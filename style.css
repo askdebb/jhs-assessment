@@ -20,6 +20,8 @@
     .container > .head-title  {
         text-align: center;
         font-size: 2rem;
+        margin-bottom: -25px !important;
+        margin-top: 30px !important;
     }
 
     .container > .head-title  span {
@@ -30,8 +32,14 @@
         
     }
 
+    .footer {
+        margin: 20px  0px !important;
+    }
+
+    
+
     .footer-items .footer-info {
-        font-size: 0.9rem !important;
+        font-size: 0.8rem !important;
     }
 }
 
@@ -44,6 +52,9 @@
     .container > .head-title  {
         text-align: center;
         font-size: 2.8rem;
+        margin-bottom: -25px !important;
+        margin-top: 30px !important;
+      
     }
 
     .container > .head-title  span {
@@ -53,9 +64,13 @@
         padding: 0 !important;
         
     }
+    
+    .footer {
+        margin: 20px  0px !important;
+    }
 
     .footer-items .footer-info {
-        font-size: 0.9rem !important;
+        font-size: 0.8rem !important;
     }
 
  }
