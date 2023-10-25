@@ -1,3 +1,53 @@
-.widee {
-    width: 90% !important;
+/* .widee {
+    width: 95% !important;
+} */
+
+/* media queries*/
+
+/* Extra small devices (portrait phones, less than 576px) */
+@media (max-width: 575.98px)
+ { 
+    .widee {
+        width: 90% !important;
+    }
+
+    .container > .head-title  {
+        text-align: center;
+        font-size: 2rem;
+    }
+
+    .container > .head-title  span {
+        text-align: center;
+        font-size: 1rem;
+        margin: 0 !important;
+        padding: 0 !important;
+        
+    }
 }
+
+/* Small devices (landscape phones, less than 768px)  */
+@media (max-width: 767.98px) { 
+    .widee {
+        width: 80% !important;
+    }
+
+    .container > .head-title  {
+        text-align: center;
+        font-size: 3rem;
+    }
+
+    .container > .head-title  span {
+        text-align: center;
+        font-size: 2rem;
+        margin: 0 !important;
+        padding: 0 !important;
+        
+    }
+
+ }
+
+/* Medium devices (tablets, less than 992px)  */
+@media (max-width: 991.98px) {  }
+
+/* Large devices (desktops, less than 1200px)  */
+@media (max-width: 1199.98px) { }
