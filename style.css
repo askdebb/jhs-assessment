@@ -23,17 +23,21 @@
         padding: 0 !important;
         
     }
+
+    .footer-items .footer-info {
+        font-size: 1rem !important;
+    }
 }
 
 /* Small devices (landscape phones, less than 768px)  */
 @media (max-width: 767.98px) { 
     .widee {
-        width: 80% !important;
+        width: 75% !important;
     }
 
     .container > .head-title  {
         text-align: center;
-        font-size: 3rem;
+        font-size: 2.8rem;
     }
 
     .container > .head-title  span {
@@ -42,6 +46,10 @@
         margin: 0 !important;
         padding: 0 !important;
         
+    }
+
+    .footer-items .footer-info {
+        font-size: 1rem !important;
     }
 
  }
