@@ -1,3 +1,9 @@
+@import url('https://fonts.cdnfonts.com/css/nexa-bold');
+
+* {
+    font-family: 'Nexa', sans-serif;
+}
+
 /* .widee {
     width: 95% !important;
 } */
