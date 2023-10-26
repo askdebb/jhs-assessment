@@ -52,7 +52,7 @@ body {
     right: 15px;
 }
 
-.task_items ul li button {
+.task_items ul li .button {
     padding: 10px 0;
     width: 200px;
     border: none;
@@ -64,8 +64,16 @@ body {
     cursor: pointer;
 }
 
-.task_items ul li button:hover {
+.task_items ul li .button:hover {
     background-color: #0C356A;
+}
+
+.back-btn {
+    text-align: center;
+    text-decoration: none;
+    font-weight: bold;
+   
+
 }
 
 
@@ -78,7 +86,7 @@ body {
 @media (max-width: 575.98px)
  { 
     .b9-comp {
-        width: 70% !important;
+        width: 80% !important;
         height: 20% !important;
     }
     .widee {
@@ -125,10 +133,10 @@ body {
 @media (max-width: 767.98px) {
     
     .b9-comp {
-        width: 70% !important;
+        width: 80% !important;
     }
     .widee {
-        width: 75% !important;
+        width: 80% !important;
     }
 
     .container > .head-title  {
