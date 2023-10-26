@@ -7,7 +7,9 @@
 
 body {
     background-color: #FFF0CE!important;
+    margin-top: 5rem !important;
 }
+
 
 .container > .head-title {
     margin-top: 60px !important;
@@ -85,11 +87,16 @@ body {
 /* Extra small devices (portrait phones, less than 576px) */
 @media (max-width: 575.98px)
  { 
+    body {
+        margin-top: 5rem !important;
+    }
+
     .b9-comp {
         width: 80% !important;
         height: 20% !important;
     }
     .widee {
+        margin-top: 500px !important;
         width: 90% !important;
     }
 
@@ -131,12 +138,18 @@ body {
 
 /* Small devices (landscape phones, less than 768px)  */
 @media (max-width: 767.98px) {
+
+    body {
+        margin-top: 5rem !important;
+    }
     
     .b9-comp {
         width: 80% !important;
     }
     .widee {
-        width: 80% !important;
+        margin-top: 500px !important;
+        width: 90% !important;
+
     }
 
     .container > .head-title  {
