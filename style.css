@@ -2,17 +2,85 @@
 
 * {
     font-family: 'Nexa', sans-serif;
+    color: #0C356A; 
 }
 
-/* .widee {
-    width: 95% !important;
-} */
+body {
+    background-color: #FFF0CE!important;
+}
+
+.container > .head-title {
+    margin-top: 60px !important;
+}
+
+.b9-comp {
+    margin-top: 30px !important;
+    padding: 10px !important;
+    /* background-color: red !important; */
+    height: 650px;
+    width: 60% !important;
+    margin: 0 auto;
+}
+
+.b9-comp > h1 {
+    text-align: center;
+    font-weight: bolder;
+    color: rgb(168, 0, 0);
+}
+.b9-comp .container-header > p {
+    text-align: center;
+    font-weight: bold;
+}
+.b9-comp > .container-header {
+    /* background-color: blueviolet; */
+    width: 100%;
+    
+}
+
+.task_items ul {
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    list-style: none;
+}
+
+.task_items ul li {
+    position: relative;
+    margin: 5px auto ;
+    text-align: center;
+    right: 15px;
+}
+
+.task_items ul li button {
+    padding: 10px 0;
+    width: 200px;
+    border: none;
+    border-radius: 3px;
+    background-color: #0f5abd;
+    color: #fff;
+    font-weight: bolder;
+    transition: 0.5s;
+    cursor: pointer;
+}
+
+.task_items ul li button:hover {
+    background-color: #0C356A;
+}
+
+
+
+
 
 /* media queries*/
 
 /* Extra small devices (portrait phones, less than 576px) */
 @media (max-width: 575.98px)
  { 
+    .b9-comp {
+        width: 70% !important;
+        height: 20% !important;
+    }
     .widee {
         width: 90% !important;
     }
@@ -36,15 +104,29 @@
         margin: 20px  0px !important;
     }
 
-    
-
     .footer-items .footer-info {
         font-size: 0.8rem !important;
     }
+
+    .b9-comp-footer {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .b9-comp-footer > .footer-items .footer-info{
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    
 }
 
 /* Small devices (landscape phones, less than 768px)  */
-@media (max-width: 767.98px) { 
+@media (max-width: 767.98px) {
+    
+    .b9-comp {
+        width: 70% !important;
+    }
     .widee {
         width: 75% !important;
     }
