@@ -17,11 +17,3 @@
       }, false)
     })
   })()
-
-
-  const elementform = document.getElementById("validationCustom04")
-
-  if (elementform.value <= 15 ){
-    let formelement = document.getElementById("msgerror")
-     formelement.innerHTML = "Provide enough solution here";
-  }
