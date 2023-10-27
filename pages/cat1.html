@@ -17,65 +17,54 @@
     <div class="container b9-form my-5">
       <h1>CAT One Assessment</h1>
       <div class="work-form">
-        <form class="row g-3">
-          <div class="col-md-10">
-            <label for="validationServer01" class="form-label">Full name</label>
-            <input
-              type="text"
-              class="form-control is-valid"
-              id="validationServer01"
-              placeholder="Kofi Wayo"
-              required=""
-            />
-            <div class="valid-feedback">Looks good!</div>
-          </div>
-          <div class="col-md-2">
-            <label for="validationServer02" class="form-label">Class </label>
-            <input
-              type="text"
-              class="form-control is-valid"
-              id="validationServer02"
-              placeholder="eg: 3A"
-              required=""
-            />
-            <div class="valid-feedback">Looks good!</div>
-          </div>
-
-          <div class="col-md-12">
-            <label for="validationServer03" class="form-label"
-              >CAT Question</label
-            >
-            <input
-              type="text"
-              class="form-control is-invalid"
-              id="validationServer03"
-              aria-describedby="validationServer03Feedback"
-              required=""
-              placeholder="Type question asked here..."
-            />
-          </div>
-
-          <div class="col-md-12">
-            <label for="validationServer03" class="form-label"
-              >Answer Box</label
-            >
-            <textarea name="message" id="message" class="form-control is-invalid" cols="30" rows="6" placeholder="Enter your answer here"></textarea>
-          </div>
-
-          <div class="mb-3">
-            <input type="file" class="form-control" aria-label="file example" />
-            <div class="invalid-feedback">
-              Example invalid form file feedback
+        
+        <form class="row g-3 needs-validation" novalidate>
+            <div class="col-md-10">
+              <label for="validationCustom01" class="form-label">Full name</label>
+              <input type="text" class="form-control " id="validationCustom01"  required="">
+              <div class="invalid-feedback">
+                Please provide a valid city.
+              </div>
             </div>
-          </div>
-
-          <div class="col-6 form-btn">
-            <a class="btn btn-tertiary btn-outline-primary" href="./b9-computing-assessment.html">Back</a>
-          </div>
-          <div class="col-6 form-btn">
-            <button class="btn btn-primary" type="submit">Submit</button>
-          </div>
-        </form>
+            
+            <div class="col-md-2">
+              <label for="validationCustom02" class="form-label">Class </label>
+              <input type="text" class="form-control" id="validationCustom02" required="" placeholder="eg: 3A">
+              <div class="invalid-feedback">
+                Please provide a valid city.
+              </div>
+            </div>
+      
+            <div class="col-md-12">
+              <label for="validationCustom03" class="form-label">CAT Question</label>
+              <input type="text" class="form-control" id="validationCustom03" required="" placeholder="Type question asked here...">
+              <div class="invalid-feedback">
+                Please provide a valid city.
+              </div>
+          
+            </div>
+      
+            <div class="col-md-12">
+              <label for="validationCustom04" class="form-label"
+                >Answer Box</label>
+              <textarea name="message" id="validationCustom04" class="form-control" cols="30" rows="6" placeholder="Enter your answer here"></textarea>
+              <div class="invalid-feedback">
+                Please provide a valid city.
+              </div>
+          
+            </div>
+      
+            <div class="mb-3">
+              <input type="file" class="form-control" aria-label="file example" />
+            </div>
+      
+            <div class="col-6 form-btn">
+              <a class="btn btn-tertiary btn-outline-primary" href="./b9-computing-assessment.html">Back</a>
+            </div>
+            <div class="col-6 form-btn">
+              <button class="btn btn-primary" type="submit">Submit</button>
+            </div>
+          </form>
       </div>
     </div>
 
