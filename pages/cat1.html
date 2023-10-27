@@ -18,12 +18,12 @@
       <h1>CAT One Assessment</h1>
       <div class="work-form">
         
-        <form class="row g-3 needs-validation" novalidate>
+        <form class="row g-3 needs-validation " >
             <div class="col-md-10">
               <label for="validationCustom01" class="form-label">Full name</label>
-              <input type="text" class="form-control " id="validationCustom01"  required="">
+              <input type="text" class="form-control" minlength="7" id="validationCustom01"  required="">
               <div class="invalid-feedback">
-                Please provide a valid city.
+                Provide your full name.
               </div>
             </div>
             
@@ -31,7 +31,7 @@
               <label for="validationCustom02" class="form-label">Class </label>
               <input type="text" class="form-control" id="validationCustom02" required="" placeholder="eg: 3A">
               <div class="invalid-feedback">
-                Please provide a valid city.
+                Enter form level.
               </div>
             </div>
       
@@ -39,23 +39,24 @@
               <label for="validationCustom03" class="form-label">CAT Question</label>
               <input type="text" class="form-control" id="validationCustom03" required="" placeholder="Type question asked here...">
               <div class="invalid-feedback">
-                Please provide a valid city.
+                Provide the question given by the teacher.
               </div>
           
             </div>
       
             <div class="col-md-12">
-              <label for="validationCustom04" class="form-label"
-                >Answer Box</label>
-              <textarea name="message" id="validationCustom04" class="form-control" cols="30" rows="6" placeholder="Enter your answer here"></textarea>
+              <label for="validationCustom04" class="form-label">Answer Box</label>
+              <textarea name="message" id="validationCustom04" minlength="15" class="form-control" cols="30" rows="2" placeholder="Enter your answer here"></textarea>
               <div class="invalid-feedback">
-                Please provide a valid city.
+                Provide enough solution here
               </div>
-          
             </div>
       
             <div class="mb-3">
-              <input type="file" class="form-control" aria-label="file example" />
+              <input type="file" class="form-control" id="validationCustom05" aria-label="file example" />
+              <div class="invalid-feedback">
+                file not found
+              </div>
             </div>
       
             <div class="col-6 form-btn">
