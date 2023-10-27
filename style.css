@@ -15,7 +15,7 @@ body {
     margin-top: 50px !important;
 }
 .container > .head-title span {
-    display: block;
+    display: inline-block;
 }
 
 .bt {
@@ -23,6 +23,7 @@ body {
     width: 12rem;
 }
 
+/* basic 9 computing assessment page 1 */
 .b9-comp {
     margin-top: 5px !important;
     padding: 5px !important;
@@ -102,6 +103,19 @@ body {
 }
 
 
+/* basic 9 computing assessment form 1 */
+
+.b9-form {
+    width: 60% !important;
+}
+.b9-form > h1 {
+    text-align: center;
+}
+
+.form-btn {
+    text-align: center;
+}
+
 
 
 
@@ -142,6 +156,10 @@ body {
         
     }
 
+    .b9-form {
+        width: 70% !important;
+    }
+
     .footer {
         margin: 20px  0px !important;
     }
@@ -170,6 +188,10 @@ body {
 
     .container > .head-title span {
         display: block;
+    }
+
+    .b9-form {
+        width: 90% !important;
     }
     
     .b9-comp {
