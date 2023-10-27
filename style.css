@@ -7,28 +7,44 @@
 
 body {
     background-color: #FFF0CE!important;
-    margin-top: 5rem !important;
+    margin: 2rem 0 !important;
 }
 
 
 .container > .head-title {
-    margin-top: 60px !important;
+    margin-top: 50px !important;
+}
+.container > .head-title span {
+    display: block;
+}
+
+.bt {
+    padding: px 0 !important;
+    width: 12rem;
 }
 
 .b9-comp {
-    margin-top: 30px !important;
-    padding: 10px !important;
-    /* background-color: red !important; */
-    height: 650px;
-    width: 60% !important;
+    margin-top: 5px !important;
+    padding: 5px !important;
+    height: 20% !important;
+    width: 40% !important;
     margin: 0 auto;
 }
 
 .b9-comp > h1 {
     text-align: center;
     font-weight: bolder;
-    color: rgb(168, 0, 0);
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+    color: #a80000;
 }
+
+.b9-comp > h1 span {
+    font-weight: normal;
+    font-size: 1.5rem;
+    display: block;
+}
+
 .b9-comp .container-header > p {
     text-align: center;
     font-weight: bold;
@@ -55,27 +71,34 @@ body {
 }
 
 .task_items ul li .button {
-    padding: 10px 0;
+    padding-top: 10px;
     width: 200px;
     border: none;
     border-radius: 3px;
     background-color: #0f5abd;
     color: #fff;
-    font-weight: bolder;
     transition: 0.5s;
     cursor: pointer;
+    text-align: center;
 }
 
 .task_items ul li .button:hover {
+    font-weight: bolder;
     background-color: #0C356A;
 }
 
 .back-btn {
     text-align: center;
-    text-decoration: none;
     font-weight: bold;
-   
+}
 
+.back-btn a {
+    font-size: 1.2rem;
+    text-decoration: none;
+}
+
+.b9-comp-footer .footer-items p {
+    font-size: 1rem !important;
 }
 
 
@@ -89,6 +112,10 @@ body {
  { 
     body {
         margin-top: 5rem !important;
+    }
+
+    .container > .head-title span {
+        display: block;
     }
 
     .b9-comp {
@@ -131,9 +158,7 @@ body {
     .b9-comp-footer > .footer-items .footer-info{
         margin: 0 !important;
         padding: 0 !important;
-    }
-
-    
+    }    
 }
 
 /* Small devices (landscape phones, less than 768px)  */
@@ -141,6 +166,10 @@ body {
 
     body {
         margin-top: 5rem !important;
+    }
+
+    .container > .head-title span {
+        display: block;
     }
     
     .b9-comp {
