@@ -18,8 +18,8 @@
       <h1>Online Assessment</h1>
       <div class="work-form">
         
-        <form class="row g-3 needs-validation" novalidate action="https://formsubmit.co/9fc0c02c2a32ec5a3e627bb736d9be48 " method="POST">
-
+        <form class="row g-3 needs-validation" novalidate action="https://formsubmit.co/9fc0c02c2a32ec5a3e627bb736d9be48 " method="POST"  enctype="multipart/form-data>
+                                                                                        
             <input type="hidden" name="_next" value="https://askdebb.github.io/jhs-assessment/pages/quickfdbk.html">
             <input type="hidden" name="_subject" value="Online Assignment 1 by Sir Chris!">
             <!-- <input type="hidden" name="_captcha" value="false"> -->
@@ -69,10 +69,11 @@
       
             <div class="col-mb-3">
               <label for="validationCustom05" class="form-label">Attach file:</label>
-              <input type="file" class="form-control" name="Student File Attached" id="validationCustom05" aria-label="file example"/>
+              <input type="file" class="form-control" name="attachment" id="validationCustom05" aria-label="file example"/>
               <div class="invalid-feedback">
                 file not selected
               </div>
+              <small>Max file size: 5MB</small>
             </div>
       
             <div class="col-6 form-btn ">
