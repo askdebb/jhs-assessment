@@ -132,6 +132,29 @@ body {
 }
 
 
+.deadline {
+    background-color: #000 !important;
+}
+
+.notice {
+    margin-top: 200px;
+    padding: 100px;
+    border: 2px solid #fff !important;
+}
+
+
+.deadline > .container .notices  {
+    color: #fff !important;
+    text-align: center;
+
+}
+.deadline > .container .notice > p {
+    color: #fff !important;
+    text-align: center;
+
+}
+
+
 
 /* media queries*/
 
