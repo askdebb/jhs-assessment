@@ -116,6 +116,21 @@ body {
     text-align: center;
 }
 
+.feedback-card > p{
+    text-align: center; 
+    display: inline-block;  
+}
+
+.feedback-card h2, .feedback-card h3 {
+    text-align: center; 
+      
+}
+
+.feedback-card h3 {
+    margin-top: 17px !important;
+    color: #a80000;
+}
+
 
 
 /* media queries*/
@@ -224,6 +239,21 @@ body {
 
     .footer-items .footer-info {
         font-size: 0.8rem !important;
+    }
+
+    .feedback-card > p{
+        text-align: center; 
+        display: inline-block;  
+    }
+    
+    .feedback-card h2, .feedback-card h3 {
+        text-align: center; 
+          
+    }
+    
+    .feedback-card h3 {
+        margin-top: 17px !important;
+        color: #a80000;
     }
 
  }
