@@ -10,6 +10,10 @@ body {
     margin: 2rem 0 !important;
 }
 
+.cr {
+    background-color: rgb(194, 141, 9) !important;
+}
+
 
 .container > .head-title {
     margin-top: 50px !important;
@@ -86,6 +90,14 @@ body {
 .task_items ul li .button:hover {
     font-weight: bolder;
     background-color: #0C356A;
+}
+
+.cr-btn {
+    background-color: rgb(63, 61, 59)!important;
+}
+ .cr-btn:hover {
+    font-weight: bolder;
+    background-color: #0C356A !important;
 }
 
 .back-btn {
