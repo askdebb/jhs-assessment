@@ -14,6 +14,16 @@ body {
     background-color: rgb(194, 141, 9) !important;
 }
 
+.company-link a{
+    text-decoration: none;
+    color: #2e2d2d;
+}
+
+.company-link a b{
+   color: #ecaa01;
+   flex-wrap: 600;
+}
+
 
 .container > .head-title {
     margin-top: 50px !important;
