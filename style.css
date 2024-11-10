@@ -1,13 +1,56 @@
-@import url('https://fonts.cdnfonts.com/css/nexa-bold');
+/* @import url('https://fonts.cdnfonts.com/css/nexa-bold'); */
+
+@import url('https://fonts.googleapis.com/css2?family=Sen:wght@400..800&display=swap');
 
 * {
-    font-family: 'Nexa', sans-serif;
+    /* font-family: 'Nexa', sans-serif; */
+    font-family: 'Sen', sans-serif;
     color: #0C356A; 
 }
 
 body {
     background-color: #FFF0CE!important;
     margin: 2rem 0 !important;
+}
+
+.form-text {
+    font-size: 0.7rem !important;
+}
+
+.user-input {
+    font-size: 0.9em !important;
+}
+.user-input-email {
+    font-size: 0.7em !important;
+}
+.user-info {
+    max-width: 75% !important;
+}
+
+.middle-section {
+    display: flex;
+    align-items: start;
+    justify-content: space-around;
+
+}
+
+.quotes-section {
+    display: flex;
+    flex-direction: column;
+    max-width: 40% !important;
+}
+
+.nsmq {
+    text-align: center;
+}
+
+.newsletter {
+    display: flex;
+   align-items: start;
+}
+.read-more-newsletter {
+    margin-top: -20px !important;
+    text-decoration: none;
 }
 
 .cr {
@@ -235,8 +278,34 @@ body {
     .b9-comp-footer > .footer-items .footer-info{
         margin: 0 !important;
         padding: 0 !important;
-    }    
+    }  
+    .middle-section {
+        flex-direction: column !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+    }  
+
+    .user-info, .quotes-section  {
+        max-width: 90% !important;
+        margin: 0 auto !important;
+        margin-bottom: 10px;
+    }
+
+     .head-title .text-danger-emphasis {
+        padding-bottom: 100px !important;
+    }
+
 }
+@media (min-width: 542px) {
+
+    .user-info {
+        width: 100% !important;
+        margin: 0 auto !important;
+        margin-bottom: 10px !important;
+        padding: 0 !important;
+    }
+}
+
 
 /* Small devices (landscape phones, less than 768px)  */
 @media (max-width: 767.98px) {
@@ -304,7 +373,46 @@ body {
  }
 
 /* Medium devices (tablets, less than 992px)  */
-@media (max-width: 991.98px) {  }
+@media (max-width: 760px) { 
+  .newsletter {
+    flex-direction: column !important;
+  }
+.nsmq {
+    width: 200px !important;
+    margin: 0 auto !important;
+}
+
+ }
+/* Medium devices (tablets, less than 992px)  */
+@media (min-width: 991.98px) { 
+    .middle-section {
+        width: 100% !important;
+        margin: 0 auto !important;
+    }
+    .user-info {
+        width: 50%;
+    }
+    .quotes-section {
+        display: flex;
+        flex-direction: column;
+        width: 50%;
+    }
+
+    .nsmq {
+        height: 90px !important;
+    }
+
+    .newsletter-info {
+        font-size: 1rem !important;
+    }
+
+    .newsletter-info > p {
+        font-size: 0.8rem !important;
+    }
+    .newsletter .read-more-newsletter {
+        font-size: 0.8rem !important;
+    }
+ }
 
 /* Large devices (desktops, less than 1200px)  */
 @media (max-width: 1199.98px) { }
