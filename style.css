@@ -221,6 +221,7 @@ body {
 
 
 
+
 /* media queries*/
 
 /* Extra small devices (portrait phones, less than 576px) */
@@ -386,7 +387,7 @@ body {
 /* Medium devices (tablets, less than 992px)  */
 @media (min-width: 991.98px) { 
     .middle-section {
-        width: 100% !important;
+        width: 75% !important;
         margin: 0 auto !important;
     }
     .user-info {
@@ -395,7 +396,8 @@ body {
     .quotes-section {
         display: flex;
         flex-direction: column;
-        width: 50%;
+        width: 70%;
+        margin-left: 2rem !important;
     }
 
     .nsmq {
