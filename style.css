@@ -21,23 +21,23 @@ body {
     font-size: 0.9em !important;
 }
 .user-input-email {
-    font-size: 0.7em !important;
-}
-.user-info {
-    max-width: 75% !important;
+    font-size: 0.8em !important;
 }
 
 .middle-section {
     display: flex;
     align-items: start;
     justify-content: space-around;
-
+    
+}
+.user-info {
+    width: 55% !important;
 }
 
 .quotes-section {
     display: flex;
     flex-direction: column;
-    max-width: 40% !important;
+    width: 40% !important;
 }
 
 .nsmq {
@@ -223,7 +223,54 @@ body {
 
 
 /* media queries*/
+@media (max-width: 375px) {
+    .middle-section {
+        flex-direction: column !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+    } 
 
+    .user-info, .quotes-section {
+        width: 100% !important;
+    }
+
+}
+
+@media (max-width: 430px) {
+    .middle-section {
+        flex-direction: column !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+    } 
+
+    .user-info, .quotes-section {
+        width: 100% !important;
+    }
+
+}
+@media (max-width: 414px) {
+    .middle-section {
+        flex-direction: column !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+    } 
+
+    .user-info, .quotes-section {
+        width: 100% !important;
+    }
+
+}
+@media (max-width: 540px) {
+    .middle-section {
+        flex-direction: column !important;
+        width: 100% !important;
+        margin: 0 auto !important;
+    } 
+
+    .user-info, .quotes-section {
+        width: 100% !important;
+    }
+}
 /* Extra small devices (portrait phones, less than 576px) */
 @media (max-width: 575.98px)
  { 
@@ -300,8 +347,8 @@ body {
 @media (min-width: 542px) {
 
     .user-info {
-        width: 100% !important;
-        margin: 0 auto !important;
+        width: 100%;
+        margin: 0 auto;
         margin-bottom: 10px !important;
         padding: 0 !important;
     }
@@ -385,21 +432,25 @@ body {
 
  }
 /* Medium devices (tablets, less than 992px)  */
-@media (min-width: 991.98px) { 
+@media (max-width: 991.98px) { 
     .middle-section {
-        width: 75% !important;
+        width: 95% !important;
         margin: 0 auto !important;
     }
     .user-info {
-        width: 50%;
+        width: 95%;
     }
     .quotes-section {
         display: flex;
         flex-direction: column;
-        width: 70%;
-        margin-left: 2rem !important;
+        width: 95%;
+        /* margin-left: 2rem !important; */
     }
 
+    .newsletter {
+        display: flex;
+        flex-direction: column;
+    }
     .nsmq {
         height: 90px !important;
     }

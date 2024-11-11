@@ -1,28 +1,25 @@
-export default async function fetchData() {
-  let quoteBucket = [];
+export default async function randomQuotes() {
+  const url = "https://quotes15.p.rapidapi.com/quotes/random/?language_code=en";
+  const options = {
+    method: "GET",
+    headers: {
+      "x-rapidapi-key": "0c71521f42msh93b64d8f0afb53bp147270jsnd36ed05c6ce3",
+      "x-rapidapi-host": "quotes15.p.rapidapi.com",
+    },
+  };
+
   try {
-    let response = await fetch("https://api.gameofthronesquotes.xyz/v1/random");
-    let data = await response.json(); // Wait for the JSON parsing to complete
-    let quoteSentence = data.sentence;
-    let quoteAuthor = data.character.name;
+    const response = await fetch(url, options);
+    const result = await response.json();
 
-    quoteBucket = [];
-
-    quoteBucket.push({
-      quote: quoteSentence,
-      author: quoteAuthor,
-    });
-
-    // console.log(quoteBucket);
-
-    quoteBucket.map((singleQuote) => {
-      quoteStructure(singleQuote.quote, singleQuote.author);
-      // console.log(singleQuote.quote, singleQuote.author);
-    });
-
-    return quoteBucket;
+    let quoteSentence = await result.content;
+    let quoteAuthor = await result.originator.name;
+    console.log("content: ", quoteSentence);
+    console.log("author: ", quoteAuthor);
+    console.log("result: ", result);
+    quoteStructure(quoteSentence, quoteAuthor);
   } catch (error) {
-    console.error("Error fetching data:", error);
+    console.error(error);
   }
 }
 

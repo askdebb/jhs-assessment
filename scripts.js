@@ -1,5 +1,5 @@
 import Learner from './Learner.js';
-import fetchData from './QuotesAPI.js';
+import randomQuotes from './QuotesAPI.js';
 
 
 
@@ -44,10 +44,21 @@ storedLearner.map((eachLearner) => console.log(eachLearner.name));
 //  localStorage.removeItem('learner');
 
 
+let quoteBtn = document.getElementById("btn1");
 
 
-document.getElementById("btn1").addEventListener('click', ()=>{
-  fetchData();
+quoteBtn.addEventListener('click', async ()=>{
+  quoteBtn.innerText="Fetching...";
+
+  await randomQuotes();
+  setTimeout(()=> {
+    quoteBtn.innerText="Finished";
+  }, 500);
+  setTimeout(()=> {
+
+    quoteBtn.innerText="New Quote";
+  }, 1500);
+
 });
 
 
