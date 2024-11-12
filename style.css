@@ -9,7 +9,7 @@
 }
 
 body {
-    background-color: #FFF0CE!important;
+    background-color: #68c5ec!important;
     margin: 2rem 0 !important;
 }
 
@@ -31,13 +31,13 @@ body {
     
 }
 .user-info {
-    width: 55% !important;
+    width: 50% ;
 }
 
 .quotes-section {
     display: flex;
     flex-direction: column;
-    width: 40% !important;
+    width: 40%;
 }
 
 .nsmq {
@@ -218,57 +218,208 @@ body {
     text-align: center;
 
 }
+.middle-section {
+    /* display: none; */
+}
 
+.assessment-menu {
+    display: none;
+    width: 60%;
+    background-color: #fdd56e;
+    padding: 1rem;
+    border-radius: 20px;
+    box-shadow: 10px 20px 2px solid black;
+
+}
+
+.container-items {
+    display: flex;
+    justify-content: space-around;
+}
+
+.user-performance-data {
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* Hide overlay by default */
+#overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.3); /* Slightly darkens the overlay */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    visibility: hidden; /* Hidden by default */
+    z-index: 1000;
+     /* Add blur effects for cross-browser compatibility */
+  backdrop-filter: blur(20px);        /* Standard */
+  -webkit-backdrop-filter: blur(20px); /* Safari 9+ */
+  }
+  
+  /* Spinner styles */
+  .spinner {
+    border: 8px solid #f3f3f3;
+    border-top: 8px solid #3498db;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+  
 
 
 
 /* media queries*/
 @media (max-width: 375px) {
     .middle-section {
+        display: block;
         flex-direction: column !important;
         width: 100% !important;
         margin: 0 auto !important;
     } 
 
-    .user-info, .quotes-section {
-        width: 100% !important;
+    .card-card {
+        width: 16rem;
     }
 
+    .user-info, .quotes-section {
+        width: 100%;
+        margin: 0 auto !important;
+    }
+
+    
+    .container-items {
+        display: block;
+        /* justify-content: space-around; */
+    }
+    
+    .user-performance-data {
+        display: flex;
+        flex-direction: column;
+        width: 80%;
+        margin: 0 auto !important;
+    }
+
+    .assessment-menu {
+        margin-bottom: 1rem !important;
+        width: 90%; 
+        margin: 0 auto;   
+    }
+    
+
+}
+@media(max-width: 360px) {
+    .card-card {
+        width: 16rem !important;
+    }
 }
 
 @media (max-width: 430px) {
     .middle-section {
+        display: block;
         flex-direction: column !important;
         width: 100% !important;
         margin: 0 auto !important;
     } 
 
-    .user-info, .quotes-section {
-        width: 100% !important;
+    .card-card {
+        width: 19rem;
     }
+    .user-info, .quotes-section {
+        width: 100%;
+        margin: 0 auto !important;
+    }
+
+    .container-items {
+        display: block;
+        /* justify-content: space-around; */
+    }
+    
+    .user-performance-data {
+        display: flex;
+        flex-direction: column;
+        width: 90%;
+        margin: 0 auto !important;
+    }
+
+    .assessment-menu {
+        margin-bottom: 1rem !important;
+        width: 90%; 
+        margin: 0 auto;   
+    }
+    .container-items {
+        display: block;
+        /* justify-content: space-around; */
+    }
+    
+    .user-performance-data {
+        display: flex;
+        flex-direction: column;
+        width: 85% ;
+        margin: 0 auto !important;
+    }
+
+    .assessment-menu {
+        margin-bottom: 1rem !important;
+        width: 95%; 
+        margin: 0 auto;   
+    }
+    
 
 }
 @media (max-width: 414px) {
     .middle-section {
+        display: block;
         flex-direction: column !important;
         width: 100% !important;
         margin: 0 auto !important;
     } 
 
     .user-info, .quotes-section {
-        width: 100% !important;
+        width: 100%;
     }
+
+    .container-items {
+        display: block;
+        /* justify-content: space-around; */
+    }
+    
+    .user-performance-data {
+        display: flex;
+        flex-direction: column;
+        width: 85%;
+        margin: 0 auto !important;
+    }
+
+    .assessment-menu {
+        margin-bottom: 1rem !important;
+        width: 95%; 
+        margin: 0 auto;   
+    }
+
+    
 
 }
 @media (max-width: 540px) {
     .middle-section {
+        display: block;
         flex-direction: column !important;
         width: 100% !important;
         margin: 0 auto !important;
     } 
 
     .user-info, .quotes-section {
-        width: 100% !important;
+        width: 100%;
     }
 }
 /* Extra small devices (portrait phones, less than 576px) */
@@ -335,7 +486,7 @@ body {
 
     .user-info, .quotes-section  {
         max-width: 90% !important;
-        margin: 0 auto !important;
+        /* margin: 0 auto !important; */
         margin-bottom: 10px;
     }
 
@@ -348,7 +499,7 @@ body {
 
     .user-info {
         width: 100%;
-        margin: 0 auto;
+        /* margin: 0 auto; */
         margin-bottom: 10px !important;
         padding: 0 !important;
     }
@@ -434,7 +585,7 @@ body {
 /* Medium devices (tablets, less than 992px)  */
 @media (max-width: 991.98px) { 
     .middle-section {
-        width: 95% !important;
+        width: 95% ;
         margin: 0 auto !important;
     }
     .user-info {
