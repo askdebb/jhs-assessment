@@ -170,3 +170,4 @@ quoteBtn.addEventListener("click", async () => {
     );
   });
 })();
+
