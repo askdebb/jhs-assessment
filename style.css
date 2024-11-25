@@ -71,6 +71,22 @@ body {
 }
 
 
+.startButton {
+    width: 60%;
+    margin: 0 auto !important;
+    text-align: center;
+   
+  
+}
+
+.startButton > button {
+    color: black;
+    border-radius: 7px;
+    padding: 5px 10px;
+    border: none;
+    background-color: #ffd900;
+}
+
 .countdown-container {
     display: flex;
     justify-content: center;

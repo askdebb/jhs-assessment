@@ -1,36 +1,97 @@
+// document.addEventListener("DOMContentLoaded", () => {
+//   // console.log("Script is running");
+
+//   const targetDate = new Date("November 25, 2024 23:59:59").getTime();
+//   // console.log("Target date:", targetDate);
+
+//   const countdownElement = document.getElementById("count-down");
+
+
+//   if (!countdownElement) console.error("Countdown element not found");
+
+
+
+//     // Remove start button and show countdown
+//     //startButton.classList.add("hidden");
+//     // countdownElement.classList.remove("hidden");
+
+//     // Begin the countdown
+//     const countdownInterval = setInterval(() => {
+//       const now = new Date().getTime();
+//       const timeDifference = targetDate - now;
+//       console.log("time difference: ", timeDifference);
+      
+
+//       if (timeDifference < 0) {
+//         clearInterval(countdownInterval);
+//         // countdownElement.textContent = "Happy New Year!";
+
+//       //  window.location.href = "../deadline.html";
+      
+   
+//         return;
+//       }
+
+//       const days = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+//       const hours = Math.floor((timeDifference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+//       const minutes = Math.floor((timeDifference % (1000 * 60)) / (1000 * 60));
+//       const seconds = Math.floor((timeDifference % (1000)) / 1000);
+  
+//       countdownElement.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+//     }, 1000);
+
+    
+
+  
+// });
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Set the target date and time
-    console.log('script running');
-    
-    const targetDate = new Date("November 25, 2024 23:59:59").getTime();
-  
-    console.log(targetDate);
-    
-    // Update the countdown every second
-    const countdownInterval = setInterval(() => {
-      const now = new Date().getTime();
-      const timeDifference = targetDate - now;
-  
-    //   Calculate days, hours, minutes, and seconds
-      const days = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((timeDifference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
-  
+  // Ensure script is running
+  console.log("Script is running");
 
+  const targetDate = new Date("November 25, 2024 23:59:59").getTime();
+  console.log("Target date:", targetDate); // Log target date
+
+  const countdownElement = document.getElementById("count-down");
+  
+  // Ensure countdown element is present
+  if (!countdownElement) {
+    console.error("Countdown element not found");
+    return; // Exit if the element is missing
+  }
+  console.log("Countdown element found");
+
+  // Begin the countdown
+  const countdownInterval = setInterval(() => {
+    const now = new Date().getTime();
+    const timeDifference = targetDate - now;
+
+    // console.log("Time difference:", timeDifference); // Log time difference
+    
+    if (timeDifference < 0) {
+      // If the countdown is complete
+      clearInterval(countdownInterval);
+      console.log("Countdown completed");
+      countdownElement.textContent = "Countdown Complete!";
       
-  
-      // Display the countdown
-      const countdownElement = document.getElementById("countdown");
-      if (countdownElement) {
-        countdownElement.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-      }
-  
-      // Stop the countdown when the target date is reached
-      if (timeDifference < 0) {
-        clearInterval(countdownInterval);
-        countdownElement.textContent = "Happy New Year!";
-      }
-    }, 1000);
-  });
+      // Uncomment this line if you want to redirect after countdown
+      window.location.href = "../deadline.html";
+
+      return;
+    }
+
+    // Calculate days, hours, minutes, seconds
+    const days = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeDifference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
+
+    // console.log(`Countdown: ${days}d ${hours}h ${minutes}m ${seconds}s`); // Log countdown
+    
+    // Update the DOM with the countdown
+    countdownElement.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+  }, 1000);
+});
+
+
