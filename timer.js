@@ -50,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Ensure script is running
   console.log("Script is running");
 
-  const targetDate = new Date("Decembe 11, 2024 23:59:59").getTime();
+  const targetDate = new Date("Decembe 17, 2024 23:59:59").getTime();
   console.log("Target date:", targetDate); // Log target date
 
   const countdownElement = document.getElementById("count-down");
