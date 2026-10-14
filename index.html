@@ -1,247 +1,2011 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-50">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Home | Assessment Portal</title>
+    <title>JHS Assessment & Learner Portal | Ghana Basic Education</title>
 
-    <link rel="stylesheet" href="style.css" />
-
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap"
       rel="stylesheet"
-      integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN"
-      crossorigin="anonymous"
     />
+
+    <!-- FontAwesome 6 Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+
+    <!-- Tailwind CSS Engine -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="./style.css" />
   </head>
-  <body>
-    <marquee class="marquee" behavior="scroll" direction="left"
-      >Important Announcement: CAT 1 for Computing is
-      <span
-        style="
-          background-color: blue;
-          color: white;
-          font-weight: bolder;
-          padding: 5px 10px;
-          border-radius: 5px;
-          text-align: center;
-        "
-        >Ready!! </span
-      >.
-      <!-- >. Click <a href="./pages/projectwork.html">HERE</a> to read instructions. -->
-      Deadline:
-      <span class="countdown count-down">Loading...</span></marquee
-    >
-    <div class="container card mx-auto mt-5 widee h-100 shadow-lg">
-      <h1 class="display-4 text-center mt-3 px-2 head-title" id="#index.html">
-        Assessment <span class="text-danger-emphasis fw-bold">Web Portal</span>
-      </h1>
+  <body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
 
-      <hr />
+    <!-- Top Announcement Bar (Clean, Fixed-Width, Perfectly Aligned) -->
+    <div class="bg-slate-900 text-white text-xs sm:text-sm py-2 px-4 border-b border-slate-800 z-50">
+      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+            ACTIVE TEST
+          </span>
+          <span class="font-medium text-slate-200">
+            Computing CAT 1 for Basic 9 is now open for submission.
+          </span>
+          <div class="inline-flex items-center gap-1.5 bg-slate-800 text-amber-300 font-mono text-xs px-2.5 py-0.5 rounded-md border border-slate-700 font-semibold" id="bannerDeadline">
+            <i class="fa-regular fa-clock text-amber-400"></i> Calculating countdown...
+          </div>
+        </div>
+        <div class="text-xs text-slate-400 hidden md:block">
+          Official NaCCA / GES Assessment Standards
+        </div>
+      </div>
+    </div>
 
-      <div class="middle-section my-2">
-        <!-- user form -->
-        <div class="user-info mb-2 bg-light p-4 rounded-2">
-          <p class="text-center">
-            Welcome Learner, fill out the form to continue.
-          </p>
-          <form method="post">
-            <div class="mb-2">
-              <label for="FullName" class="form-label">Full Name</label>
-              <input
-                type="text"
-                required
-                class="form-control user-input"
-                placeholder="eg: Chris Columbus"
-                id="full-Name"
-                aria-describedby="fullNameHelp"
-              />
-              <div id="fullNameHelp" class="form-text">
-                We'll keep your name for assessment.
+    <!-- Main Navigation Bar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 sm:py-4 min-h-[4.5rem] flex items-center justify-between">
+        
+        <!-- Brand Group -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/20">
+            <i class="fa-solid fa-graduation-cap text-lg"></i>
+          </div>
+          <div>
+            <div class="font-extrabold text-lg text-slate-900 tracking-tight flex items-center gap-1.5">
+              JHS Assessment <span class="text-indigo-600">Portal</span>
+            </div>
+            <p class="text-xs text-slate-500 font-medium">Ghana Basic Education Standard (B7 – B9)</p>
+          </div>
+        </div>
+
+        <!-- Header Actions: Notification Bell + Admin Switcher + Auth Container -->
+        <div class="flex items-center gap-3">
+          
+          <!-- In-App Notification Bell -->
+          <div class="relative">
+            <button
+              id="notifBellBtn"
+              class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition cursor-pointer relative"
+              title="Notifications"
+            >
+              <i class="fa-regular fa-bell text-base"></i>
+              <span id="notifBadge" class="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[11px] font-bold flex items-center justify-center ring-2 ring-white">2</span>
+            </button>
+
+            <!-- Notifications Dropdown Panel -->
+            <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden">
+              <div class="p-4 border-b border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-sm text-slate-900">Notifications</span>
+                  <span id="notifUnreadPill" class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700">2 New</span>
+                </div>
+                <button id="markAllReadBtn" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer">Mark all as read</button>
+              </div>
+              <div id="notifListContainer" class="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                <!-- Notifications injected via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Student Track Switcher (Basic 9A vs Basic 9B) -->
+          <div id="studentTrackSwitcherContainer" class="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/90 text-xs shadow-2xs">
+            <button
+              id="trackBtn9A"
+              type="button"
+              class="px-2.5 py-1.5 rounded-lg font-bold transition-all cursor-pointer bg-white text-indigo-700 shadow-xs"
+              title="Switch active learner track to Basic 9A (Kwame Mensah Frimpong)"
+            >
+              <i class="fa-solid fa-graduation-cap mr-1 text-indigo-600"></i> Basic 9A
+            </button>
+            <button
+              id="trackBtn9B"
+              type="button"
+              class="px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer text-slate-600 hover:text-slate-900"
+              title="Switch active learner track to Basic 9B (Kofi Owusu Boateng)"
+            >
+              <i class="fa-solid fa-graduation-cap mr-1 text-slate-400"></i> Basic 9B
+            </button>
+          </div>
+
+          <!-- Role Switcher Button (Visible for Quick Switching & Admin Access) -->
+          <div id="adminToggleContainer">
+            <button
+              id="viewModeToggleBtn"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer"
+              title="Switch Console View"
+            >
+              <i class="fa-solid fa-shield-halved text-indigo-400"></i>
+              <span id="viewModeLabel">Admin Console</span>
+            </button>
+          </div>
+
+          <!-- Auth Navigation Actions -->
+          <div id="authNavContainer" class="flex items-center gap-3">
+            <button id="headerSignInBtn" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/25 transition-all">
+              <i class="fa-brands fa-google"></i> Sign In with Gmail
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+      <!-- ================================================================= -->
+      <!-- VIEW 1: AUTHENTICATION LANDING VIEW (Logged Out)                  -->
+      <!-- ================================================================= -->
+      <section id="authSection" class="py-10 max-w-4xl mx-auto">
+        <div class="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden">
+          
+          <!-- Decorative Top Accent -->
+          <div class="h-2 w-full bg-gradient-to-r from-indigo-600 via-blue-500 to-emerald-500"></div>
+
+          <div class="p-8 sm:p-14 text-center">
+            
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 mb-6">
+              <i class="fa-solid fa-shield-halved"></i> Continuous Assessment & Project Work
+            </div>
+
+            <h1 class="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight mb-4">
+              Track Your Scores, Take CATs &amp; <br class="hidden sm:inline" />
+              <span class="bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
+                Accelerate Academic Excellence
+              </span>
+            </h1>
+
+            <p class="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto mb-8 leading-relaxed">
+              Sign in with your Google account to access your personalized learner dashboard, submit your JHS continuous assessments, and track cumulative marks.
+            </p>
+
+            <!-- OAuth Error Alert Banner -->
+            <div id="authErrorBanner" class="hidden mb-8 max-w-2xl mx-auto p-4 rounded-2xl bg-rose-50 border border-rose-200 text-left shadow-xs">
+              <div class="flex items-start gap-3">
+                <div class="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5">
+                  <i class="fa-solid fa-triangle-exclamation text-base"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center justify-between gap-2 mb-1">
+                    <h4 class="text-sm font-bold text-rose-900" id="authErrorTitle">Google Sign-In Authentication Notice</h4>
+                    <button id="dismissAuthErrorBtn" class="text-xs text-rose-500 hover:text-rose-700 cursor-pointer font-bold px-1" title="Dismiss">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                  <p class="text-xs text-rose-700 leading-relaxed mb-3" id="authErrorMsg">
+                    Supabase was unable to exchange external code with Google (<code>Unable to exchange external code</code>).
+                  </p>
+                  
+                  <div class="p-3 bg-white rounded-xl border border-rose-200 text-xs text-slate-700 space-y-1.5 mb-3 font-medium shadow-xs">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5 text-xs text-rose-800">
+                      <i class="fa-solid fa-wrench"></i> How to resolve in Google Cloud &amp; Supabase:
+                    </div>
+                    <ol class="text-[11px] text-slate-600 pl-4 list-decimal space-y-1.5">
+                      <li>
+                        <strong>Google Cloud Console &rarr; Credentials &rarr; OAuth 2.0 Client ID</strong>:<br>
+                        Verify <em>Authorized redirect URI</em> is set to:
+                        <code class="block mt-0.5 bg-slate-100 text-indigo-700 font-mono text-[10px] px-2 py-1 rounded select-all break-all border border-slate-200">https://vyecjlbknzwqexugtneg.supabase.co/auth/v1/callback</code>
+                      </li>
+                      <li>
+                        <strong>Supabase Dashboard &rarr; Authentication &rarr; Providers &rarr; Google</strong>:<br>
+                        Ensure <em>Client Secret</em> was pasted accurately without extra spaces.
+                      </li>
+                      <li>
+                        <strong>Google Cloud &rarr; OAuth consent screen</strong>:<br>
+                        If set to <em>Testing</em>, your Gmail must be added under <em>Test users</em> (or click <em>Publish App</em>).
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div class="flex flex-wrap items-center gap-2">
+                    <button id="authErrorRetryBtn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 transition cursor-pointer">
+                      <i class="fa-brands fa-google mr-1"></i> Try Google Sign In Again
+                    </button>
+                    <button id="authErrorDemoStudentBtn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-rose-200 text-rose-800 hover:bg-rose-100 transition cursor-pointer">
+                      Enter as Student (Demo)
+                    </button>
+                    <button id="authErrorDemoAdminBtn" type="button" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-rose-200 text-rose-800 hover:bg-rose-100 transition cursor-pointer">
+                      Enter as Admin (Demo)
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div class="row">
-              <!-- age -->
-              <div class="mb-2 col-md-4 col-sm-4 col-12">
-                <label for="age-Input" class="form-label">Age</label>
-                <input
-                  type="number"
-                  required
-                  min="12"
-                  max="23"
-                  maxlength="2"
-                  class="form-control user-input"
-                  id="age-Input"
-                  aria-describedby="ageHelp"
-                />
-                <div id="ageHelp" class="form-text">Enter the correct age.</div>
+            <!-- CTA Buttons -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+              <button
+                id="googleSignInBtn"
+                class="w-full sm:w-auto inline-flex items-center justify-center gap-3 px-6 py-3.5 rounded-xl text-sm sm:text-base font-semibold bg-white text-slate-800 border border-slate-300 shadow-md hover:shadow-lg hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                <svg class="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>Continue with Google (Gmail)</span>
+              </button>
+
+              <button
+                id="demoModeBtn"
+                class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl text-sm sm:text-base font-semibold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-graduation-cap text-indigo-600"></i>
+                <span>Learner Demo</span>
+              </button>
+
+              <button
+                id="demoAdminBtn"
+                class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl text-sm sm:text-base font-semibold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-user-shield text-amber-600"></i>
+                <span>Admin &amp; Teacher Demo</span>
+              </button>
+            </div>
+
+            <!-- 3 Features Pillars -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 text-left border-t border-slate-100 pt-8 mb-8">
+              <div class="flex items-start gap-3.5 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-chart-line text-lg"></i>
+                </div>
+                <div>
+                  <h2 class="font-bold text-sm text-slate-900">Real-Time Grades</h2>
+                  <p class="text-xs text-slate-500 mt-0.5">Instant computation of scores across CAT 1, CAT 2 and Project Works.</p>
+                </div>
               </div>
 
-              <!-- form / level -->
-              <div class="mb-2 col-md-3 col-sm-4 col-12">
-                <label for="level-Input" class="form-label">Level</label>
+              <div class="flex items-start gap-3.5 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                </div>
+                <div>
+                  <h2 class="font-bold text-sm text-slate-900">Timed Assessments</h2>
+                  <p class="text-xs text-slate-500 mt-0.5">Clear countdown clocks and scheduled availability dates for all tasks.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3.5 p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <div class="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                  <i class="fa-solid fa-id-card-clip text-lg"></i>
+                </div>
+                <div>
+                  <h2 class="font-bold text-sm text-slate-900">Official Register Sync</h2>
+                  <p class="text-xs text-slate-500 mt-0.5">Student identity strictly aligned with official class registry records.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quote Card -->
+            <div class="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-5 text-left flex items-start gap-4">
+              <div class="text-indigo-600 text-2xl shrink-0 mt-0.5">
+                <i class="fa-solid fa-quote-left"></i>
+              </div>
+              <div class="flex-1">
+                <p id="quoteText" class="text-sm font-medium text-slate-700 italic">
+                  "Education is the passport to the future, for tomorrow belongs to those who prepare for it today."
+                </p>
+                <div class="flex items-center justify-between mt-2">
+                  <span id="quoteAuthor" class="text-xs font-bold text-indigo-700">— Malcolm X</span>
+                  <button id="newQuoteBtn" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer">
+                    <i class="fa-solid fa-rotate mr-1"></i> New Quote
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 2: LEARNER DASHBOARD (Logged In)                             -->
+      <!-- ================================================================= -->
+      <section id="dashboardSection" class="hidden space-y-6">
+        
+        <!-- Birthday Celebration Greeting Banner (Shown when birthday is due) -->
+        <div id="birthdayCelebrationBanner" class="hidden relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-pink-500 via-purple-600 to-amber-500 text-white shadow-xl animate-fade-in">
+          <!-- Festive Floating Balloons & Embellishments -->
+          <div class="absolute -right-4 -bottom-6 opacity-20 text-9xl pointer-events-none select-none">🎂</div>
+          <div class="absolute right-24 top-2 opacity-30 text-6xl pointer-events-none select-none animate-float-balloon">🎈</div>
+          <div class="absolute left-1/3 -top-4 opacity-25 text-5xl pointer-events-none select-none">✨</div>
+
+          <div class="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-4 text-center sm:text-left">
+              <div class="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-3xl shrink-0 shadow-inner">
+                🎉
+              </div>
+              <div>
+                <div class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full text-xs font-black bg-amber-300 text-amber-950 uppercase tracking-widest mb-1 shadow-xs">
+                  <i class="fa-solid fa-star"></i> Birthday Celebration Due Today!
+                </div>
+                <h2 id="birthdayGreetingHeading" class="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">
+                  Happy Birthday! 🎂
+                </h2>
+                <p id="birthdayGreetingMessage" class="text-xs sm:text-sm text-pink-100 max-w-xl mt-1 leading-relaxed">
+                  On behalf of your teachers and classmates, we celebrate you today! Wishing you academic excellence, good health, and stellar continuous assessment marks!
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2.5 shrink-0">
+              <button
+                id="triggerConfettiBtn"
+                type="button"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-white text-purple-700 hover:bg-amber-100 hover:scale-105 active:scale-95 transition-all shadow-lg cursor-pointer"
+              >
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-500"></i> Pop Confetti!
+              </button>
+              <button
+                id="dismissBirthdayBannerBtn"
+                type="button"
+                class="text-white/70 hover:text-white p-2 text-sm cursor-pointer"
+                title="Dismiss greeting"
+              >
+                <i class="fa-solid fa-xmark text-lg"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Learner Hero Profile Banner (Clean Executive SaaS Styling) -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-7 relative overflow-hidden">
+          <div class="h-1 w-full bg-indigo-600 absolute top-0 left-0"></div>
+
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pt-2">
+            
+            <!-- Learner Avatar + Info -->
+            <div class="flex items-center gap-5">
+              <div class="relative shrink-0">
+                <img
+                  id="dashAvatar"
+                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
+                  alt="Learner Avatar"
+                  class="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl object-cover ring-4 ring-slate-100 shadow-md"
+                />
+                <span class="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" title="Active"></span>
+              </div>
+
+              <div>
+                <div class="flex flex-wrap items-center gap-2.5 mb-1.5">
+                  <h1 id="dashFullName" class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                    Kwame Mensah Frimpong
+                  </h1>
+                  <span id="dashClassBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    Basic 9A
+                  </span>
+                  <span id="dashOverallRankBadge" class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-2xs">
+                    <i class="fa-solid fa-trophy text-amber-500"></i> Overall Rank: <strong id="dashOverallRankText">1st of 45 in Basic 9A</strong>
+                  </span>
+                  <span id="dashGenderBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                    Male
+                  </span>
+                  <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <i class="fa-solid fa-circle-check text-emerald-600"></i> Verified
+                  </span>
+                  <span id="dashBirthdayBadge" class="hidden inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r from-pink-500 to-amber-500 text-white shadow-xs animate-bounce">
+                    <i class="fa-solid fa-cake-candles"></i> Birthday Celebrant!
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:text-sm text-slate-500">
+                  <span class="flex items-center gap-1.5">
+                    <i class="fa-regular fa-envelope text-slate-400"></i>
+                    <span id="dashEmail">kwame.mensah@ghana-edu.gov.gh</span>
+                  </span>
+                  <span class="hidden sm:inline text-slate-300">•</span>
+                  <span class="flex items-center gap-1.5 font-mono">
+                    <i class="fa-solid fa-id-card text-indigo-500"></i>
+                    ID: <strong id="dashStudentId" class="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">JHS26-B9A-001</strong>
+                  </span>
+                  <span class="hidden sm:inline text-slate-300">•</span>
+                  <span class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-cake-candles text-amber-500"></i>
+                    Age: <strong id="dashAge" class="text-slate-800 font-bold">15 yrs</strong>
+                    <span id="dashDobText" class="text-slate-400 text-xs font-normal">(DOB: 18 Apr 2011)</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Profile Actions -->
+            <div class="flex items-center gap-3 shrink-0">
+              <button
+                id="editProfileBtn"
+                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-user-pen text-slate-500"></i>
+                <span>Edit Profile</span>
+              </button>
+
+              <button
+                id="signOutBtn"
+                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span>Sign Out</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 4 KPI Metrics Row (Zero Overlap, Identical Height, Symmetrical) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          
+          <!-- Card 1: Cumulative Average -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-chart-pie text-lg"></i>
+                </div>
+                <span id="dashGradeTag" class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800">
+                  Distinction
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Cumulative Average</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1" id="dashAvgScore">
+                91.0%
+              </div>
+            </div>
+            
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div id="dashAvgProgressBar" class="h-full bg-emerald-500 rounded-full w-[91%]"></div>
+              </div>
+              <span class="text-xs text-slate-400 block mt-1.5">Across all marked tests</span>
+            </div>
+          </div>
+
+          <!-- Card 2: Tests Completed -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-list-check text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-100 text-indigo-800">
+                  Submitted
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Tests Completed</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span id="dashCompletedCount">2</span>
+                <span id="dashTotalTests" class="text-sm font-semibold text-slate-400">/ 6 Tasks</span>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div id="dashCompletedProgressBar" class="h-full bg-indigo-600 rounded-full w-[33%]"></div>
+              </div>
+              <span class="text-xs text-slate-400 block mt-1.5">Marked &amp; recorded</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Available / Open Tasks -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-hourglass-half text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800">
+                  Action Due
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Available / Open Tasks</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span id="dashAvailableCount">4</span>
+                <span class="text-sm font-semibold text-slate-400">Tasks</span>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                <div class="h-full bg-amber-500 rounded-full w-[67%]"></div>
+              </div>
+              <span class="text-xs text-slate-400 block mt-1.5">Open for submission</span>
+            </div>
+          </div>
+
+          <!-- Card 4: Last Test Done -->
+          <div id="lastTestCard" class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all cursor-pointer">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-award text-lg"></i>
+                </div>
+                <div class="text-right">
+                  <span id="dashLastTestDate" class="text-xs font-medium text-slate-500 block">
+                    11 Oct 2026 at 09:42 AM
+                  </span>
+                  <span id="dashLastTestRank" class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 mt-0.5">
+                    <i class="fa-solid fa-list-ol text-amber-600"></i> 7th of 45 in Basic 9A
+                  </span>
+                </div>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Last Test Done</p>
+              <h3 id="dashLastTestTitle" class="text-base font-bold text-slate-900 truncate mt-1">
+                Computing CAT 2
+              </h3>
+              <div class="flex items-baseline gap-2 mt-0.5">
+                <span id="dashLastTestScore" class="text-lg font-extrabold text-indigo-600">18.5 / 20</span>
+                <span class="text-xs text-emerald-600 font-semibold">(92.5%)</span>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <p id="dashLastTestRemarks" class="text-xs text-slate-500 italic truncate">
+                "Excellent grasp of control structures..."
+              </p>
+              <span class="text-xs text-indigo-600 font-semibold block mt-1">
+                Click to view feedback &rarr;
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Assessment Management Hub Card -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8">
+          
+          <!-- Hub Header & Filters -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-200">
+            <div>
+              <h2 class="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <i class="fa-solid fa-layer-group text-indigo-600"></i>
+                Assessment &amp; Project Work Center
+              </h2>
+              <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                Official syllabus CATs, practical project works, and marked assignments.
+              </p>
+            </div>
+
+            <!-- Filter Tabs & Subject Dropdown -->
+            <div class="flex flex-wrap items-center gap-3">
+              
+              <!-- Status Filter Tabs -->
+              <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-semibold">
+                <button class="filter-tab px-3 py-1.5 rounded-lg transition-all cursor-pointer bg-white text-indigo-600 shadow-xs active" data-filter="all">
+                  All (<span id="countAll">6</span>)
+                </button>
+                <button class="filter-tab px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all cursor-pointer" data-filter="AVAILABLE">
+                  Available (<span id="countAvailable">4</span>)
+                </button>
+                <button class="filter-tab px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all cursor-pointer" data-filter="CLOSED">
+                  Closed (<span id="countClosed">2</span>)
+                </button>
+                <button class="filter-tab px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all cursor-pointer" data-filter="GRADED">
+                  My Scores (<span id="countGraded">2</span>)
+                </button>
+              </div>
+
+              <!-- Subject Select -->
+              <div class="relative">
+                <select id="subjectSelect" class="appearance-none bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                  <option value="ALL">All Subjects</option>
+                  <option value="Computing">Computing</option>
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="Creative Arts">Creative Arts</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                  <i class="fa-solid fa-chevron-down text-xs"></i>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Assessment Cards Grid (Renders Skeleton Cards by Default) -->
+          <div id="assessmentGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-6">
+            <!-- Skeleton Card 1 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-24 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-20 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-3/4 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-5/6 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-2/3 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-24 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+            <!-- Skeleton Card 2 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-28 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-16 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-4/5 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-4/5 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-1/2 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-28 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+            <!-- Skeleton Card 3 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-24 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-20 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-2/3 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-5/6 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-3/4 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-20 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+            <!-- Skeleton Card 4 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse hidden md:flex">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-24 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-16 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-3/4 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-4/5 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-2/3 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-24 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+            <!-- Skeleton Card 5 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse hidden lg:flex">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-28 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-20 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-4/5 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-5/6 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-1/2 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-28 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+            <!-- Skeleton Card 6 -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between animate-pulse hidden lg:flex">
+              <div>
+                <div class="flex items-center justify-between mb-3.5">
+                  <div class="h-6 w-24 bg-slate-200 rounded-full"></div>
+                  <div class="h-5 w-16 bg-slate-200 rounded-full"></div>
+                </div>
+                <div class="h-5 w-3/4 bg-slate-200 rounded-md mb-2.5"></div>
+                <div class="space-y-2 mt-3">
+                  <div class="h-3.5 w-full bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-4/5 bg-slate-100 rounded"></div>
+                  <div class="h-3.5 w-2/3 bg-slate-100 rounded"></div>
+                </div>
+              </div>
+              <div class="mt-6 pt-3 border-t border-slate-100 flex items-center justify-between">
+                <div class="h-4 w-24 bg-slate-200 rounded"></div>
+                <div class="h-8 w-24 bg-slate-200 rounded-xl"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ================================================================= -->
+      <!-- VIEW 3: ADMINISTRATOR & TEACHER DASHBOARD                         -->
+      <!-- ================================================================= -->
+      <section id="adminDashboardSection" class="hidden space-y-8">
+        
+        <!-- Admin Command Header Banner (Executive Modern SaaS Styling) -->
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-7 relative overflow-hidden">
+          <div class="h-1 w-full bg-slate-900 absolute top-0 left-0"></div>
+
+          <div class="flex flex-col gap-5 pt-1">
+            <!-- Top Meta Line: Status Pills & View Mode Switcher -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-slate-900 text-white">
+                  <i class="fa-solid fa-shield-halved text-indigo-400"></i> Admin Console
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span id="adminLiveUsersBadge">3</span> Learners Online
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  <i class="fa-solid fa-layer-group text-indigo-500"></i> Basic 9 (Tracks 9A &amp; 9B)
+                </span>
+              </div>
+
+              <!-- Switch to Student View -->
+              <button
+                id="adminSwitchLearnerBtn"
+                class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-arrow-right-from-bracket text-slate-400"></i>
+                <span>Switch to Learner View</span>
+              </button>
+            </div>
+
+            <!-- Main Heading & Primary Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                <h1 class="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+                  Continuous Assessment Management System
+                </h1>
+                <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                  Oversee curriculum lanes, verify official marking schemes, calibrate term weights to 100%, and manage student assessments.
+                </p>
+              </div>
+
+              <!-- Executive Action Toolbar -->
+              <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  id="adminViewAnswerKeysBtn"
+                  class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer"
+                  title="Inspect Official NaCCA Verified Answers and Solutions"
+                >
+                  <i class="fa-solid fa-key text-amber-500"></i>
+                  <span>Marking Scheme &amp; Answer Keys</span>
+                </button>
+
+                <button
+                  id="adminManageAssessmentsBtn"
+                  class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer"
+                  title="Configure assessment weights and test items"
+                >
+                  <i class="fa-solid fa-scale-balanced text-indigo-600"></i>
+                  <span>Assessment &amp; Term Weights</span>
+                </button>
+
+                <button
+                  id="adminNewBroadcastBtn"
+                  class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-xs shadow-slate-900/10 transition-all cursor-pointer"
+                  title="Send announcement to students"
+                >
+                  <i class="fa-solid fa-bullhorn text-indigo-400"></i>
+                  <span>Send Announcement</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin 4 KPI Metrics Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          
+          <!-- Card 1: Users Online -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-signal text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Active Learners Online</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span id="kpiOnlineCount">3</span>
+                <span class="text-sm font-semibold text-slate-400">Students</span>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <span class="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                <i class="fa-solid fa-circle-check"></i> Realtime presence active
+              </span>
+            </div>
+          </div>
+
+          <!-- Card 2: Registered Students -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-users text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-indigo-100 text-indigo-800">
+                  Enrolled
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Registered Learners</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span id="kpiTotalStudents">93</span>
+                <span class="text-sm font-semibold text-slate-400">Learners</span>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <span class="text-xs text-slate-400 block">45 in Basic 9A • 48 in Basic 9B</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Active Assessments -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-file-signature text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-800">
+                  Curriculum
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">Active Assessment Tasks</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span>4</span>
+                <span class="text-sm font-semibold text-slate-400">Open Tasks</span>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <span class="text-xs text-slate-400 block">2 Closed / Archived tasks</span>
+            </div>
+          </div>
+
+          <!-- Card 4: Dispatched Notifications -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between hover:shadow-md transition-all">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-bell text-lg"></i>
+                </div>
+                <span class="px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-800">
+                  Broadcasts
+                </span>
+              </div>
+              <p class="text-xs font-medium text-slate-500 mt-3">In-App Notifications</p>
+              <div class="text-3xl font-extrabold text-slate-900 tracking-tight mt-1 flex items-baseline gap-1.5">
+                <span id="kpiNotifsSent">3</span>
+                <span class="text-sm font-semibold text-slate-400">Dispatched</span>
+              </div>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <span class="text-xs text-slate-400 block">Broadcast to All &amp; Specific Classes</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Section A: Send In-App Broadcast Notification -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8" id="broadcastComposerSection">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-200 mb-6">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <i class="fa-solid fa-paper-plane text-lg"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-lg text-slate-900">Dispatch Broadcast Notification</h3>
+                <p class="text-xs text-slate-500">Learners see this instant alert under their bell notification icon.</p>
+              </div>
+            </div>
+          </div>
+
+          <form id="broadcastNotifForm" class="space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <!-- Title -->
+              <div class="sm:col-span-2">
+                <label for="notifTitleInput" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Notification Title <span class="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
+                  id="notifTitleInput"
                   required
-                  maxlength="2"
-                  class="form-control user-input"
-                  id="level-Input"
-                  aria-describedby="levelHelp"
+                  placeholder="e.g. Computing CAT 1 Deadline Extended"
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-                <div id="levelHelp" class="form-text">eg: 3A</div>
               </div>
 
-              <!-- gender -->
-              <div class="mb-2 col-md-5 col-sm-4 col-12">
-                <label for="gender-Input" class="form-label">Gender</label>
+              <!-- Target Class -->
+              <div>
+                <label for="notifTargetClass" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Target Class <span class="text-rose-500">*</span>
+                </label>
                 <select
-                  name="genderInput"
-                  class="form-control user-input"
+                  id="notifTargetClass"
                   required
-                  id="gender-Input"
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
+                  <option value="ALL">All Classes (B7 - B9)</option>
+                  <option value="Basic 9A">Basic 9A only</option>
+                  <option value="Basic 9B">Basic 9B only</option>
+                  <option value="Basic 8A">Basic 8A only</option>
+                  <option value="Basic 8B">Basic 8B only</option>
+                  <option value="Basic 7A">Basic 7A only</option>
+                  <option value="Basic 7B">Basic 7B only</option>
                 </select>
               </div>
             </div>
 
-            <!-- email -->
-            <div class="mb-3">
-              <label for="emailInput" class="form-label">Email</label>
-              <input
-                type="email"
+            <!-- Message Body -->
+            <div>
+              <label for="notifMessageInput" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Notification Message <span class="text-rose-500">*</span>
+              </label>
+              <textarea
+                id="notifMessageInput"
                 required
-                class="form-control user-input-email"
-                id="email-Input"
-                placeholder=" eg: computing.b9@gmail.com"
-              />
+                rows="2"
+                placeholder="Write your broadcast message to be displayed to learners..."
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              ></textarea>
             </div>
 
-            <button
-              type="button"
-              class="rounded-0 btn btn-secondary w-100 submit-student-btn"
-            >
-              Submit
-            </button>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                id="sendBroadcastSubmitBtn"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/25 transition-all cursor-pointer"
+              >
+                <i class="fa-solid fa-bullhorn"></i>
+                <span>Broadcast Notification</span>
+              </button>
+            </div>
           </form>
         </div>
 
-        <!-- quotes -->
-        <div class="quotes-section bg-light p-4 rounded-2">
-          <div class="quotes">
-            <h4>Inspirational Quotes</h4>
-            <div class="quote-info bg-info p-3">
-              <p class="user-input-email">
-                Want some quotes, click on the button
+        <!-- Section B: Live Registered Student Directory & Realtime Chat -->
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 sm:p-8">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200 mb-6">
+            <div>
+              <h3 class="font-bold text-xl text-slate-900 tracking-tight flex items-center gap-2">
+                <i class="fa-solid fa-address-book text-indigo-600"></i>
+                Registered Learner Directory &amp; Realtime Communication
+              </h3>
+              <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+                View student grades, live presence, and start instant 1-on-1 chats.
+              </p>
+            </div>
+
+            <!-- Filter Class Select -->
+            <div class="flex items-center gap-2">
+              <label for="adminClassFilter" class="text-xs font-semibold text-slate-500">Filter:</label>
+              <select
+                id="adminClassFilter"
+                class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="ALL">All Classes</option>
+                <option value="Basic 9A">Basic 9A</option>
+                <option value="Basic 9B">Basic 9B</option>
+                <option value="ONLINE">Online Learners Only</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Students Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <th class="py-3 px-4">Learner Name (As in Register)</th>
+                  <th class="py-3 px-4">Class</th>
+                  <th class="py-3 px-4">Presence Status</th>
+                  <th class="py-3 px-4">Academic Status</th>
+                  <th class="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminLearnersTableBody" class="divide-y divide-slate-100 text-sm">
+                <!-- Injected via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- ================================================================= -->
+    <!-- FLOATING REALTIME CHATBOX WIDGET (Learner & Admin)                -->
+    <!-- ================================================================= -->
+    <div id="floatingChatContainer" class="hidden">
+      <!-- Floating Chat Launch Button -->
+      <button
+        id="openChatBtn"
+        class="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl hover:bg-indigo-700 flex items-center justify-center text-xl transition-all hover:scale-105 cursor-pointer relative"
+        title="Chat with Teacher / Admin"
+      >
+        <i class="fa-solid fa-comments"></i>
+        <span id="chatUnreadDot" class="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full"></span>
+      </button>
+
+      <!-- Chatbox Window Panel -->
+      <div
+        id="chatWindow"
+        class="hidden fixed bottom-24 right-6 z-40 w-80 sm:w-96 bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[480px]"
+      >
+        <!-- Chat Header with Icons of the Two Users Chatting -->
+        <div class="bg-indigo-600 p-4 text-white flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <!-- Two Chatting Avatars Paired -->
+            <div class="flex items-center -space-x-2.5 relative shrink-0">
+              <img
+                id="chatUserAvatar"
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
+                alt="You"
+                class="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-xs z-10"
+                title="You"
+              />
+              <img
+                id="chatPartnerAvatar"
+                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
+                alt="Chat Partner"
+                class="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-300 shadow-xs z-20"
+                title="Chat Partner"
+              />
+              <span class="absolute -bottom-0.5 -right-0.5 z-30 w-3 h-3 bg-emerald-400 border-2 border-indigo-600 rounded-full"></span>
+            </div>
+            <div>
+              <h4 id="chatPartnerName" class="font-bold text-sm leading-tight">Master Debrah (Admin)</h4>
+              <p id="chatPartnerStatus" class="text-[11px] text-indigo-100 flex items-center gap-1 mt-0.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online • 1-on-1 Support
               </p>
             </div>
           </div>
-          <button class="rounded-0 btn btn-secondary mt-1" id="btn1">
-            New Quote
+          <button id="closeChatBtn" class="text-indigo-200 hover:text-white p-1 cursor-pointer" title="Close Chat">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Chat Messages Feed -->
+        <div id="chatMessagesContainer" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- Typing Indicator Banner -->
+        <div id="chatTypingIndicator" class="hidden px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center gap-2">
+          <div class="flex items-center gap-1 bg-white border border-slate-200 px-2.5 py-1 rounded-full shadow-2xs">
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce" style="animation-delay: 0ms"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce" style="animation-delay: 150ms"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce" style="animation-delay: 300ms"></span>
+          </div>
+          <span id="chatTypingText" class="text-[11px] font-medium text-slate-500">Master Debrah is typing...</span>
+        </div>
+
+        <!-- Attachment Preview Bar (hidden by default) -->
+        <div id="chatAttachmentPreview" class="hidden px-3 py-2 bg-indigo-50 border-t border-indigo-100 flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img id="chatPreviewThumb" src="" alt="Preview" class="w-9 h-9 rounded-lg object-cover border border-indigo-200 hidden" />
+            <div id="chatPreviewDocIcon" class="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm hidden">
+              <i class="fa-solid fa-file-waveform"></i>
+            </div>
+            <div class="min-w-0">
+              <div id="chatPreviewFilename" class="text-xs font-bold text-slate-800 truncate">selected_file.png</div>
+              <div id="chatPreviewFilesize" class="text-[10px] text-slate-500">124 KB • Ready to send</div>
+            </div>
+          </div>
+          <button type="button" id="chatRemoveAttachBtn" class="text-slate-400 hover:text-rose-600 p-1 cursor-pointer" title="Remove attachment">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Audio Voice Recording Bar (active during mic recording) -->
+        <div id="chatRecordingBar" class="hidden p-3 bg-rose-50 border-t border-rose-200 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+            <span id="recordingTimer" class="font-mono text-xs font-bold text-rose-700">0:00</span>
+            <div class="flex items-center gap-0.5 h-5 px-1.5">
+              <div class="soundwave-bar"></div>
+              <div class="soundwave-bar"></div>
+              <div class="soundwave-bar"></div>
+              <div class="soundwave-bar"></div>
+              <div class="soundwave-bar"></div>
+            </div>
+            <span class="text-[11px] text-rose-600 font-medium">Recording audio...</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" id="cancelRecordBtn" class="px-2 py-1 text-xs font-semibold text-slate-500 hover:text-rose-600 transition cursor-pointer">
+              Cancel
+            </button>
+            <button type="button" id="sendRecordBtn" class="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition cursor-pointer">
+              <i class="fa-solid fa-paper-plane text-[10px]"></i> Send
+            </button>
+          </div>
+        </div>
+
+        <!-- Chat Input Form -->
+        <form id="chatInputForm" class="p-2.5 bg-white border-t border-slate-200 flex items-center gap-1.5">
+          <!-- Hidden File Input -->
+          <input type="file" id="chatFileInput" accept="image/*,audio/*,.pdf,.doc,.docx" class="hidden" />
+
+          <!-- Attachment Button -->
+          <button
+            type="button"
+            id="chatAttachBtn"
+            class="w-8 h-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 flex items-center justify-center shrink-0 transition cursor-pointer"
+            title="Attach Image, Document, or Audio"
+          >
+            <i class="fa-solid fa-paperclip text-sm"></i>
           </button>
 
-          <h5 class="mt-4 mb-0">Newsletter for you:</h5>
-          <div class="newsletter">
-            <img
-              class="nsmq mt-3"
-              src="./images/nsmq_winner.webp"
-              alt="NSMQ winner 2024"
-              height="120"
+          <!-- Voice Record Mic Button -->
+          <button
+            type="button"
+            id="chatVoiceRecordBtn"
+            class="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center shrink-0 transition cursor-pointer"
+            title="Record Voice Note"
+          >
+            <i class="fa-solid fa-microphone text-sm"></i>
+          </button>
+
+          <!-- Text Input -->
+          <input
+            type="text"
+            id="chatMessageInput"
+            placeholder="Type message, attach media, or record..."
+            autocomplete="off"
+            class="flex-1 bg-slate-100 border border-slate-200 rounded-xl py-1.5 px-3 text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+
+          <!-- Send Button -->
+          <button
+            type="submit"
+            id="chatSendBtn"
+            class="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shrink-0 shadow-sm transition cursor-pointer"
+            title="Send Message"
+          >
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Image / Media Lightbox Modal -->
+    <div id="mediaLightboxModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="relative max-w-2xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <div class="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+          <span id="lightboxCaption" class="text-xs font-semibold truncate px-2">Attachment Preview</span>
+          <button id="closeLightboxBtn" class="text-slate-400 hover:text-white p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+        <div class="p-2 bg-slate-950 flex items-center justify-center max-h-[75vh]">
+          <img id="lightboxImg" src="" alt="Enlarged media" class="max-h-[70vh] w-auto rounded-lg object-contain" />
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 1: ONBOARDING MODAL (First Time Sign-Up)                    -->
+    <!-- ================================================================= -->
+    <div id="onboardingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto">
+        
+        <!-- Header -->
+        <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-6">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <i class="fa-solid fa-user-graduate text-lg"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-slate-900">Learner Registration</h3>
+              <p class="text-xs text-slate-500">Ensure details match your official school register.</p>
+            </div>
+          </div>
+          <button id="closeOnboardingModalBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <form id="onboardingForm" class="space-y-5">
+          
+          <!-- Full Name -->
+          <div>
+            <label for="regFullName" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Full Name (as in Class Register) <span class="text-rose-500">*</span>
+            </label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <i class="fa-regular fa-user"></i>
+              </div>
+              <input
+                type="text"
+                id="regFullName"
+                required
+                placeholder="e.g. Kwame Mensah Frimpong"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-10 pr-4 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
+              />
+            </div>
+            <p class="text-xs text-slate-400 mt-1">Official spelling for continuous assessment records.</p>
+          </div>
+
+          <!-- Date of Birth, Sex & Class Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            
+            <!-- Date of Birth Selector -->
+            <div>
+              <label for="regDob" class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                <span>Date of Birth</span>
+                <span class="text-rose-500">*</span>
+                <i id="regDobLockIcon" class="fa-solid fa-lock text-slate-400 text-xs hidden" title="Date of Birth is locked"></i>
+              </label>
+              <input
+                type="date"
+                id="regDob"
+                required
+                max="2017-12-31"
+                min="2004-01-01"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
+              />
+            </div>
+
+            <!-- Sex / Gender -->
+            <div>
+              <label for="regGender" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Sex / Gender <span class="text-rose-500">*</span>
+              </label>
+              <select
+                id="regGender"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
+              >
+                <option value="" disabled selected>Select</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+
+            <!-- Class / Form -->
+            <div>
+              <label for="regClass" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Class / Form <span class="text-rose-500">*</span>
+              </label>
+              <select
+                id="regClass"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
+              >
+                <option value="Basic 9A" selected>Basic 9A</option>
+                <option value="Basic 9B">Basic 9B</option>
+                <option value="Basic 8A">Basic 8A</option>
+                <option value="Basic 8B">Basic 8B</option>
+                <option value="Basic 7A">Basic 7A</option>
+                <option value="Basic 7B">Basic 7B</option>
+              </select>
+            </div>
+
+          </div>
+
+          <!-- Profile Picture Picker -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Profile Photo (Optional)
+              </label>
+              <span class="text-[10px] text-slate-400 font-medium">Upload photo or choose preset</span>
+            </div>
+            
+            <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <!-- Top row: Avatar Preview + Upload / Action Buttons -->
+              <div class="flex items-center gap-3.5">
+                <div class="relative group shrink-0">
+                  <img
+                    id="onboardAvatarPreview"
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
+                    alt="Avatar Preview"
+                    class="w-16 h-16 rounded-2xl object-cover ring-2 ring-indigo-500 shadow-sm transition"
+                  />
+                  <!-- Upload trigger overlay on hover -->
+                  <label for="regAvatarFile" class="absolute inset-0 bg-slate-900/50 rounded-2xl flex flex-col items-center justify-center text-white text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition cursor-pointer">
+                    <i class="fa-solid fa-camera text-sm mb-0.5"></i>
+                    <span>Upload</span>
+                  </label>
+                </div>
+
+                <div class="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-800">Your Personal Photo</h4>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Upload a clean passport photo from your device (PNG, JPG, WebP).</p>
+                  </div>
+                  
+                  <div class="flex items-center gap-2">
+                    <label for="regAvatarFile" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-300 shadow-xs transition cursor-pointer">
+                      <i class="fa-solid fa-cloud-arrow-up text-indigo-600"></i>
+                      <span>Upload Photo</span>
+                    </label>
+                    <input type="file" id="regAvatarFile" accept="image/png, image/jpeg, image/jpg, image/webp" class="hidden" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Bottom row: Quick Preset Avatars -->
+              <div class="pt-2.5 border-t border-slate-200/70">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[11px] font-semibold text-slate-600">Or choose a school preset:</span>
+                  <span id="customAvatarIndicator" class="hidden text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                    <i class="fa-solid fa-circle-check"></i> Custom photo selected
+                  </span>
+                </div>
+                <div id="avatarPresets" class="flex flex-wrap gap-2">
+                  <!-- Injected via JS -->
+                </div>
+              </div>
+            </div>
+            <input type="hidden" id="selectedAvatarUrl" value="" />
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button
+              type="submit"
+              id="saveOnboardingBtn"
+              class="w-full py-3 px-4 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/25 transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <i class="fa-solid fa-check"></i>
+              <span>Save Profile &amp; Enter Dashboard</span>
+            </button>
+          </div>
+
+        </form>
+
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 2: SCORE DETAILS & FEEDBACK MODAL                           -->
+    <!-- ================================================================= -->
+    <div id="scoreDetailsModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 sm:p-8 relative">
+        
+        <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-6">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <i class="fa-solid fa-award text-lg"></i>
+            </div>
+            <div>
+              <h3 id="scoreModalTitle" class="font-bold text-lg text-slate-900">Computing CAT 2</h3>
+              <p id="scoreModalSubtitle" class="text-xs text-slate-500">Basic 9 Continuous Assessment</p>
+            </div>
+          </div>
+          <button id="closeScoreModalBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Score Number Circle / Box -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 text-center mb-6">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">Score Achieved</span>
+          <div class="flex items-baseline justify-center gap-1">
+            <span id="modalScoreNum" class="text-4xl font-extrabold text-indigo-600">18.5</span>
+            <span id="modalMaxScore" class="text-lg font-bold text-slate-400">/ 20</span>
+          </div>
+          <div class="mt-2 flex items-center justify-center gap-2">
+            <span id="modalGradeLabel" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+              Distinction
+            </span>
+            <span id="modalScorePct" class="text-xs font-semibold text-slate-600">92.5%</span>
+          </div>
+        </div>
+
+        <!-- Meta list -->
+        <div class="space-y-2.5 text-xs text-slate-600 mb-6">
+          <div class="flex justify-between py-1.5 border-b border-slate-100">
+            <span class="text-slate-400">Submitted Date &amp; Time:</span>
+            <span id="modalSubmittedDate" class="font-semibold text-slate-700">11 Oct 2026 at 09:42 AM</span>
+          </div>
+          <div class="flex justify-between items-center py-1.5 border-b border-slate-100">
+            <span class="text-slate-400">Submission Position:</span>
+            <span id="modalSubmissionRank" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+              <i class="fa-solid fa-list-ol text-amber-600"></i> 7th person to submit out of 45 students (Basic 9A)
+            </span>
+          </div>
+          <div class="flex justify-between py-1.5 border-b border-slate-100">
+            <span class="text-slate-400">Subject:</span>
+            <span id="modalSubject" class="font-semibold text-slate-700">Computing</span>
+          </div>
+          <div class="flex justify-between py-1.5 border-b border-slate-100">
+            <span class="text-slate-400">Task Type:</span>
+            <span id="modalType" class="font-semibold text-slate-700">Continuous Assessment (CAT)</span>
+          </div>
+        </div>
+
+        <!-- Remarks -->
+        <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-4 mb-6">
+          <span class="text-xs font-bold text-indigo-900 flex items-center gap-1.5 mb-1">
+            <i class="fa-solid fa-chalkboard-user"></i> Teacher Remarks:
+          </span>
+          <p id="modalRemarks" class="text-xs text-slate-700 italic leading-relaxed">
+            "Excellent grasp of control structures and flowchart conventions. Keep up the high standard!"
+          </p>
+        </div>
+
+        <button id="closeScoreModalBtn2" class="w-full py-2.5 px-4 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">
+          Close Score Card
+        </button>
+
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 3: SUPABASE BACKEND CONFIGURATION MODAL                     -->
+    <!-- ================================================================= -->
+    <div id="backendConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full p-6 sm:p-8 relative">
+        
+        <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-6">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <i class="fa-solid fa-server text-lg"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-slate-900">Supabase Connection</h3>
+              <p class="text-xs text-slate-500">Live Backend Configuration</p>
+            </div>
+          </div>
+          <button id="closeConfigModalBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <div class="space-y-4 mb-6">
+          <div>
+            <label for="cfgSupabaseUrl" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Project URL
+            </label>
+            <input
+              type="text"
+              id="cfgSupabaseUrl"
+              readonly
+              value="https://vyecjlbknzwqexugtneg.supabase.co"
+              class="w-full bg-slate-100 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-600 font-mono"
             />
-            <div class="newsletter-info ms-2">
-              <h6 class="mt-3">Mfantipim Wins NSMQ 2024 Edition</h6>
-              <p>The Grand Finale of the 20...</p>
-              <span
-                ><a
-                  class="read-more-newsletter btn btn-light rounded-0"
-                  href="https://bit.ly/3YFq9Yd"
-                  target="_blank"
-                  rel="noopener"
-                  >Read more</a
-                >
+          </div>
+
+          <div>
+            <label for="cfgAnonKey" class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Anon Key (Public API Key)
+            </label>
+            <input
+              type="password"
+              id="cfgAnonKey"
+              placeholder="Paste anon key"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-xs text-emerald-800 flex items-center gap-2">
+            <i class="fa-solid fa-circle-check text-emerald-600"></i>
+            <span>Configured and ready with live Supabase project.</span>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button id="saveConfigBtn" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition cursor-pointer">
+            Save &amp; Reload
+          </button>
+          <button id="closeConfigModalBtn2" class="py-2.5 px-4 rounded-xl text-sm font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer">
+            Cancel
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 4: IN-PORTAL SECURE ASSESSMENT & QUIZ RUNNER                -->
+    <!-- ================================================================= -->
+    <div id="quizRunnerModal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-5 hidden overflow-y-auto">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full my-auto overflow-hidden relative flex flex-col max-h-[92vh]">
+        
+        <!-- Quiz Header -->
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shrink-0 relative">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                <span id="quizSubjectBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                  Computing
+                </span>
+                <span id="quizClassTrackBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/30 text-amber-200 border border-amber-400/30">
+                  Basic 9A Track
+                </span>
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  <i class="fa-solid fa-shield-halved text-emerald-400"></i> Anti-Cheat Sequence
+                </span>
+              </div>
+              <h3 id="quizTitle" class="text-lg sm:text-xl font-bold tracking-tight text-white">
+                Computing CAT 1: Continuous Assessment
+              </h3>
+              <div class="flex items-center gap-2 mt-1 text-xs text-slate-300">
+                <span class="flex items-center gap-1">
+                  <i class="fa-solid fa-user-check text-indigo-400"></i>
+                  <span id="quizLearnerName">Kwame Mensah Frimpong</span>
+                </span>
+                <span>•</span>
+                <span id="quizStudentIdText" class="font-mono text-indigo-200">JHS26-B9A-001</span>
+              </div>
+            </div>
+
+            <button id="closeQuizRunnerBtn" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition cursor-pointer" title="Exit Quiz">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+
+          <!-- Progress Bar & Indicator -->
+          <div id="quizProgressRow" class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+            <span class="text-slate-300 font-medium">
+              Question <strong id="quizCurrentNum" class="text-white">1</strong> of <span id="quizTotalNum">10</span>
+            </span>
+            <span class="text-slate-300 font-medium flex items-center gap-1.5">
+              <i class="fa-regular fa-clock text-amber-400"></i>
+              <span id="quizTimerText">15:00</span>
+            </span>
+          </div>
+          <div id="quizProgressBarTrack" class="w-full bg-white/15 h-2 rounded-full overflow-hidden mt-2">
+            <div id="quizProgressBar" class="h-full bg-emerald-400 rounded-full transition-all duration-300 w-[10%]"></div>
+          </div>
+        </div>
+
+        <!-- Quiz Body: Question Active View -->
+        <div id="quizActiveBody" class="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
+          
+          <!-- Question Prompt Card -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5 sm:p-6">
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <span id="quizQuestionPill" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-800">
+                Question 1
+              </span>
+              <span class="text-xs font-semibold text-slate-400">
+                2 Marks
+              </span>
+            </div>
+            <p id="quizQuestionPrompt" class="text-base sm:text-lg font-bold text-slate-900 leading-relaxed">
+              Loading question prompt...
+            </p>
+          </div>
+
+          <!-- Options Container -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Select your answer:
+              </span>
+              <span class="text-[11px] text-slate-400 italic">
+                Shuffled options
+              </span>
+            </div>
+            <div id="quizOptionsList" class="space-y-3">
+              <!-- Dynamically rendered randomized option buttons -->
+            </div>
+          </div>
+
+          <!-- Academic Notice -->
+          <div class="p-3.5 bg-amber-50 rounded-xl border border-amber-200/80 text-xs text-amber-800 flex items-start gap-2.5">
+            <i class="fa-solid fa-eye-slash text-amber-600 mt-0.5 shrink-0"></i>
+            <div>
+              <p class="font-semibold">Blind progression active</p>
+              <p class="text-[11px] text-amber-700/90 mt-0.5">
+                Answers are recorded silently without showing correctness to peers. Exact solutions are safeguarded after submission.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quiz Active Footer -->
+        <div id="quizActiveFooter" class="p-4 sm:p-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+          <div class="text-xs text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-lock text-slate-400"></i>
+            <span>Card locks permanently once submitted</span>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button
+              id="quizNextBtn"
+              class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/25 transition cursor-pointer"
+            >
+              <span>Next Question</span>
+              <i class="fa-solid fa-arrow-right"></i>
+            </button>
+            <button
+              id="quizSubmitBtn"
+              class="hidden inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-600/25 transition cursor-pointer"
+            >
+              <i class="fa-solid fa-check-circle"></i>
+              <span>Submit &amp; Lock Test</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quiz Result Screen (Hidden during test) -->
+        <div id="quizResultScreen" class="p-6 sm:p-8 overflow-y-auto space-y-6 hidden text-center my-auto">
+          <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-inner">
+            <i class="fa-solid fa-award"></i>
+          </div>
+
+          <div>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 mb-2">
+              <i class="fa-solid fa-circle-check"></i> Assessment Completed &amp; Locked
+            </span>
+            <h3 class="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Test Record Transmitted!
+            </h3>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+              Your responses have been processed and cumulatively added to the school continuous assessment database.
+            </p>
+          </div>
+
+          <!-- Score Card -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 max-w-md mx-auto">
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+              Your Assessment Score
+            </span>
+            <div class="flex items-baseline justify-center gap-1.5">
+              <span id="quizResultScore" class="text-4xl font-black text-indigo-600">18.0</span>
+              <span id="quizResultMax" class="text-lg font-bold text-slate-400">/ 20</span>
+            </div>
+            <div class="mt-2 flex items-center justify-center gap-2">
+              <span id="quizResultGradeBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                Distinction
+              </span>
+              <span id="quizResultPct" class="text-xs font-semibold text-slate-600">90.0%</span>
+            </div>
+
+            <!-- Score Breakdown (No answers revealed!) -->
+            <div class="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-slate-200 text-xs">
+              <div class="p-2.5 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">
+                <span class="block text-[11px] text-emerald-600 font-medium">Correct Items</span>
+                <strong id="quizCorrectCount" class="text-lg font-extrabold">9</strong>
+              </div>
+              <div class="p-2.5 bg-rose-50 rounded-xl border border-rose-100 text-rose-800">
+                <span class="block text-[11px] text-rose-600 font-medium">Incorrect Items</span>
+                <strong id="quizIncorrectCount" class="text-lg font-extrabold">1</strong>
+              </div>
+            </div>
+
+            <div class="mt-4 pt-3 border-t border-slate-200/80 text-[11px] text-slate-500">
+              <span class="font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 inline-flex items-center gap-1">
+                <i class="fa-solid fa-list-ol"></i> <span id="quizResultRankText">Turn-in Order: 2nd in Basic 9A</span>
               </span>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div class="container-items">
-        <div class="text-center assessment-menu">
-          <p class="fs-5 mb-4 px-2">
-            Welcome Learner! Choose your programme to begin the submission of
-            your assignment.
-          </p>
+          <!-- Academic Privacy Protection Notice -->
+          <div class="p-3.5 bg-slate-100 rounded-xl border border-slate-200 text-xs text-slate-600 max-w-md mx-auto text-left flex items-start gap-2.5">
+            <i class="fa-solid fa-shield-halved text-indigo-600 mt-0.5 shrink-0"></i>
+            <p class="text-[11px] leading-relaxed">
+              <strong>Academic Integrity Policy:</strong> Individual question keys and correct answer choices are not revealed to prevent sharing with classmates who have not yet taken this assessment.
+            </p>
+          </div>
 
-          <a
-            class="btn btn-secondary bt"
-            href="./pages/b9-computing-assessment.html"
-            >Computing Basic 9</a
-          >
-          <br />
-          <br />
-          <a
-            class="btn btn-primary bt disabled"
-            href="./creative_arts/assessment-choice.html"
-            >Creative Arts Basic 9</a
-          >
-          <br />
-          <br />
-          <a
-            class="btn btn-info fw-bold mb-2 bt disabled"
-            href="./pages/b9-maths-assessment.html"
-            >Mathematics Basic 9</a
-          >
-          <hr />
-          <p>Playground</p>
-          <a
-            class="btn btn-danger fw-bold mb-3 text-light bt"
-            href="https://askdebb.github.io/calculator"
-            >Play with Calculator</a
-          >
-          <br />
-          <a
-            class="btn btn-info fw-bold mb-3 text-white bt"
-            href="https://askdebb.github.io/Rock-Paper-Scissors-JS/"
-            >Rock-Paper-Scissors</a
-          >
-        </div>
-
-        <div class="user-performance-data">
-          <div class="user-profile"></div>
-          <br />
-          <div class="user-performance"></div>
-        </div>
-      </div>
-
-      <hr />
-
-      <div class="footer mt-2 px-2">
-        <div class="footer-items">
-          <p class="text-center fs-4 footer-info">
-            <span>&copy; 2023-24</span> | made with&#9889;|
-            <span class="text-danger-emphasis fw-bold company-link"
-              ><a href="https://web.facebook.com/cwdebrah"
-                >code <b>BOLT</b></a
-              ></span
+          <div class="pt-2 max-w-md mx-auto">
+            <button
+              id="quizDoneBtn"
+              class="w-full py-3 px-5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-md shadow-indigo-600/25 transition cursor-pointer"
             >
-            studios
-          </p>
+              Return to Dashboard &amp; View Standing
+            </button>
+          </div>
         </div>
+
       </div>
     </div>
-    <!-- Full-screen overlay with spinner -->
-    <div id="overlay">
-      <div class="spinner"></div>
-    </div>
-    <script
-      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"
-      integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL"
-      crossorigin="anonymous"
-    ></script>
 
-    <script src="scripts.js" type="module"></script>
-    <script src="./timer.js"></script>
+    <!-- ================================================================= -->
+    <!-- MODAL 5: ADMIN ASSESSMENT & TERM WEIGHTING CONFIGURATION          -->
+    <!-- ================================================================= -->
+    <div id="adminAssessmentConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden overflow-y-auto">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl w-full my-auto overflow-hidden relative flex flex-col max-h-[92vh]">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-slate-200 flex items-start justify-between gap-4 bg-slate-50">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-sliders"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-lg text-slate-900">Term Assessment &amp; Weighting Configuration</h3>
+              <p class="text-xs text-slate-500">Determine total assessments and calibrate weights so cumulative term score sums to 100.</p>
+            </div>
+          </div>
+          <button id="closeAdminAsmtConfigBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto space-y-6 flex-1">
+          
+          <!-- Cumulative Weight Progress Card -->
+          <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span class="text-xs text-indigo-300 font-bold uppercase tracking-wider">
+                  Academic Term Weight Calibration
+                </span>
+                <div class="text-2xl font-extrabold flex items-baseline gap-2 mt-0.5">
+                  <span id="adminTotalWeightVal">100.00%</span>
+                  <span class="text-sm font-semibold text-slate-300">/ 100.00% Target</span>
+                </div>
+              </div>
+              <div id="adminWeightStatusBadgeContainer" class="flex flex-wrap items-center gap-2">
+                <span id="adminWeightStatusBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                  <i class="fa-solid fa-circle-check"></i> Balanced (100%)
+                </span>
+                <button
+                  id="adminAutoBalanceBtn"
+                  type="button"
+                  class="px-2.5 py-1 rounded-full text-xs font-bold bg-white/20 hover:bg-white/30 text-white transition cursor-pointer flex items-center gap-1"
+                  title="Automatically adjust active assessment weights to sum exactly to 100%"
+                >
+                  <i class="fa-solid fa-wand-magic-sparkles text-amber-300"></i> Auto-Balance to 100%
+                </button>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="w-full bg-white/20 h-2.5 rounded-full overflow-hidden mt-3">
+              <div id="adminWeightProgressBar" class="h-full bg-emerald-400 rounded-full transition-all duration-300 w-[100%]"></div>
+            </div>
+            <p id="adminWeightDescription" class="text-[11px] text-slate-300 mt-2">
+              All term assessments, CATs, and project works cumulatively sum to 100 marks.
+            </p>
+          </div>
+
+          <!-- Current Assessment Items Table -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-list-check text-indigo-600"></i>
+                Active Term Assessment Items (<span id="adminAsmtCount">6</span>)
+              </h4>
+              <span class="text-xs text-slate-400">Lock, schedule countdown unlock, or edit weight</span>
+            </div>
+
+            <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th class="py-3 px-3">Title &amp; Track</th>
+                    <th class="py-3 px-2">Type</th>
+                    <th class="py-3 px-2">Weight (%)</th>
+                    <th class="py-3 px-2">Max Pts</th>
+                    <th class="py-3 px-3">Status &amp; Countdown</th>
+                    <th class="py-3 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminAsmtTableBody" class="divide-y divide-slate-100">
+                  <!-- Dynamically populated rows -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Introduce New Assessment Item Section -->
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-5">
+            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-2 mb-3">
+              <i class="fa-solid fa-plus-circle text-emerald-600"></i>
+              Introduce Another Assessment / Test Item to Term
+            </h4>
+            
+            <form id="addNewAssessmentForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div class="sm:col-span-2">
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Assessment Title *</label>
+                <input
+                  type="text"
+                  id="newAsmtTitle"
+                  required
+                  placeholder="e.g. Computing CAT 3: Network Security"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Subject *</label>
+                <select
+                  id="newAsmtSubject"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="Computing">Computing</option>
+                  <option value="Mathematics">Mathematics</option>
+                  <option value="Creative Arts">Creative Arts</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Class Track *</label>
+                <select
+                  id="newAsmtClass"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="Basic 9A">Basic 9A</option>
+                  <option value="Basic 9B">Basic 9B</option>
+                  <option value="Basic 9">Basic 9 (Both 9A &amp; 9B)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Type *</label>
+                <select
+                  id="newAsmtType"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="CAT">Continuous Assessment (CAT)</option>
+                  <option value="PROJECT_WORK">Project Work</option>
+                  <option value="HOME_ASSIGNMENT">Home Assignment</option>
+                  <option value="EXAM">Examination</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Term Weight (%) *</label>
+                <input
+                  type="number"
+                  id="newAsmtWeight"
+                  required
+                  min="1"
+                  max="100"
+                  value="20"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Initial Status *</label>
+                <select
+                  id="newAsmtStatus"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                >
+                  <option value="AVAILABLE">Available (Unlocked Now)</option>
+                  <option value="UPCOMING">Upcoming (Scheduled Unlock)</option>
+                  <option value="CLOSED">Closed (Locked)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-600 mb-1">Schedule Unlock Time (Optional)</label>
+                <input
+                  type="datetime-local"
+                  id="newAsmtUnlockTime"
+                  class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div class="sm:col-span-2 lg:col-span-4 flex justify-end pt-2">
+                <button
+                  type="submit"
+                  class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
+                >
+                  <i class="fa-solid fa-plus"></i> Add Test Item to Curriculum
+                </button>
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 shrink-0">
+          <button
+            id="closeAdminAsmtConfigBtn2"
+            class="py-2.5 px-5 rounded-xl text-sm font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition cursor-pointer"
+          >
+            Close Settings
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 6: OFFICIAL MARKING SCHEME & ANSWER KEYS (ADMIN / TEACHER)  -->
+    <!-- ================================================================= -->
+    <div id="adminAnswerKeyModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden overflow-y-auto">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-4xl w-full my-auto overflow-hidden relative flex flex-col max-h-[92vh]">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-slate-200 flex items-start justify-between gap-4 bg-gradient-to-r from-amber-50 via-indigo-50 to-amber-50">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg shadow-sm">
+              <i class="fa-solid fa-key"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-lg text-slate-900">Official Marking Scheme &amp; Answer Keys</h3>
+                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-200 text-amber-900 border border-amber-300">Teacher / Admin Access</span>
+              </div>
+              <p class="text-xs text-slate-500">Verified Ghana NaCCA Syllabus solutions, marking guides, and pedagogical rationales.</p>
+            </div>
+          </div>
+          <button id="closeAnswerKeyModalBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Controls: Track Selector & Assessment Selector -->
+        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-3">
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">Select Assessment Pack</label>
+              <select id="answerKeyAsmtSelect" class="bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-xs">
+                <option value="asmt-001">Computing CAT 1 (Basic 9A Track)</option>
+                <option value="asmt-002">Computing CAT 1 (Basic 9B Track)</option>
+                <option value="asmt-005">Computing CAT 2: Algorithms (Basic 9A Track)</option>
+                <option value="asmt-005-9B">Computing CAT 2: Scratch (Basic 9B Track)</option>
+                <option value="asmt-003">Mathematics CAT 1: Real Numbers (Basic 9A Track)</option>
+                <option value="asmt-003-9B">Mathematics CAT 1: Sets &amp; Ratios (Basic 9B Track)</option>
+                <option value="asmt-004">Creative Arts: Cultural Artifacts (Basic 9A Track)</option>
+                <option value="asmt-004-9B">Creative Arts: Performing Arts (Basic 9B Track)</option>
+              </select>
+            </div>
+            <div class="pt-3">
+              <span id="answerKeyTrackBadge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">Basic 9A Track</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="printAnswerKeyBtn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-2xs transition cursor-pointer">
+              <i class="fa-solid fa-print"></i> Print Marking Scheme
+            </button>
+          </div>
+        </div>
+
+        <!-- Body: Questions List with Correct Answers Highlighted -->
+        <div id="answerKeyQuestionsContainer" class="p-6 overflow-y-auto space-y-4 flex-1">
+          <!-- Dynamic Question Cards populated via JS -->
+        </div>
+
+        <!-- Footer -->
+        <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 shrink-0">
+          <span class="flex items-center gap-1.5 text-emerald-800">
+            <i class="fa-solid fa-shield-halved text-emerald-600"></i> Protected Solution Keys &mdash; Kept strictly confidential from student learners during assessments
+          </span>
+          <button id="closeAnswerKeyModalBtn2" type="button" class="py-2 px-4 rounded-xl text-xs font-semibold bg-slate-200 text-slate-700 hover:bg-slate-300 transition cursor-pointer">
+            Close Scheme
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- App Footer -->
+    <footer class="bg-white border-t border-slate-200 py-6 text-xs text-slate-500 mt-auto">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div>
+          &copy; 2026 Ghana JHS Assessment Portal &nbsp;•&nbsp; <strong>codeBOLT Studios</strong> / askdebb
+        </div>
+        <div class="flex items-center gap-4">
+          <button id="openConfigBtn" class="text-slate-400 hover:text-indigo-600 transition flex items-center gap-1 cursor-pointer">
+            <i class="fa-solid fa-gear"></i> Supabase Setup
+          </button>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Application Script Module -->
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
