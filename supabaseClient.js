@@ -1,32 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Default Supabase project URL from your configuration
+// Default Supabase project URL and anon key
 const DEFAULT_SUPABASE_URL = "https://vyecjlbknzwqexugtneg.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5ZWNqbGJrbnp3cWV4dWd0bmVnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE5NjcwMDMsImV4cCI6MjEwNzU0MzAwM30.OAZaBxB0x4McklqAQ0PM78DncMUV2MODzG7mh8pkKuA";
 
-// Designated admin emails that automatically get admin permissions upon signing in
+// Designated admin email strictly required to access /admin and admin subpages
+export const PRIMARY_ADMIN_EMAIL = "computing.b9@gmail.com";
 export const ADMIN_EMAILS = [
-  "admin@gmail.com",
-  "askdebb@gmail.com",
   "computing.b9@gmail.com",
-  "admin@jhs.edu.gh",
 ];
 
 export function isUserAdmin(user, profile) {
   if (!user && !profile) return false;
-  const email = (user?.email || profile?.email || "").toLowerCase();
-  if (ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === email)) {
-    return true;
-  }
-  return profile?.role === "admin" || profile?.role === "teacher";
+  const email = (user?.email || profile?.email || "").toLowerCase().trim();
+  return email === PRIMARY_ADMIN_EMAIL.toLowerCase();
 }
 
-// Retrieve config from Vite environment or localStorage for in-browser configuration
+// Retrieve config from Vite environment or fallback to defaults
 export function getSupabaseConfig() {
   const envUrl = typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_URL;
   const envKey = typeof import.meta !== "undefined" && import.meta.env?.VITE_SUPABASE_ANON_KEY;
 
   const url = (envUrl && envUrl.trim() !== "") ? envUrl : (localStorage.getItem("jhs_supabase_url") || DEFAULT_SUPABASE_URL);
-  const anonKey = (envKey && envKey.trim() !== "") ? envKey : (localStorage.getItem("jhs_supabase_anon_key") || "");
+  const anonKey = (envKey && envKey.trim() !== "") ? envKey : (localStorage.getItem("jhs_supabase_anon_key") || DEFAULT_SUPABASE_ANON_KEY);
 
   return { url, anonKey };
 }
@@ -76,7 +72,7 @@ export async function signInWithGoogle() {
       redirectTo: redirectUrl,
       queryParams: {
         access_type: "offline",
-        prompt: "consent",
+        prompt: "select_account",
       },
     },
   });
@@ -98,6 +94,7 @@ export async function signOutUser() {
 export async function getSessionUser() {
   const supabase = getSupabase();
   if (!supabase) {
+    if (isMockDataCleared()) return null;
     const demo = localStorage.getItem("jhs_demo_session");
     if (demo) {
       try {
@@ -109,9 +106,43 @@ export async function getSessionUser() {
     return null;
   }
 
+  // Handle OAuth redirect returning with access_token & refresh_token in URL hash
+  if (typeof window !== "undefined" && window.location.hash && window.location.hash.includes("access_token")) {
+    try {
+      const hashStr = window.location.hash.startsWith("#") ? window.location.hash.substring(1) : window.location.hash;
+      const params = new URLSearchParams(hashStr);
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!error && data?.session?.user) {
+          // Clean the ugly hash fragment from browser URL bar
+          try {
+            window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          } catch (e) {}
+          return data.session.user;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not set Supabase session from hash:", err);
+    }
+  }
+
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) return null;
   return session.user;
+}
+
+export function onAuthChange(callback) {
+  const supabase = getSupabase();
+  if (supabase) {
+    return supabase.auth.onAuthStateChange(callback);
+  }
+  return { data: { subscription: { unsubscribe: () => {} } } };
 }
 
 // -------------------------------------------------------------
@@ -168,12 +199,35 @@ export async function updateLearnerProfile(profileData) {
 }
 
 // -------------------------------------------------------------
+// Mock Data Clearance & Live Testing Helpers
+// -------------------------------------------------------------
+export function isMockDataCleared() {
+  return localStorage.getItem("jhs_clear_mock_data") === "true";
+}
+
+export function clearAllMockData() {
+  localStorage.removeItem("jhs_demo_session");
+  localStorage.removeItem("jhs_active_learner");
+  localStorage.removeItem("jhs_local_assessments");
+  localStorage.removeItem("jhs_local_submissions");
+  localStorage.removeItem("jhs_local_chats");
+  localStorage.removeItem("jhs_local_notifications");
+  localStorage.removeItem("jhs_all_learners");
+  localStorage.removeItem("jhs_view_mode");
+  localStorage.setItem("jhs_clear_mock_data", "true");
+}
+
+export function restoreMockData() {
+  localStorage.removeItem("jhs_clear_mock_data");
+}
+
+// -------------------------------------------------------------
 // Admin: Fetch All Registered Learners
 // -------------------------------------------------------------
 export async function fetchAllLearners() {
   const supabase = getSupabase();
   if (!supabase) {
-    return getFallbackAllLearners();
+    return isMockDataCleared() ? [] : getFallbackAllLearners();
   }
 
   const { data, error } = await supabase
@@ -181,10 +235,16 @@ export async function fetchAllLearners() {
     .select("*, submissions(count, score)")
     .order("created_at", { ascending: false });
 
-  if (error || !data || data.length === 0) {
-    return getFallbackAllLearners();
+  if (error) {
+    console.warn("Supabase fetchAllLearners error:", error);
+    return isMockDataCleared() ? [] : getFallbackAllLearners();
   }
-  return data;
+
+  // When live data testing or mock data cleared: return actual database records
+  if (isMockDataCleared()) {
+    return data || [];
+  }
+  return (data && data.length > 0) ? data : getFallbackAllLearners();
 }
 
 // -------------------------------------------------------------
@@ -193,7 +253,8 @@ export async function fetchAllLearners() {
 export async function fetchAssessments() {
   const supabase = getSupabase();
   if (!supabase) {
-    return getFallbackAssessments();
+    if (isMockDataCleared()) return [];
+    return getFallbackAssessments().filter(a => a.subject !== "Mathematics" && !a.title.toLowerCase().includes("math"));
   }
 
   const { data, error } = await supabase
@@ -201,15 +262,23 @@ export async function fetchAssessments() {
     .select("*")
     .order("deadline", { ascending: true });
 
-  if (error || !data || data.length === 0) {
-    return getFallbackAssessments();
+  if (error) {
+    console.warn("Supabase fetchAssessments error:", error);
+    if (isMockDataCleared()) return [];
+    return getFallbackAssessments().filter(a => a.subject !== "Mathematics" && !a.title.toLowerCase().includes("math"));
   }
-  return data;
+
+  const filtered = (data || []).filter(a => a.subject !== "Mathematics" && !a.title.toLowerCase().includes("math"));
+  if (isMockDataCleared()) {
+    return filtered;
+  }
+  return (filtered.length > 0) ? filtered : getFallbackAssessments().filter(a => a.subject !== "Mathematics" && !a.title.toLowerCase().includes("math"));
 }
 
 export async function fetchLearnerSubmissions(learnerId) {
   const supabase = getSupabase();
   if (!supabase) {
+    if (isMockDataCleared()) return [];
     const all = getFallbackSubmissions();
     return all.filter((s) => s.learner_id === learnerId || !s.learner_id);
   }
@@ -241,28 +310,39 @@ export async function fetchLearnerSubmissions(learnerId) {
     .eq("learner_id", learnerId)
     .order("submitted_at", { ascending: false });
 
-  if (error || !data || data.length === 0) {
+  if (error) {
+    console.warn("Supabase fetchLearnerSubmissions error:", error);
+    if (isMockDataCleared()) return [];
     const all = getFallbackSubmissions();
     return all.filter((s) => s.learner_id === learnerId || !s.learner_id);
   }
-  return data;
+
+  if (isMockDataCleared()) {
+    return data || [];
+  }
+  return (data && data.length > 0) ? data : (getFallbackSubmissions().filter((s) => s.learner_id === learnerId || !s.learner_id));
 }
 
 export async function fetchAllSubmissions() {
   const supabase = getSupabase();
   if (!supabase) {
-    return getFallbackSubmissions();
+    return isMockDataCleared() ? [] : getFallbackSubmissions();
   }
 
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, assessments(title, subject, class_level, max_score, weight), learners(full_name, class_level, student_id)")
+    .select("*, assessments(id, title, subject, class_level, max_score, weight, assessment_type), learners(id, full_name, class_level, student_id)")
     .order("submitted_at", { ascending: false });
 
-  if (error || !data || data.length === 0) {
-    return getFallbackSubmissions();
+  if (error) {
+    console.warn("Supabase fetchAllSubmissions error:", error);
+    return isMockDataCleared() ? [] : getFallbackSubmissions();
   }
-  return data;
+
+  if (isMockDataCleared()) {
+    return data || [];
+  }
+  return (data && data.length > 0) ? data : getFallbackSubmissions();
 }
 
 export async function saveAssessmentSubmission(payload) {
@@ -520,8 +600,18 @@ export async function markChatMessagesAsRead(viewerRole) {
 export function getFallbackAssessments() {
   const local = localStorage.getItem("jhs_local_assessments");
   if (local) {
-    try { return JSON.parse(local); } catch (e) {}
+    try {
+      const parsed = JSON.parse(local);
+      // Strictly purge any legacy Creative Arts or Mathematics items so the portal is purely Computing
+      const filtered = parsed.filter(a => (a.subject === "Computing" || !a.subject) && !a.title?.toLowerCase().includes("math") && !a.title?.toLowerCase().includes("creative") && !a.title?.toLowerCase().includes("art"));
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem("jhs_local_assessments", JSON.stringify(filtered));
+      }
+      if (filtered.length > 0) return filtered;
+    } catch (e) {}
   }
+
+  // Pure Computing Ghanaian Curriculum Assessments (B7 - B9 Standard)
   return [
     {
       id: "asmt-001",
@@ -554,36 +644,6 @@ export function getFallbackAssessments() {
       assessment_url: "https://forms.gle/TaDY59WHMsWYKGH7A",
     },
     {
-      id: "asmt-003",
-      title: "Mathematics CAT 1: Real Numbers",
-      subject: "Mathematics",
-      class_level: "Basic 9",
-      assessment_type: "CAT",
-      description: "Standard NaCCA syllabus test on Rational/Irrational Numbers, Standard Form and Indices.",
-      max_score: 20,
-      weight: 20.00,
-      status: "AVAILABLE",
-      unlock_time: null,
-      deadline: new Date(Date.now() + 6 * 86400000).toISOString(),
-      time_limit_minutes: 20,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
-    },
-    {
-      id: "asmt-004",
-      title: "Creative Arts: 2D Cultural Artifact Sketch",
-      subject: "Creative Arts",
-      class_level: "Basic 9",
-      assessment_type: "PROJECT_WORK",
-      description: "Hands-on project work documenting Ghanaian visual heritage symbols and modern creative analysis.",
-      max_score: 50,
-      weight: 20.00,
-      status: "AVAILABLE",
-      unlock_time: null,
-      deadline: new Date(Date.now() + 10 * 86400000).toISOString(),
-      time_limit_minutes: 45,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
-    },
-    {
       id: "asmt-005",
       title: "Computing CAT 2: Algorithms & Scratch",
       subject: "Computing",
@@ -592,34 +652,87 @@ export function getFallbackAssessments() {
       description: "Algorithm flowcharts, loops, conditional branching, and Scratch visual programming concepts.",
       max_score: 20,
       weight: 20.00,
-      status: "CLOSED",
+      status: "AVAILABLE",
       unlock_time: null,
-      deadline: new Date(Date.now() - 3 * 86400000).toISOString(),
+      deadline: new Date(Date.now() + 5 * 86400000).toISOString(),
       time_limit_minutes: 15,
       assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+    },
+    {
+      id: "asmt-008",
+      title: "Computing Quick Quiz: Hardware & Cyber Safety",
+      subject: "Computing",
+      class_level: "Basic 9",
+      assessment_type: "QUIZ",
+      description: "Rapid-fire 10 questions testing CPU architecture, memory, cybersecurity, and networking protocols.",
+      max_score: 20,
+      weight: 15.00,
+      status: "AVAILABLE",
+      unlock_time: null,
+      deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+      time_limit_minutes: 10,
+      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+    },
+    {
+      id: "asmt-007",
+      title: "Computing Practical Project 1: Visual Algorithm & Scratch",
+      subject: "Computing",
+      class_level: "Basic 9",
+      assessment_type: "PROJECT_WORK",
+      description: "Hands-on project work documenting algorithm flowcharts, iterative loops, and Scratch sprite interactions.",
+      max_score: 30,
+      weight: 20.00,
+      status: "AVAILABLE",
+      unlock_time: null,
+      deadline: new Date(Date.now() + 10 * 86400000).toISOString(),
+      time_limit_minutes: 30,
+      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+    },
+    {
+      id: "asmt-009",
+      title: "Computing End of Term Examination",
+      subject: "Computing",
+      class_level: "Basic 9",
+      assessment_type: "EXAM",
+      description: "Comprehensive terminal examination evaluating Ghanaian NaCCA B7-B9 Computing curriculum competencies.",
+      max_score: 50,
+      weight: 25.00,
+      status: "UPCOMING",
+      unlock_time: new Date(Date.now() + 2 * 86400000).toISOString(),
+      deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
+      time_limit_minutes: 45,
+      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+    },
+    /*
+    // [MATHEMATICS ASSESSMENTS COMMENTED OUT AS REQUESTED]
+    {
+      id: "asmt-003",
+      title: "Mathematics CAT 1: Real Numbers",
+      subject: "Mathematics",
+      ...
     },
     {
       id: "asmt-006",
       title: "Mathematics Project Work 1: Community Survey",
       subject: "Mathematics",
-      class_level: "Basic 9",
-      assessment_type: "PROJECT_WORK",
-      description: "Field data collection, frequency distribution table, and histogram representation.",
-      max_score: 40,
-      weight: 20.00,
-      status: "CLOSED",
-      unlock_time: null,
-      deadline: new Date(Date.now() - 8 * 86400000).toISOString(),
-      time_limit_minutes: 45,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
-    },
+      ...
+    }
+    */
   ];
 }
 
 export function getFallbackSubmissions() {
   const local = localStorage.getItem("jhs_local_submissions");
   if (local) {
-    try { return JSON.parse(local); } catch (e) {}
+    try {
+      const parsed = JSON.parse(local);
+      // Strictly purge any non-Computing submissions (Creative Arts / Math)
+      const filtered = parsed.filter(s => (s.assessments?.subject === "Computing" || !s.assessments?.subject) && !s.assessments?.title?.toLowerCase().includes("math") && !s.assessments?.title?.toLowerCase().includes("creative") && !s.assessments?.title?.toLowerCase().includes("art"));
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem("jhs_local_submissions", JSON.stringify(filtered));
+      }
+      if (filtered.length > 0) return filtered;
+    } catch (e) {}
   }
   return [
     {
@@ -644,28 +757,15 @@ export function getFallbackSubmissions() {
         weight: 20.00,
       },
     },
+    /*
+    // [MATHEMATICS SUBMISSION EXCLUDED]
     {
       id: "sub-002",
       assessment_id: "asmt-006",
-      learner_id: "demo-user-12345",
       score: 36,
-      max_score: 40,
-      correct_count: 18,
-      incorrect_count: 2,
-      status: "GRADED",
-      submission_rank: 12,
-      submitted_at: "2026-10-06T14:15:30Z",
-      teacher_remarks: "Accurate frequency tables and well-labeled axes on the histogram. Good analytical reasoning.",
-      assessments: {
-        id: "asmt-006",
-        title: "Mathematics Project Work 1: Community Survey",
-        subject: "Mathematics",
-        class_level: "Basic 9",
-        assessment_type: "PROJECT_WORK",
-        max_score: 40,
-        weight: 20.00,
-      },
-    },
+      assessments: { subject: "Mathematics" }
+    }
+    */
   ];
 }
 
@@ -695,11 +795,11 @@ export function getFallbackNotifications() {
     },
     {
       id: "note-03",
-      title: "Inter-School Mathematics Quiz Prep",
+      title: "Inter-School Computing & Robotics Challenge Prep",
       message: "Extra prep sessions for selected contestants will hold on Thursday at the computer laboratory.",
       target_class: "ALL",
       type: "GENERAL",
-      sender_name: "Academic Board",
+      sender_name: "Computing Academic Board",
       created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
     },
   ];

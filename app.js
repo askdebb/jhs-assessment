@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ==============================================================================
 // JHS ASSESSMENT & LEARNER DASHBOARD: APPLICATION CONTROLLER
 // Fully Styled with TailwindCSS (Clean, Modern, Intuitive Light Aesthetic)
@@ -26,23 +27,36 @@ import {
   sendChatMessage,
   markChatMessagesAsRead,
   isUserAdmin,
+  PRIMARY_ADMIN_EMAIL,
   ADMIN_EMAILS,
   generateStudentId,
   getNextStudentSequence,
   calculateAge,
   isBirthdayToday,
+  clearAllMockData,
+  isMockDataCleared,
+  restoreMockData,
+  onAuthChange,
 } from "./supabaseClient.js";
+
+import {
+  exportBroadsheetExcel,
+  calculateBroadsheetData,
+} from "./excelExport.ts";
 
 import {
   COMPUTING_CAT1_9A,
   COMPUTING_CAT1_9B,
   COMPUTING_CAT2_9A,
   COMPUTING_CAT2_9B,
-  MATH_CAT1_9A,
-  MATH_CAT1_9B,
-  CREATIVE_ARTS_CAT1_9A,
-  CREATIVE_ARTS_CAT1_9B,
+  COMPUTING_QUIZ_9A,
+  COMPUTING_PROJECT_9,
+  COMPUTING_EXAM_9,
   ALL_OFFICIAL_QUESTION_PACKS,
+  getAllConfiguredQuestionPacks,
+  saveConfiguredQuestion,
+  deleteConfiguredQuestion,
+  updateAssessmentDuration,
   getAssessmentQuestionPack,
   generateStudentPaper,
   shuffleArray,
@@ -113,6 +127,8 @@ const state = {
   // Admin & Communication State
   isAdmin: false,
   activeView: "learner", // 'learner' | 'admin'
+  questionCatFilter: "ALL",
+  questionTrackFilter: "ALL",
   allLearners: [],
   notifications: [],
   readNotificationIds: new Set(JSON.parse(localStorage.getItem("jhs_read_notifications") || "[]")),
@@ -222,6 +238,10 @@ const adminLearnersTableBody = document.getElementById("adminLearnersTableBody")
 const adminSwitchLearnerBtn = document.getElementById("adminSwitchLearnerBtn");
 const adminNewBroadcastBtn = document.getElementById("adminNewBroadcastBtn");
 const adminManageAssessmentsBtn = document.getElementById("adminManageAssessmentsBtn");
+const adminExportExcelBtn = document.getElementById("adminExportExcelBtn");
+const adminExportExcelBtnText = document.getElementById("adminExportExcelBtnText");
+const adminTopExportExcelBtn = document.getElementById("adminTopExportExcelBtn");
+const adminClearMockBtn = document.getElementById("adminClearMockBtn");
 
 // Quiz Runner Elements
 const quizRunnerModal = document.getElementById("quizRunnerModal");
@@ -286,6 +306,73 @@ const answerKeyAsmtSelect = document.getElementById("answerKeyAsmtSelect");
 const answerKeyTrackBadge = document.getElementById("answerKeyTrackBadge");
 const printAnswerKeyBtn = document.getElementById("printAnswerKeyBtn");
 const answerKeyQuestionsContainer = document.getElementById("answerKeyQuestionsContainer");
+
+// Admin Security Gatekeeper & Routing Elements
+const adminGatekeeperSection = document.getElementById("adminGatekeeperSection");
+const adminGatekeeperQuickBtn = document.getElementById("adminGatekeeperQuickBtn");
+const adminGatekeeperGoogleBtn = document.getElementById("adminGatekeeperGoogleBtn");
+const adminGatekeeperLearnerBtn = document.getElementById("adminGatekeeperLearnerBtn");
+const brandLogoLink = document.getElementById("brandLogoLink");
+
+// Admin Sub-Navigation Tabs
+const adminTabOverview = document.getElementById("adminTabOverview");
+const adminTabQuestions = document.getElementById("adminTabQuestions");
+const adminTabAssessments = document.getElementById("adminTabAssessments");
+const adminTabMarkingScheme = document.getElementById("adminTabMarkingScheme");
+const adminTabBroadcast = document.getElementById("adminTabBroadcast");
+const adminQuestionsNavBtn = document.getElementById("adminQuestionsNavBtn");
+
+// Admin Subviews
+const adminSubViewOverview = document.getElementById("adminSubViewOverview");
+const adminSubViewQuestions = document.getElementById("adminSubViewQuestions");
+const adminSubViewAssessments = document.getElementById("adminSubViewAssessments");
+const adminSubViewMarkingScheme = document.getElementById("adminSubViewMarkingScheme");
+const adminSubViewBroadcast = document.getElementById("adminSubViewBroadcast");
+
+// Questions Bank & Sitting Config Elements
+const addNewQuestionBtn = document.getElementById("addNewQuestionBtn");
+const questionTrackFilter = document.getElementById("questionTrackFilter");
+const adminQuestionSittingsContainer = document.getElementById("adminQuestionSittingsContainer");
+
+// Assessments & Weights Table 2 Elements
+const adminAutoBalanceBtn2 = document.getElementById("adminAutoBalanceBtn2");
+const adminWeightStatusBadge2 = document.getElementById("adminWeightStatusBadge2");
+const adminTotalWeightVal2 = document.getElementById("adminTotalWeightVal2");
+const adminWeightProgressBar2 = document.getElementById("adminWeightProgressBar2");
+const adminAsmtTableBody2 = document.getElementById("adminAsmtTableBody2");
+
+// Embedded Marking Scheme & Answer Keys Elements
+const printAnswerKeyBtn2 = document.getElementById("printAnswerKeyBtn2");
+const embeddedAnswerKeySelect = document.getElementById("embeddedAnswerKeySelect");
+const embeddedAnswerKeyTrackBadge = document.getElementById("embeddedAnswerKeyTrackBadge");
+const embeddedAnswerKeyContainer = document.getElementById("embeddedAnswerKeyContainer");
+
+// Question Editor Modal Elements
+const questionEditorModal = document.getElementById("questionEditorModal");
+const questionEditorModalTitle = document.getElementById("questionEditorModalTitle");
+const closeQuestionEditorBtn = document.getElementById("closeQuestionEditorBtn");
+const cancelQuestionEditorBtn = document.getElementById("cancelQuestionEditorBtn");
+const questionEditorForm = document.getElementById("questionEditorForm");
+const qEditorQuestionId = document.getElementById("qEditorQuestionId");
+const qEditorAsmtSelect = document.getElementById("qEditorAsmtSelect");
+const qEditorPrompt = document.getElementById("qEditorPrompt");
+const qEditorPoints = document.getElementById("qEditorPoints");
+const qEditorOptA = document.getElementById("qEditorOptA");
+const qEditorOptB = document.getElementById("qEditorOptB");
+const qEditorOptC = document.getElementById("qEditorOptC");
+const qEditorOptD = document.getElementById("qEditorOptD");
+const qEditorCorrectOpt = document.getElementById("qEditorCorrectOpt");
+const qEditorExplanation = document.getElementById("qEditorExplanation");
+
+// Extend Period Modal Elements
+const extendPeriodModal = document.getElementById("extendPeriodModal");
+const extendModalAsmtId = document.getElementById("extendModalAsmtId");
+const extendModalAsmtTitle = document.getElementById("extendModalAsmtTitle");
+const extendModalCurrentDeadline = document.getElementById("extendModalCurrentDeadline");
+const extendCustomDatetimeInput = document.getElementById("extendCustomDatetimeInput");
+const closeExtendPeriodBtn = document.getElementById("closeExtendPeriodBtn");
+const cancelExtendPeriodBtn = document.getElementById("cancelExtendPeriodBtn");
+const saveExtendPeriodBtn = document.getElementById("saveExtendPeriodBtn");
 
 // Floating Chat Elements
 const floatingChatContainer = document.getElementById("floatingChatContainer");
@@ -366,15 +453,37 @@ const newQuoteBtn = document.getElementById("newQuoteBtn");
 const bannerDeadline = document.getElementById("bannerDeadline");
 
 // ------------------------------------------------------------------------------
-// Initialization
+// Initialization & Application Lifecycle
 // ------------------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", async () => {
+async function startApplication() {
   initAvatarPresets();
   initQuotes();
   initCountdownTimer();
   attachEventListeners();
+  window.addEventListener("popstate", () => handleRoute());
+
+  // Listen for Supabase realtime OAuth events (e.g. login redirect completion)
+  onAuthChange(async (event, session) => {
+    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      if (session?.user && (!state.user || state.user.id !== session.user.id)) {
+        await checkAuthSession();
+      }
+    } else if (event === "SIGNED_OUT") {
+      state.user = null;
+      state.profile = null;
+      state.isAdmin = false;
+      await handleRoute();
+    }
+  });
+
   await checkAuthSession();
-});
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => startApplication());
+} else {
+  startApplication();
+}
 
 // ------------------------------------------------------------------------------
 // Auth & Session Management
@@ -392,74 +501,85 @@ async function checkAuthSession() {
 
     if (oauthError || oauthDesc) {
       showOAuthErrorBanner(oauthError, oauthErrorCode, oauthDesc);
+      const gatekeeperError = document.getElementById("adminGatekeeperError");
+      const gatekeeperErrorMsg = document.getElementById("adminGatekeeperErrorMsg");
+      if (gatekeeperError) {
+        gatekeeperError.classList.remove("hidden");
+        if (gatekeeperErrorMsg) {
+          gatekeeperErrorMsg.textContent = oauthDesc || oauthError || "Google Authentication failed. Please try again.";
+        }
+      }
       try {
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (e) {}
     }
 
     let user = await getSessionUser();
-    if (!user) {
-      user = {
-        id: "lrn-001",
-        email: "kwame.mensah@ghana-edu.gov.gh",
-        user_metadata: {
-          full_name: "Kwame Mensah Frimpong",
-          avatar_url: AVATAR_PRESETS[0],
-        },
-      };
+    let profile = null;
+
+    if (user) {
+      state.user = user;
+      profile = await fetchLearnerProfile(user.id);
+
+      // Default profile if newly authenticated user has no profile yet
+      if (!profile) {
+        profile = {
+          id: user.id,
+          student_id: generateStudentId("Basic 9A", 1),
+          full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Student Learner",
+          email: user.email,
+          gender: "Male",
+          date_of_birth: "2011-10-14",
+          class_level: "Basic 9A",
+          role: "learner",
+          avatar_url: user.user_metadata?.avatar_url || AVATAR_PRESETS[0],
+          onboarding_completed: true,
+        };
+      }
+
+      // Determine Admin Status via Email or Profile Role
+      state.isAdmin = isUserAdmin(user, profile);
+
+      // If user is designated Admin, ensure profile role is set to admin
+      if (state.isAdmin && (!profile || profile.role !== "admin")) {
+        profile = {
+          id: user.id,
+          full_name: profile?.full_name || user.user_metadata?.full_name || "School Administrator",
+          email: user.email,
+          gender: profile?.gender || "Male",
+          class_level: profile?.class_level || "Basic 9A",
+          role: "admin",
+          avatar_url: profile?.avatar_url || TEACHER_AVATAR,
+          onboarding_completed: true,
+        };
+      }
+
+      state.profile = profile;
+    } else {
+      state.user = null;
+      state.profile = null;
+      state.isAdmin = false;
     }
 
-    state.user = user;
-    let profile = await fetchLearnerProfile(user.id);
-
-    // Default to verified Ghanaian student learner Kwame Mensah Frimpong (Basic 9A)
-    if (!profile) {
-      profile = {
-        id: user.id || "lrn-001",
-        student_id: "JHS26-B9A-001",
-        full_name: user.user_metadata?.full_name || "Kwame Mensah Frimpong",
-        email: user.email || "kwame.mensah@ghana-edu.gov.gh",
-        gender: "Male",
-        date_of_birth: "2011-10-14",
-        class_level: "Basic 9A",
-        role: "learner",
-        avatar_url: AVATAR_PRESETS[0],
-        onboarding_completed: true,
-      };
-    }
-
-    // Determine Admin Status via Email or Profile Role
-    state.isAdmin = isUserAdmin(user, profile);
-
-    // If user is designated Admin, ensure profile role is set to admin
-    if (state.isAdmin && (!profile || profile.role !== "admin")) {
-      profile = {
-        id: user.id,
-        full_name: profile?.full_name || user.user_metadata?.full_name || "School Administrator",
-        email: user.email,
-        gender: profile?.gender || "Male",
-        class_level: profile?.class_level || "Basic 9A",
-        role: "admin",
-        avatar_url: profile?.avatar_url || TEACHER_AVATAR,
-        onboarding_completed: true,
-      };
-    }
-
-    state.profile = profile;
     const savedView = localStorage.getItem("jhs_view_mode");
     state.activeView = savedView === "admin" ? "admin" : "learner";
 
-    await initNotifications();
-    await initChat();
-
-    if (state.activeView === "admin") {
-      await renderAdminDashboard();
-    } else {
-      await renderDashboard();
+    if (state.user) {
+      await initNotifications();
+      await initChat();
     }
+
+    await handleRoute();
   } catch (err) {
     console.error("Error checking auth session:", err);
-    startDemoMode();
+    if (!isMockDataCleared()) {
+      startDemoMode();
+    } else {
+      state.user = null;
+      state.profile = null;
+      state.isAdmin = false;
+      await handleRoute();
+    }
   }
 }
 
@@ -474,9 +594,14 @@ function showOAuthErrorBanner(error, code, description) {
 }
 
 function renderAuthLanding() {
+  document.getElementById("topAnnouncementBar")?.classList.add("hidden");
+  document.getElementById("mainHeader")?.classList.add("hidden");
+
   authSection.classList.remove("hidden");
   dashboardSection.classList.add("hidden");
   adminDashboardSection.classList.add("hidden");
+  adminGatekeeperSection.classList.add("hidden");
+  adminGatekeeperSection.classList.remove("flex");
   adminToggleContainer.classList.add("hidden");
   floatingChatContainer.classList.add("hidden");
 
@@ -495,14 +620,71 @@ async function handleGoogleSignIn() {
     return;
   }
 
+  const gatekeeperBtn = document.getElementById("adminGatekeeperGoogleBtn");
+  const gatekeeperError = document.getElementById("adminGatekeeperError");
+  if (gatekeeperError) gatekeeperError.classList.add("hidden");
+
+  const originalGoogleBtnHtml = googleSignInBtn ? googleSignInBtn.innerHTML : "";
+  const originalGatekeeperBtnHtml = gatekeeperBtn ? gatekeeperBtn.innerHTML : "";
+
   try {
+    // When clicked, change button text to spinner for both learner and admin app
     if (googleSignInBtn) {
-      googleSignInBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-indigo-600"></i><span>Connecting to Google...</span>`;
+      googleSignInBtn.disabled = true;
+      googleSignInBtn.classList.add("opacity-75", "cursor-wait");
+      googleSignInBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-base text-indigo-600"></i>`;
+    }
+    if (gatekeeperBtn) {
+      gatekeeperBtn.disabled = true;
+      gatekeeperBtn.classList.add("opacity-75", "cursor-wait");
+      gatekeeperBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-base text-white"></i>`;
+    }
+    if (headerSignInBtn) {
+      headerSignInBtn.disabled = true;
+      headerSignInBtn.classList.add("opacity-75", "cursor-wait");
+      headerSignInBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-xs text-white"></i>`;
     }
     await signInWithGoogle();
   } catch (err) {
-    alert("Could not start Google Sign In. Please verify your Supabase anon key.");
-    openBackendConfig();
+    if (googleSignInBtn) {
+      googleSignInBtn.disabled = false;
+      googleSignInBtn.classList.remove("opacity-75", "cursor-wait");
+      googleSignInBtn.innerHTML = originalGoogleBtnHtml || `
+        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Continue with Google (Gmail)</span>
+      `;
+    }
+    if (gatekeeperBtn) {
+      gatekeeperBtn.disabled = false;
+      gatekeeperBtn.classList.remove("opacity-75", "cursor-wait");
+      gatekeeperBtn.innerHTML = originalGatekeeperBtnHtml || `
+        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span id="adminGatekeeperGoogleBtnText">Sign in with Google</span>
+      `;
+    }
+    if (headerSignInBtn) {
+      headerSignInBtn.disabled = false;
+      headerSignInBtn.classList.remove("opacity-75", "cursor-wait");
+      headerSignInBtn.innerHTML = `<i class="fa-brands fa-google text-xs"></i> Sign In`;
+    }
+    if (gatekeeperError) {
+      gatekeeperError.classList.remove("hidden");
+      const errorMsg = document.getElementById("adminGatekeeperErrorMsg");
+      if (errorMsg) errorMsg.textContent = err.message || "Could not start Google Sign In. Please try again.";
+    } else {
+      alert("Could not start Google Sign In. Please verify your connection.");
+      openBackendConfig();
+    }
   }
 }
 
@@ -540,13 +722,13 @@ function startDemoMode() {
 
   initNotifications();
   initChat();
-  renderDashboard();
+  navigateTo("/learner");
 }
 
 function startAdminDemoMode() {
   const adminUser = {
     id: "admin-master-debrah",
-    email: "computing.b9@gmail.com",
+    email: PRIMARY_ADMIN_EMAIL,
     user_metadata: {
       full_name: "Master Debrah (Admin & Head of Computing)",
       avatar_url: TEACHER_AVATAR,
@@ -556,7 +738,7 @@ function startAdminDemoMode() {
   const adminProfile = {
     id: "admin-master-debrah",
     full_name: "Master Debrah",
-    email: "computing.b9@gmail.com",
+    email: PRIMARY_ADMIN_EMAIL,
     gender: "Male",
     class_level: "Basic 9A",
     role: "admin",
@@ -575,7 +757,7 @@ function startAdminDemoMode() {
 
   initNotifications();
   initChat();
-  renderAdminDashboard();
+  navigateTo("/admin");
 }
 
 async function handleSignOut() {
@@ -588,16 +770,10 @@ async function handleSignOut() {
 }
 
 function toggleViewMode() {
-  state.activeView = state.activeView === "admin" ? "learner" : "admin";
   if (state.activeView === "admin") {
-    state.isAdmin = true;
-  }
-  localStorage.setItem("jhs_view_mode", state.activeView);
-
-  if (state.activeView === "admin") {
-    renderAdminDashboard();
+    navigateTo("/learner");
   } else {
-    renderDashboard();
+    navigateTo("/admin");
   }
 }
 
@@ -607,20 +783,20 @@ function toggleViewMode() {
 function updateHeaderNav() {
   const profile = state.profile;
   const roleBadge = state.activeView === "admin"
-    ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Admin</span>`
-    : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">${profile?.class_level || "Student"}</span>`;
+    ? `<span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Admin</span>`
+    : `<span class="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-indigo-100 text-indigo-800">${profile?.class_level || "Student"}</span>`;
 
   authNavContainer.innerHTML = `
-    <div class="flex items-center gap-3">
-      <div class="flex items-center gap-2.5 p-1.5 pr-3 rounded-full bg-slate-100 border border-slate-200">
-        <img src="${profile?.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-8 h-8 rounded-full object-cover ring-2 ring-indigo-500" />
-        <div class="flex items-center gap-1.5">
-          <span class="text-xs sm:text-sm font-semibold text-slate-800">${state.activeView === "admin" ? "Master Debrah (Admin)" : (profile?.full_name || "Kwame Mensah Frimpong")}</span>
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <div class="flex items-center gap-1.5 sm:gap-2 p-1 pr-2.5 rounded-full bg-slate-100 border border-slate-200">
+        <img src="${profile?.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover ring-1 ring-indigo-500 shrink-0" />
+        <div class="flex items-center gap-1">
+          <span class="text-xs font-semibold text-slate-800 max-w-[110px] sm:max-w-none truncate">${state.activeView === "admin" ? "Master Debrah" : (profile?.full_name || "Kwame Mensah Frimpong")}</span>
           ${roleBadge}
         </div>
       </div>
-      <button id="headerSignOutBtn" class="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer" title="Sign Out">
-        <i class="fa-solid fa-right-from-bracket text-sm"></i>
+      <button id="headerSignOutBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer" title="Sign Out">
+        <i class="fa-solid fa-right-from-bracket text-xs"></i>
       </button>
     </div>
   `;
@@ -631,13 +807,13 @@ function updateHeaderNav() {
     adminToggleContainer.classList.remove("hidden");
     if (state.activeView === "admin") {
       if (viewModeLabel) viewModeLabel.textContent = "Learner Portal";
-      viewModeToggleBtn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
-      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600"></i> <span>Learner Portal</span>`;
+      viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
+      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600 text-xs"></i> <span>Learner Portal</span>`;
       viewModeToggleBtn.title = "Switch to Learner Portal";
     } else {
       if (viewModeLabel) viewModeLabel.textContent = "Admin Console";
-      viewModeToggleBtn.className = "inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
-      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400"></i> <span>Admin Console</span>`;
+      viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
+      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400 text-xs"></i> <span>Admin Console</span>`;
       viewModeToggleBtn.title = "Switch to Admin Console";
     }
   }
@@ -1238,16 +1414,9 @@ function renderAssessmentCards() {
     const isAvailable = asmt.status === "AVAILABLE" && !isScheduled;
     const hasScore = sub && sub.status === "GRADED";
 
-    // Subject styles
-    let subjectClass = "bg-blue-50 text-blue-700 border-blue-200";
-    let subjectIcon = "fa-laptop-code";
-    if (asmt.subject === "Mathematics") {
-      subjectClass = "bg-emerald-50 text-emerald-700 border-emerald-200";
-      subjectIcon = "fa-calculator";
-    } else if (asmt.subject === "Creative Arts") {
-      subjectClass = "bg-amber-50 text-amber-700 border-amber-200";
-      subjectIcon = "fa-palette";
-    }
+    // Subject styles - Exclusively Computing
+    const subjectClass = "bg-blue-50 text-blue-700 border-blue-200";
+    const subjectIcon = "fa-laptop-code";
 
     // Status Pill
     let statusBadge = "";
@@ -1281,37 +1450,37 @@ function renderAssessmentCards() {
     let countdownBox = "";
     if (isScheduled && !hasScore) {
       countdownBox = `
-        <div class="bg-amber-50/90 border border-amber-200 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-amber-900 mb-4 shadow-2xs">
-          <span class="flex items-center gap-1.5 text-amber-700"><i class="fa-solid fa-clock animate-spin text-amber-600"></i> Live Countdown:</span>
-          <span class="asmt-live-countdown font-mono text-sm text-amber-950 font-extrabold" data-unlock-time="${asmt.unlock_time}">--:--:--</span>
+        <div class="bg-amber-50/90 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between text-xs font-bold text-amber-900 mb-3 shadow-2xs">
+          <span class="flex items-center gap-1 text-amber-700 text-xs"><i class="fa-solid fa-clock animate-spin text-amber-600 text-xs"></i> Live Countdown:</span>
+          <span class="asmt-live-countdown font-mono text-xs sm:text-sm text-amber-950 font-extrabold" data-unlock-time="${asmt.unlock_time}">--:--:--</span>
         </div>
       `;
     }
 
-    // Action Button
+    // Action Button (Compact)
     let actionBtn = "";
     if (hasScore) {
       actionBtn = `
-        <button class="view-score-btn w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}">
-          <i class="fa-solid fa-file-lines text-indigo-600"></i> View Score &amp; Feedback
+        <button class="view-score-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}">
+          <i class="fa-solid fa-file-lines text-indigo-600 text-xs"></i> View Score &amp; Feedback
         </button>
       `;
     } else if (isScheduled) {
       actionBtn = `
-        <button disabled class="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-clock text-slate-400"></i> Locked until scheduled release
+        <button disabled class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-clock text-slate-400 text-xs"></i> Locked until scheduled release
         </button>
       `;
     } else if (isAvailable) {
       actionBtn = `
-        <button class="start-quiz-btn w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/20 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
-          <i class="fa-solid fa-play"></i> Start Assessment (CAT)
+        <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
+          <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
         </button>
       `;
     } else {
       actionBtn = `
-        <button disabled class="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-lock text-slate-400"></i> Locked by Administrator
+        <button disabled class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-lock text-slate-400 text-xs"></i> Locked by Administrator
         </button>
       `;
     }
@@ -1321,25 +1490,25 @@ function renderAssessmentCards() {
     const cardOrdinal = getOrdinalSuffix(cardRankNum);
 
     return `
-      <div class="bg-white rounded-2xl border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-all">
+      <div class="bg-white rounded-xl border border-slate-200 p-3.5 sm:p-4.5 flex flex-col justify-between hover:shadow-xs hover:border-slate-300 transition-all">
         <div>
           <!-- Header -->
-          <div class="flex items-center justify-between gap-2 mb-3">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${subjectClass}">
-              <i class="fa-solid ${subjectIcon}"></i> ${asmt.subject}
+          <div class="flex items-center justify-between gap-1.5 mb-2.5">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold border ${subjectClass}">
+              <i class="fa-solid ${subjectIcon} text-[10px]"></i> ${asmt.subject}
             </span>
             ${statusBadge}
           </div>
 
-          <h4 class="font-bold text-base text-slate-900 mb-1 leading-snug">${asmt.title}</h4>
-          <p class="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">
+          <h4 class="font-bold text-sm sm:text-base text-slate-900 mb-1 leading-snug">${asmt.title}</h4>
+          <p class="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed">
             ${asmt.description || "Continuous assessment task under Ghana JHS curriculum."}
           </p>
 
           ${countdownBox}
 
           <!-- Details Grid -->
-          <div class="space-y-1.5 py-3 border-y border-slate-100 text-xs text-slate-600 mb-4">
+          <div class="space-y-1 py-2 border-y border-slate-100 text-xs text-slate-600 mb-3">
             <div class="flex justify-between">
               <span class="text-slate-400">Class Track:</span>
               <span class="font-semibold text-slate-700">${asmt.class_level || "Basic 9"}</span>
@@ -1481,7 +1650,7 @@ function startAssessmentQuiz(asmtId) {
 
   const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
   if (asmt.status === "CLOSED" || isScheduled) {
-    alert("This assessment is currently locked by the administrator.");
+    alert("This assessment has been turned off / closed by the administrator or is locked until scheduled release.");
     return;
   }
 
@@ -1489,6 +1658,7 @@ function startAssessmentQuiz(asmtId) {
   const questionPack = getAssessmentQuestionPack(asmtId, learnerClass, asmt.title);
   // Anti-cheat intelligence: randomize both question order AND option order for each student paper
   const studentPaper = generateStudentPaper(questionPack);
+  const sittingMinutes = questionPack?.time_limit_minutes || asmt.time_limit_minutes || 15;
 
   state.activeQuiz = {
     asmtId: asmtId,
@@ -1500,7 +1670,7 @@ function startAssessmentQuiz(asmtId) {
     currentIndex: 0,
     answers: {},
     isSubmitting: false,
-    remainingSeconds: (asmt.time_limit_minutes || 15) * 60,
+    remainingSeconds: sittingMinutes * 60,
   };
 
   if (quizSubjectBadge) quizSubjectBadge.textContent = asmt.subject;
@@ -1547,25 +1717,25 @@ function renderQuizQuestion() {
       return `
         <button
           type="button"
-          class="quiz-option-btn w-full p-4 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all cursor-pointer ${
+          class="quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
             isSelected
               ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
               : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
           }"
           data-option="${escapeHtml(optText)}"
         >
-          <div class="flex items-center gap-3">
-            <span class="quiz-letter-badge w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+          <div class="flex items-center gap-2.5">
+            <span class="quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
               isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
             }">
               ${letter}
             </span>
-            <span class="text-sm leading-relaxed">${escapeHtml(optText)}</span>
+            <span class="text-xs sm:text-sm leading-relaxed">${escapeHtml(optText)}</span>
           </div>
-          <div class="quiz-radio-outer w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+          <div class="quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
             isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
           }">
-            <span class="quiz-radio-inner">${isSelected ? '<span class="w-2 h-2 rounded-full bg-white block"></span>' : ''}</span>
+            <span class="quiz-radio-inner">${isSelected ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : ''}</span>
           </div>
         </button>
       `;
@@ -1579,26 +1749,26 @@ function renderQuizQuestion() {
         // Visual selection indicator without revealing right/wrong answers
         quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((b) => {
           const isThis = b.getAttribute("data-option") === optionVal;
-          b.className = `quiz-option-btn w-full p-4 rounded-2xl border text-left flex items-center justify-between gap-3 transition-all cursor-pointer ${
+          b.className = `quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
             isThis
               ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
               : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
           }`;
           const badge = b.querySelector(".quiz-letter-badge");
           if (badge) {
-            badge.className = `quiz-letter-badge w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+            badge.className = `quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
               isThis ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
             }`;
           }
           const radioOuter = b.querySelector(".quiz-radio-outer");
           if (radioOuter) {
-            radioOuter.className = `quiz-radio-outer w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+            radioOuter.className = `quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
               isThis ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
             }`;
           }
           const radioInner = b.querySelector(".quiz-radio-inner");
           if (radioInner) {
-            radioInner.innerHTML = isThis ? '<span class="w-2 h-2 rounded-full bg-white block"></span>' : '';
+            radioInner.innerHTML = isThis ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : '';
           }
         });
 
@@ -1844,7 +2014,7 @@ async function openAnswerKeyModal(asmtId = null) {
   }
   if (!answerKeyAsmtSelect) return;
 
-  const asmts = state.assessments || [];
+  const asmts = (state.assessments || []).filter(a => a.subject !== "Mathematics");
   answerKeyAsmtSelect.innerHTML = asmts.map((a) => {
     return `<option value="${a.id}">${escapeHtml(a.title)} (${escapeHtml(a.class_level || 'Basic 9')} - ${escapeHtml(a.subject)})</option>`;
   }).join("");
@@ -1872,7 +2042,9 @@ function renderAnswerKeyPack(asmtId) {
   }
 
   const questionPack = getAssessmentQuestionPack(asmtId, classLevel, asmt?.title);
-  if (!questionPack || questionPack.length === 0) {
+  const questions = questionPack?.questions || (Array.isArray(questionPack) ? questionPack : []);
+
+  if (!questions || questions.length === 0) {
     answerKeyQuestionsContainer.innerHTML = `
       <div class="text-center py-12 text-slate-400">
         <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 text-amber-500 block"></i>
@@ -1883,7 +2055,7 @@ function renderAnswerKeyPack(asmtId) {
   }
 
   const optionLetters = ["A", "B", "C", "D", "E"];
-  answerKeyQuestionsContainer.innerHTML = questionPack.map((q, idx) => {
+  answerKeyQuestionsContainer.innerHTML = questions.map((q, idx) => {
     return `
       <div class="p-5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3">
         <div class="flex items-center justify-between gap-2">
@@ -1893,13 +2065,108 @@ function renderAnswerKeyPack(asmtId) {
             </span>
             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHtml(q.topic || asmt?.subject || 'Curriculum')}</span>
           </div>
-          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">2 Marks</span>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">${q.points || 2} Marks</span>
         </div>
 
         <p class="text-sm font-semibold text-slate-900 leading-relaxed">${escapeHtml(q.prompt)}</p>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-          ${q.options.map((opt, optIdx) => {
+          ${(q.options || []).map((opt, optIdx) => {
+            const isCorrect = q.correctAnswer && opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+            return `
+              <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                isCorrect
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-950 font-bold'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-700'
+              }">
+                <div class="flex items-center gap-2">
+                  <span class="w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] ${
+                    isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                  }">
+                    ${optionLetters[optIdx] || optIdx + 1}
+                  </span>
+                  <span>${escapeHtml(opt)}</span>
+                </div>
+                ${isCorrect ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700"><i class="fa-solid fa-circle-check"></i> Verified Correct</span>' : ''}
+              </div>
+            `;
+          }).join("")}
+        </div>
+
+        ${
+          q.explanation
+            ? `
+          <div class="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 text-xs text-indigo-950 leading-relaxed">
+            <span class="font-bold flex items-center gap-1 text-indigo-900 mb-0.5">
+              <i class="fa-solid fa-lightbulb text-amber-500"></i> Marking Rubric &amp; Solution Note:
+            </span>
+            ${escapeHtml(q.explanation)}
+          </div>
+        `
+            : ""
+        }
+      </div>
+    `;
+  }).join("");
+}
+
+function renderEmbeddedAnswerKeyView(asmtId = null) {
+  if (!embeddedAnswerKeyContainer) return;
+  const asmts = (state.assessments || []).filter(a => a.subject !== "Mathematics");
+
+  if (embeddedAnswerKeySelect) {
+    embeddedAnswerKeySelect.innerHTML = asmts.map((a) => {
+      return `<option value="${a.id}">${escapeHtml(a.title)} (${escapeHtml(a.class_level || 'Basic 9')} - ${escapeHtml(a.subject)})</option>`;
+    }).join("");
+
+    if (asmtId) {
+      embeddedAnswerKeySelect.value = asmtId;
+    }
+  }
+
+  const activeId = asmtId || embeddedAnswerKeySelect?.value || (asmts.length > 0 ? asmts[0].id : null);
+  if (!activeId) {
+    embeddedAnswerKeyContainer.innerHTML = `<div class="text-center py-12 text-slate-400">No assessments available.</div>`;
+    return;
+  }
+
+  const asmt = asmts.find(a => a.id === activeId);
+  const classLevel = asmt?.class_level || "Basic 9A";
+  if (embeddedAnswerKeyTrackBadge) {
+    embeddedAnswerKeyTrackBadge.textContent = `${classLevel} Track`;
+  }
+
+  const questionPack = getAssessmentQuestionPack(activeId, classLevel, asmt?.title);
+  const questions = questionPack?.questions || (Array.isArray(questionPack) ? questionPack : []);
+
+  if (!questions || questions.length === 0) {
+    embeddedAnswerKeyContainer.innerHTML = `
+      <div class="text-center py-12 text-slate-400">
+        <i class="fa-solid fa-triangle-exclamation text-3xl mb-2 text-amber-500 block"></i>
+        No marking scheme registered for this assessment item.
+      </div>
+    `;
+    return;
+  }
+
+  const optionLetters = ["A", "B", "C", "D", "E"];
+  embeddedAnswerKeyContainer.innerHTML = questions.map((q, idx) => {
+    return `
+      <div class="p-5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+              Q${idx + 1}
+            </span>
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHtml(q.topic || asmt?.subject || 'Curriculum')}</span>
+          </div>
+          <span class="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">${q.points || 2} Marks</span>
+        </div>
+
+        <p class="text-sm font-semibold text-slate-900 leading-relaxed">${escapeHtml(q.prompt)}</p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+          ${(q.options || []).map((opt, optIdx) => {
             const isCorrect = q.correctAnswer && opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
             return `
               <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
@@ -2249,36 +2516,981 @@ async function handleAddNewAssessment(e) {
 // ------------------------------------------------------------------------------
 // Admin Command Center & Learner Directory
 // ------------------------------------------------------------------------------
-async function renderAdminDashboard() {
-  state.activeView = "admin";
-  authSection.classList.add("hidden");
-  dashboardSection.classList.add("hidden");
-  adminDashboardSection.classList.remove("hidden");
-  floatingChatContainer.classList.remove("hidden");
+// ------------------------------------------------------------------------------
+// Client-Side Router & Access Control Controller
+// ------------------------------------------------------------------------------
+function navigateTo(path, replace = false) {
+  if (replace) {
+    window.history.replaceState({}, "", path);
+  } else {
+    window.history.pushState({}, "", path);
+  }
+  handleRoute();
+}
 
-  updateHeaderNav();
+async function handleRoute() {
+  const path = window.location.pathname.toLowerCase();
 
-  if (!state.assessments || state.assessments.length === 0) {
-    state.assessments = await fetchAssessments();
+  // If path targets administrator surfaces (/admin or /admin/*)
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    state.activeView = "admin";
+    updateHeaderNav();
+
+    // STRICT SECURITY GATEKEEPER:
+    // Requires verified email 'computing.b9@gmail.com'
+    const isAuthorizedAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+    if (!isAuthorizedAdmin) {
+      // Show Gatekeeper Clearance Screen - Only the sign in form, simply centered
+      document.getElementById("topAnnouncementBar")?.classList.add("hidden");
+      document.getElementById("mainHeader")?.classList.add("hidden");
+      document.getElementById("mainFooter")?.classList.add("hidden");
+
+      authSection?.classList.add("hidden");
+      dashboardSection?.classList.add("hidden");
+      adminDashboardSection?.classList.add("hidden");
+      adminGatekeeperSection?.classList.remove("hidden");
+      adminGatekeeperSection?.classList.add("flex");
+
+      const gatekeeperError = document.getElementById("adminGatekeeperError");
+      const gatekeeperErrorMsg = document.getElementById("adminGatekeeperErrorMsg");
+      const gatekeeperGoogleBtnText = document.getElementById("adminGatekeeperGoogleBtnText");
+
+      // Check if user authenticated with an unauthorized email
+      const currentEmail = state.user?.email;
+      const isRealUser = state.user && !state.user.id?.startsWith("demo-") && state.user.id !== "lrn-001";
+
+      if (isRealUser && currentEmail && currentEmail.toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()) {
+        if (gatekeeperError) gatekeeperError.classList.remove("hidden");
+        if (gatekeeperErrorMsg) {
+          gatekeeperErrorMsg.innerHTML = `<strong>${escapeHtml(currentEmail)}</strong> is not authorized. Please choose your dedicated administrator Gmail (<code>${PRIMARY_ADMIN_EMAIL}</code>).`;
+        }
+        if (gatekeeperGoogleBtnText) {
+          gatekeeperGoogleBtnText.textContent = "Choose another Google Account";
+        }
+      } else {
+        if (gatekeeperError) gatekeeperError.classList.add("hidden");
+        if (gatekeeperGoogleBtnText) {
+          gatekeeperGoogleBtnText.textContent = "Sign in with Google";
+        }
+      }
+      return;
+    }
+
+    // Authorized Admin
+    document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+    document.getElementById("mainHeader")?.classList.remove("hidden");
+    document.getElementById("mainFooter")?.classList.remove("hidden");
+
+    adminGatekeeperSection?.classList.add("hidden");
+    adminGatekeeperSection?.classList.remove("flex");
+    authSection?.classList.add("hidden");
+    dashboardSection?.classList.add("hidden");
+    adminDashboardSection?.classList.remove("hidden");
+    floatingChatContainer?.classList.remove("hidden");
+
+    if (!state.assessments || state.assessments.length === 0) {
+      state.assessments = await fetchAssessments();
+    }
+
+    // Resolve subviews
+    if (path.includes("/admin/questions")) {
+      showAdminSubview("questions");
+    } else if (path.includes("/admin/assessments")) {
+      showAdminSubview("assessments");
+    } else if (path.includes("/admin/marking-scheme")) {
+      showAdminSubview("marking-scheme");
+    } else if (path.includes("/admin/broadcast")) {
+      showAdminSubview("broadcast");
+    } else {
+      showAdminSubview("overview");
+    }
+    return;
   }
 
-  // Render skeletons for admin KPI cards & learners table
-  renderAdminKpiSkeletons();
+  // Learner Surface (/learner or / or other)
+  state.activeView = "learner";
+  localStorage.setItem("jhs_view_mode", "learner");
 
-  // Load all registered learners
-  state.allLearners = await fetchAllLearners();
+  adminGatekeeperSection?.classList.add("hidden");
+  adminGatekeeperSection?.classList.remove("flex");
+  adminDashboardSection?.classList.add("hidden");
 
-  // Compute live admin statistics
+  if (window.location.pathname === "/" || window.location.pathname === "") {
+    window.history.replaceState({}, "", "/learner");
+  }
+
+  // If user is not authenticated, show the Learner Sign In screen (without headers)
+  if (!state.user) {
+    renderAuthLanding();
+    return;
+  }
+
+  document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+  document.getElementById("mainHeader")?.classList.remove("hidden");
+  document.getElementById("mainFooter")?.classList.remove("hidden");
+
+  await renderDashboard();
+  updateHeaderNav();
+}
+
+function showAdminSubview(subviewKey) {
+  const tabs = [
+    { key: "overview", el: adminTabOverview, view: adminSubViewOverview },
+    { key: "questions", el: adminTabQuestions, view: adminSubViewQuestions },
+    { key: "assessments", el: adminTabAssessments, view: adminSubViewAssessments },
+    { key: "marking-scheme", el: adminTabMarkingScheme, view: adminSubViewMarkingScheme },
+    { key: "broadcast", el: adminTabBroadcast, view: adminSubViewBroadcast },
+  ];
+
+  tabs.forEach((t) => {
+    if (t.key === subviewKey) {
+      t.el?.classList.remove("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
+      t.el?.classList.add("text-white", "bg-slate-900", "border-slate-800");
+      t.view?.classList.remove("hidden");
+    } else {
+      t.el?.classList.remove("text-white", "bg-slate-900", "border-slate-800");
+      t.el?.classList.add("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
+      t.view?.classList.add("hidden");
+    }
+  });
+
+  if (subviewKey === "questions") {
+    renderQuestionsConfigView();
+  } else if (subviewKey === "assessments") {
+    renderAdminAssessmentConfigTable2();
+  } else if (subviewKey === "marking-scheme") {
+    renderEmbeddedAnswerKeyView();
+  } else if (subviewKey === "overview") {
+    renderAdminOverviewStats();
+    renderAdminLearnersTable();
+  }
+}
+
+async function authenticateAsAdminEmail() {
+  const adminUser = {
+    id: "admin-master-debrah",
+    email: PRIMARY_ADMIN_EMAIL, // "computing.b9@gmail.com"
+    user_metadata: {
+      full_name: "Master Debrah (Admin)",
+      avatar_url: TEACHER_AVATAR,
+    },
+  };
+  const adminProfile = {
+    id: "admin-master-debrah",
+    student_id: "STAFF-ADM-001",
+    full_name: "Master Debrah (Admin)",
+    email: PRIMARY_ADMIN_EMAIL,
+    gender: "Male",
+    class_level: "Basic 9A",
+    role: "admin",
+    avatar_url: TEACHER_AVATAR,
+    onboarding_completed: true,
+  };
+
+  localStorage.setItem("jhs_demo_session", JSON.stringify(adminUser));
+  localStorage.setItem("jhs_active_learner", JSON.stringify(adminProfile));
+  localStorage.setItem("jhs_view_mode", "admin");
+
+  state.user = adminUser;
+  state.profile = adminProfile;
+  state.isAdmin = true;
+  state.activeView = "admin";
+
+  await initNotifications();
+  await initChat();
+  handleRoute();
+}
+
+async function renderAdminDashboard() {
+  navigateTo("/admin");
+}
+
+async function renderAdminOverviewStats() {
+  if (!state.allLearners || state.allLearners.length === 0) {
+    state.allLearners = await fetchAllLearners();
+  }
   const onlineCount = state.allLearners.filter((l) => l.is_online).length;
   if (kpiOnlineCount) kpiOnlineCount.textContent = onlineCount;
   if (kpiTotalStudents) kpiTotalStudents.textContent = state.allLearners.length;
   if (kpiNotifsSent) kpiNotifsSent.textContent = state.notifications.length;
+}
 
-  renderAdminLearnersTable();
+// ------------------------------------------------------------------------------
+// Questions Bank & Test Sittings Configuration View (/admin/questions)
+// ------------------------------------------------------------------------------
+function renderQuestionsConfigView() {
+  if (!adminQuestionSittingsContainer) return;
+
+  const catFilter = state.questionCatFilter || "ALL";
+  const trackFilter = state.questionTrackFilter || "ALL";
+
+  // Filter computing assessments only (no Mathematics)
+  let filtered = (state.assessments || []).filter((a) => {
+    if (a.subject === "Mathematics") return false;
+    if (catFilter !== "ALL") {
+      const aType = (a.assessment_type || "").toUpperCase();
+      const aTitle = (a.title || "").toUpperCase();
+      if (catFilter === "CAT" && !aType.includes("CAT") && !aTitle.includes("CAT")) return false;
+      if (catFilter === "QUIZ" && !aType.includes("QUIZ") && !aTitle.includes("QUIZ")) return false;
+      if (catFilter === "PROJECT_WORK" && !aType.includes("PROJECT") && !aTitle.includes("PROJECT")) return false;
+      if (catFilter === "EXAM" && !aType.includes("EXAM") && !aTitle.includes("EXAM")) return false;
+    }
+    if (trackFilter !== "ALL") {
+      if (a.class_level && a.class_level !== trackFilter && a.class_level !== "Basic 9") return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    adminQuestionSittingsContainer.innerHTML = `
+      <div class="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-400">
+        <i class="fa-solid fa-list-check text-4xl mb-3 text-indigo-400 block"></i>
+        <h3 class="text-base font-bold text-slate-700">No assessment test items match current filters</h3>
+        <p class="text-xs text-slate-400 mt-1">Select "All Items" or "All Tracks" to view all Computing assessment question sets.</p>
+      </div>
+    `;
+    return;
+  }
+
+  adminQuestionSittingsContainer.innerHTML = filtered.map((asmt) => {
+    const pack = getAssessmentQuestionPack(asmt.id, asmt.class_level || "Basic 9A", asmt.title);
+    const questions = pack?.questions || (Array.isArray(pack) ? pack : []);
+    const duration = pack?.time_limit_minutes || asmt.time_limit_minutes || 15;
+    const isActive = asmt.status === "AVAILABLE";
+    const statusColor = isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200";
+    const statusIcon = isActive ? "fa-solid fa-circle-check text-emerald-500" : "fa-solid fa-lock text-slate-400";
+    const statusText = isActive ? "Active & Open" : "Inactive / Turned Off";
+
+    const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
+
+    return `
+      <div class="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden" data-asmt-config-card="${asmt.id}">
+        <!-- Sitting Control Header Bar -->
+        <div class="p-5 sm:p-6 bg-slate-50/70 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div class="flex flex-wrap items-center gap-2 mb-1.5">
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                <i class="fa-solid fa-laptop-code mr-1"></i> ${escapeHtml(asmt.subject || "Computing")}
+              </span>
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                ${escapeHtml(asmt.class_level || "Basic 9")} Track
+              </span>
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-200/80 text-slate-700">
+                ${escapeHtml(asmt.assessment_type || "CAT")}
+              </span>
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold border ${statusColor}">
+                <i class="${statusIcon}"></i> ${statusText}
+              </span>
+              <span class="px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                Weight: ${parseFloat(asmt.weight) || 20}% of Term
+              </span>
+            </div>
+
+            <h3 class="text-lg font-bold text-slate-900 leading-snug">
+              ${escapeHtml(asmt.title)}
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              ${questions.length} Question items configured • Max Score: ${asmt.max_score || 20} Marks • Deadline: <strong class="text-slate-700">${dueDateStr}</strong>
+            </p>
+          </div>
+
+          <!-- Controls: Sitting Duration, On/Off, Extend Period, Add Question -->
+          <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+            <!-- Sitting Duration Controller -->
+            <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <span class="text-slate-400 text-xs"><i class="fa-solid fa-stopwatch text-indigo-500"></i></span>
+              <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Sitting:</label>
+              <input
+                type="number"
+                min="5"
+                max="180"
+                step="5"
+                value="${duration}"
+                class="asmt-duration-input w-14 bg-slate-50 border border-slate-200 rounded-lg py-0.5 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+                data-asmt-id="${asmt.id}"
+                title="Duration for one sitting in minutes"
+              />
+              <span class="text-[11px] font-semibold text-slate-500">min</span>
+              <button
+                type="button"
+                class="save-duration-btn ml-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="Save sitting duration"
+              >
+                Save
+              </button>
+            </div>
+
+            <!-- Active / Inactive Toggle (Turn Off / On) -->
+            <button
+              type="button"
+              class="toggle-status-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer shadow-2xs ${
+                isActive
+                  ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
+              }"
+              data-asmt-id="${asmt.id}"
+              data-current-status="${asmt.status}"
+              title="${isActive ? 'Turn off assessment (Learners will not be able to start)' : 'Turn on assessment (Make available to learners)'}"
+            >
+              <i class="fa-solid ${isActive ? 'fa-toggle-on text-rose-600' : 'fa-toggle-off text-emerald-600'}"></i>
+              <span>${isActive ? 'Turn Off (Deactivate)' : 'Turn On (Activate)'}</span>
+            </button>
+
+            <!-- Extend Period Button -->
+            <button
+              type="button"
+              class="open-extend-modal-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 shadow-2xs transition cursor-pointer"
+              data-asmt-id="${asmt.id}"
+              data-asmt-title="${escapeHtml(asmt.title)}"
+              data-due-date="${asmt.deadline || asmt.due_date || ''}"
+              title="Extend deadline period for this assessment"
+            >
+              <i class="fa-solid fa-clock-rotate-left text-amber-600"></i>
+              <span>Extend Period</span>
+            </button>
+
+            <!-- Add Question to this specific sitting -->
+            <button
+              type="button"
+              class="add-question-to-asmt-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition cursor-pointer"
+              data-asmt-id="${asmt.id}"
+            >
+              <i class="fa-solid fa-plus text-indigo-400"></i>
+              <span>Add Question</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Questions List Body -->
+        <div class="p-5 sm:p-6 space-y-4">
+          ${questions.length === 0 ? `
+            <div class="p-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
+              <i class="fa-solid fa-folder-open text-2xl mb-1 block"></i>
+              No questions configured yet for this sitting. Click "Add Question" to begin.
+            </div>
+          ` : questions.map((q, qIdx) => {
+            const optionLetters = ["A", "B", "C", "D", "E"];
+            return `
+              <div class="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3 hover:border-slate-300 transition-all">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
+                      Q${qIdx + 1}
+                    </span>
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">${escapeHtml(q.topic || asmt.subject || "Computing")}</span>
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">${q.points || 2} Marks</span>
+                  </div>
+
+                  <!-- Edit / Delete actions -->
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="edit-question-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Edit question prompt, options, answer key"
+                    >
+                      <i class="fa-solid fa-pen-to-square text-indigo-600"></i> Edit
+                    </button>
+                    <button
+                      type="button"
+                      class="delete-question-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Delete this question"
+                    >
+                      <i class="fa-solid fa-trash text-rose-600"></i> Delete
+                    </button>
+                  </div>
+                </div>
+
+                <p class="text-sm font-semibold text-slate-900 leading-relaxed">
+                  ${escapeHtml(q.prompt)}
+                </p>
+
+                <!-- Options Grid with verified answer -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  ${(q.options || []).map((opt, optIdx) => {
+                    const isCorrect = q.correctAnswer && opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+                    return `
+                      <div class="p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                        isCorrect
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-950 font-bold'
+                          : 'border-slate-200 bg-slate-50/50 text-slate-700'
+                      }">
+                        <div class="flex items-center gap-2">
+                          <span class="w-5 h-5 rounded-md flex items-center justify-center font-bold text-[10px] ${
+                            isCorrect ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                          }">
+                            ${optionLetters[optIdx] || optIdx + 1}
+                          </span>
+                          <span>${escapeHtml(opt)}</span>
+                        </div>
+                        ${isCorrect ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700"><i class="fa-solid fa-circle-check"></i> Answer Key</span>' : ''}
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+
+                ${q.explanation ? `
+                  <div class="mt-2 p-3 rounded-xl bg-indigo-50/60 border border-indigo-100 text-xs text-indigo-950 leading-relaxed">
+                    <span class="font-bold flex items-center gap-1 text-indigo-900 mb-0.5">
+                      <i class="fa-solid fa-lightbulb text-amber-500"></i> Marking Rubric &amp; Solution Note:
+                    </span>
+                    ${escapeHtml(q.explanation)}
+                  </div>
+                ` : ""}
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  attachQuestionsConfigHandlers();
+}
+
+function attachQuestionsConfigHandlers() {
+  const container = adminQuestionSittingsContainer;
+  if (!container) return;
+
+  // Save Sitting Duration
+  container.querySelectorAll(".save-duration-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const input = container.querySelector(`.asmt-duration-input[data-asmt-id="${asmtId}"]`);
+      const durationVal = parseInt(input?.value, 10) || 15;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+      updateAssessmentDuration(asmtId, durationVal);
+      await updateAssessment(asmtId, { time_limit_minutes: durationVal });
+      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+      if (asmt) asmt.time_limit_minutes = durationVal;
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i> Saved`;
+      setTimeout(() => {
+        btn.textContent = "Save";
+      }, 2000);
+    });
+  });
+
+  // Toggle Active / Inactive (Turn Off / On)
+  container.querySelectorAll(".toggle-status-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const current = btn.getAttribute("data-current-status");
+      const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+      await updateAssessment(asmtId, { status: nextStatus });
+      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+      if (asmt) asmt.status = nextStatus;
+      renderQuestionsConfigView();
+      renderAssessmentCards();
+    });
+  });
+
+  // Extend Period
+  container.querySelectorAll(".open-extend-modal-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      openExtendPeriodModal(asmtId);
+    });
+  });
+
+  // Add Question to sitting
+  container.querySelectorAll(".add-question-to-asmt-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      openQuestionEditor(asmtId);
+    });
+  });
+
+  // Edit question
+  container.querySelectorAll(".edit-question-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const qId = btn.getAttribute("data-q-id");
+      openQuestionEditor(asmtId, qId);
+    });
+  });
+
+  // Delete question
+  container.querySelectorAll(".delete-question-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const qId = btn.getAttribute("data-q-id");
+      if (!confirm("Are you sure you want to delete this question from the sitting bank?")) return;
+      deleteConfiguredQuestion(asmtId, qId);
+      renderQuestionsConfigView();
+      if (embeddedAnswerKeySelect?.value === asmtId) {
+        renderEmbeddedAnswerKeyView(asmtId);
+      }
+    });
+  });
+}
+
+// ------------------------------------------------------------------------------
+// Assessments & Term Weights Calibration Table 2 (/admin/assessments)
+// ------------------------------------------------------------------------------
+function renderAdminAssessmentConfigTable2() {
+  if (!adminAsmtTableBody2) return;
+
+  const asmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
+  const trackAsmts = asmts.filter((a) => a.class_level !== "Basic 9B");
+  const totalWeight = trackAsmts.reduce((sum, a) => sum + (parseFloat(a.weight) || 20), 0);
+
+  if (adminTotalWeightVal2) adminTotalWeightVal2.textContent = `${totalWeight.toFixed(2)}%`;
+  if (adminWeightProgressBar2) {
+    const clampedPct = Math.min(100, Math.round(totalWeight));
+    adminWeightProgressBar2.style.width = `${clampedPct}%`;
+    adminWeightProgressBar2.className =
+      Math.round(totalWeight) === 100
+        ? "h-full bg-emerald-500 rounded-full transition-all duration-300"
+        : "h-full bg-amber-500 rounded-full transition-all duration-300";
+  }
+  if (adminWeightStatusBadge2) {
+    if (Math.round(totalWeight) === 100) {
+      adminWeightStatusBadge2.className =
+        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300";
+      adminWeightStatusBadge2.innerHTML = `<i class="fa-solid fa-circle-check"></i> Balanced (100.00%)`;
+    } else {
+      adminWeightStatusBadge2.className =
+        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300";
+      adminWeightStatusBadge2.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Calibrate (${totalWeight.toFixed(1)}% / 100%)`;
+    }
+  }
+
+  if (asmts.length === 0) {
+    adminAsmtTableBody2.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No assessments found.</td></tr>`;
+    return;
+  }
+
+  adminAsmtTableBody2.innerHTML = asmts.map((asmt) => {
+    const isActive = asmt.status === "AVAILABLE";
+    const duration = asmt.time_limit_minutes || 15;
+    const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors" data-asmt-row2="${asmt.id}">
+        <td class="py-3 px-3">
+          <div class="font-bold text-slate-900">${escapeHtml(asmt.title)}</div>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+            <span class="text-[11px] text-slate-500">${escapeHtml(asmt.subject || "Computing")}</span>
+          </div>
+        </td>
+        <td class="py-3 px-2">
+          <span class="font-semibold text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
+        </td>
+        <td class="py-3 px-2">
+          <div class="flex items-center gap-1">
+            <input
+              type="number"
+              min="5"
+              max="180"
+              step="5"
+              value="${duration}"
+              class="asmt-duration-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              data-asmt-id="${asmt.id}"
+            />
+            <span class="text-slate-400 font-semibold">m</span>
+            <button
+              type="button"
+              class="save-duration-btn2 px-2 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+              data-asmt-id="${asmt.id}"
+            >
+              Save
+            </button>
+          </div>
+        </td>
+        <td class="py-3 px-2">
+          <div class="flex items-center gap-1">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value="${parseFloat(asmt.weight) || 20}"
+              class="asmt-weight-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              data-asmt-id="${asmt.id}"
+            />
+            <span class="text-slate-400 font-semibold">%</span>
+            <button
+              type="button"
+              class="save-weight-btn2 px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+              data-asmt-id="${asmt.id}"
+            >
+              Save
+            </button>
+          </div>
+        </td>
+        <td class="py-3 px-2 font-mono font-bold text-slate-700">${asmt.max_score || 20}</td>
+        <td class="py-3 px-3">
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1.5">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                isActive
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }">
+                <i class="fa-solid ${isActive ? 'fa-circle-check text-emerald-600' : 'fa-lock text-slate-400'}"></i> ${isActive ? 'Active' : 'Closed'}
+              </span>
+              <button
+                type="button"
+                class="toggle-status-btn2 text-[10px] font-bold px-2 py-0.5 rounded border ${
+                  isActive
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                } cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                data-current="${asmt.status}"
+              >
+                ${isActive ? 'Turn Off' : 'Turn On'}
+              </button>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span>Due: ${dueDateStr}</span>
+              <button
+                type="button"
+                class="open-extend-modal-btn2 text-amber-600 hover:text-amber-800 font-bold cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="Extend Deadline"
+              >
+                <i class="fa-solid fa-clock-rotate-left"></i> Extend
+              </button>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-3 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              class="asmt-nav-questions-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
+              data-asmt-id="${asmt.id}"
+              title="Configure questions for this assessment"
+            >
+              <i class="fa-solid fa-list-check"></i> Questions
+            </button>
+            <button
+              type="button"
+              class="asmt-open-key-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 cursor-pointer"
+              data-asmt-id="${asmt.id}"
+              title="View marking scheme"
+            >
+              <i class="fa-solid fa-key"></i> Key
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  attachAdminAsmtTable2Handlers();
+}
+
+function attachAdminAsmtTable2Handlers() {
+  const tbody = adminAsmtTableBody2;
+  if (!tbody) return;
+
+  // Save Duration
+  tbody.querySelectorAll(".save-duration-btn2").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
+      const val = parseInt(row?.querySelector(".asmt-duration-input2")?.value, 10) || 15;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+      updateAssessmentDuration(asmtId, val);
+      await updateAssessment(asmtId, { time_limit_minutes: val });
+      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+      if (asmt) asmt.time_limit_minutes = val;
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+      setTimeout(() => {
+        btn.textContent = "Save";
+      }, 2000);
+    });
+  });
+
+  // Save Weight
+  tbody.querySelectorAll(".save-weight-btn2").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
+      const val = parseFloat(row?.querySelector(".asmt-weight-input2")?.value) || 20;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+      await updateAssessment(asmtId, { weight: val });
+      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+      if (asmt) asmt.weight = val;
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+      setTimeout(() => {
+        btn.textContent = "Save";
+      }, 2000);
+      renderAdminAssessmentConfigTable2();
+    });
+  });
+
+  // Toggle Status
+  tbody.querySelectorAll(".toggle-status-btn2").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const current = btn.getAttribute("data-current");
+      const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+      await updateAssessment(asmtId, { status: nextStatus });
+      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+      if (asmt) asmt.status = nextStatus;
+      renderAdminAssessmentConfigTable2();
+      renderAssessmentCards();
+    });
+  });
+
+  // Extend Period
+  tbody.querySelectorAll(".open-extend-modal-btn2").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      openExtendPeriodModal(asmtId);
+    });
+  });
+
+  // Nav to questions
+  tbody.querySelectorAll(".asmt-nav-questions-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navigateTo("/admin/questions");
+    });
+  });
+
+  // Open key
+  tbody.querySelectorAll(".asmt-open-key-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      openAnswerKeyModal(asmtId);
+    });
+  });
+}
+
+async function autoBalanceAssessmentWeights2() {
+  const asmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
+  if (asmts.length === 0) return;
+
+  const trackAsmts = asmts.filter((a) => a.class_level !== "Basic 9B");
+  const count = trackAsmts.length;
+  if (count === 0) return;
+
+  const baseWeight = Math.floor(100 / count);
+  const remainder = 100 - baseWeight * count;
+
+  if (adminAutoBalanceBtn2) {
+    adminAutoBalanceBtn2.disabled = true;
+    adminAutoBalanceBtn2.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Balancing...`;
+  }
+
+  for (let i = 0; i < count; i++) {
+    const asmt = trackAsmts[i];
+    const newWeight = i === 0 ? baseWeight + remainder : baseWeight;
+    await updateAssessment(asmt.id, { weight: newWeight });
+    asmt.weight = newWeight;
+
+    const baseTitle = asmt.title.replace(" (Basic 9A)", "").replace(" 9A", "");
+    const parallel9B = asmts.find((a) => a.class_level === "Basic 9B" && a.title.includes(baseTitle));
+    if (parallel9B) {
+      await updateAssessment(parallel9B.id, { weight: newWeight });
+      parallel9B.weight = newWeight;
+    }
+  }
+
+  renderAdminAssessmentConfigTable2();
+  renderAssessmentCards();
+
+  if (adminAutoBalanceBtn2) {
+    adminAutoBalanceBtn2.disabled = false;
+    adminAutoBalanceBtn2.innerHTML = `<i class="fa-solid fa-scale-balanced"></i> Auto-Balance to 100%`;
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Question Editor Modal Handlers
+// ------------------------------------------------------------------------------
+function openQuestionEditor(asmtId = null, questionId = null) {
+  if (!questionEditorModal) return;
+
+  const asmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
+  if (qEditorAsmtSelect) {
+    qEditorAsmtSelect.innerHTML = asmts.map((a) => {
+      return `<option value="${a.id}">${escapeHtml(a.title)} (${escapeHtml(a.class_level || "Basic 9")})</option>`;
+    }).join("");
+
+    if (asmtId) qEditorAsmtSelect.value = asmtId;
+  }
+
+  const activeAsmtId = asmtId || qEditorAsmtSelect?.value || (asmts.length > 0 ? asmts[0].id : null);
+  const asmt = asmts.find((a) => a.id === activeAsmtId);
+  const pack = getAssessmentQuestionPack(activeAsmtId, asmt?.class_level || "Basic 9A", asmt?.title);
+  const questions = pack?.questions || (Array.isArray(pack) ? pack : []);
+
+  if (questionId) {
+    const q = questions.find((item) => item.id === questionId);
+    if (q) {
+      if (questionEditorModalTitle) questionEditorModalTitle.textContent = "Edit Question";
+      if (qEditorQuestionId) qEditorQuestionId.value = q.id;
+      if (qEditorPrompt) qEditorPrompt.value = q.prompt || "";
+      if (qEditorPoints) qEditorPoints.value = q.points || 2;
+      if (qEditorOptA) qEditorOptA.value = q.options?.[0] || "";
+      if (qEditorOptB) qEditorOptB.value = q.options?.[1] || "";
+      if (qEditorOptC) qEditorOptC.value = q.options?.[2] || "";
+      if (qEditorOptD) qEditorOptD.value = q.options?.[3] || "";
+
+      // Determine correct opt letter
+      let correctLetter = "A";
+      (q.options || []).forEach((opt, idx) => {
+        if (q.correctAnswer && opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
+          correctLetter = ["A", "B", "C", "D"][idx] || "A";
+        }
+      });
+      if (qEditorCorrectOpt) qEditorCorrectOpt.value = correctLetter;
+      if (qEditorExplanation) qEditorExplanation.value = q.explanation || "";
+    }
+  } else {
+    if (questionEditorModalTitle) questionEditorModalTitle.textContent = "Add New Question";
+    if (qEditorQuestionId) qEditorQuestionId.value = "";
+    if (qEditorPrompt) qEditorPrompt.value = "";
+    if (qEditorPoints) qEditorPoints.value = "2";
+    if (qEditorOptA) qEditorOptA.value = "";
+    if (qEditorOptB) qEditorOptB.value = "";
+    if (qEditorOptC) qEditorOptC.value = "";
+    if (qEditorOptD) qEditorOptD.value = "";
+    if (qEditorCorrectOpt) qEditorCorrectOpt.value = "A";
+    if (qEditorExplanation) qEditorExplanation.value = "";
+  }
+
+  questionEditorModal.classList.remove("hidden");
+}
+
+function handleQuestionEditorSubmit(e) {
+  e.preventDefault();
+  const asmtId = qEditorAsmtSelect?.value;
+  if (!asmtId) return;
+
+  const qId = qEditorQuestionId?.value || null;
+  const promptVal = qEditorPrompt?.value?.trim();
+  const pointsVal = parseInt(qEditorPoints?.value, 10) || 2;
+  const optA = qEditorOptA?.value?.trim() || "";
+  const optB = qEditorOptB?.value?.trim() || "";
+  const optC = qEditorOptC?.value?.trim() || "";
+  const optD = qEditorOptD?.value?.trim() || "";
+  const correctLetter = qEditorCorrectOpt?.value || "A";
+  const explanationVal = qEditorExplanation?.value?.trim() || "";
+
+  if (!promptVal || !optA || !optB || !optC || !optD) {
+    alert("Please complete the prompt and all 4 options.");
+    return;
+  }
+
+  const optionsMap = { A: optA, B: optB, C: optC, D: optD };
+  const correctText = optionsMap[correctLetter] || optA;
+
+  const questionData = {
+    id: qId || `q-${Date.now()}`,
+    prompt: promptVal,
+    options: [optA, optB, optC, optD],
+    correctAnswer: correctText,
+    points: pointsVal,
+    topic: "Computing",
+    explanation: explanationVal,
+  };
+
+  saveConfiguredQuestion(asmtId, questionData, !qId);
+  questionEditorModal?.classList.add("hidden");
+  renderQuestionsConfigView();
+  if (embeddedAnswerKeySelect?.value === asmtId) {
+    renderEmbeddedAnswerKeyView(asmtId);
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Extend Assessment Period Modal Handlers
+// ------------------------------------------------------------------------------
+function openExtendPeriodModal(asmtId) {
+  if (!extendPeriodModal) return;
+  const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+  if (!asmt) return;
+
+  if (extendModalAsmtId) extendModalAsmtId.value = asmtId;
+  if (extendModalAsmtTitle) extendModalAsmtTitle.textContent = asmt.title;
+
+  const currentDue = asmt.deadline || asmt.due_date;
+  if (extendModalCurrentDeadline) {
+    extendModalCurrentDeadline.textContent = currentDue
+      ? new Date(currentDue).toLocaleString()
+      : "No deadline currently configured";
+  }
+
+  // Pre-set custom datetime input to 24 hours from now
+  const defaultExtend = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16);
+  if (extendCustomDatetimeInput) {
+    extendCustomDatetimeInput.value = defaultExtend;
+  }
+
+  extendPeriodModal.classList.remove("hidden");
+}
+
+async function handleSaveExtendPeriod() {
+  const asmtId = extendModalAsmtId?.value;
+  if (!asmtId) return;
+
+  const customVal = extendCustomDatetimeInput?.value;
+  if (!customVal) {
+    alert("Please pick a custom deadline or choose a preset.");
+    return;
+  }
+
+  const newIso = new Date(customVal).toISOString();
+  if (saveExtendPeriodBtn) {
+    saveExtendPeriodBtn.disabled = true;
+    saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Saving...`;
+  }
+
+  await updateAssessment(asmtId, { deadline: newIso, due_date: newIso });
+  const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+  if (asmt) {
+    asmt.deadline = newIso;
+    asmt.due_date = newIso;
+  }
+
+  if (saveExtendPeriodBtn) {
+    saveExtendPeriodBtn.disabled = false;
+    saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-calendar-check"></i> Apply Extension`;
+  }
+
+  extendPeriodModal?.classList.add("hidden");
+  renderQuestionsConfigView();
+  renderAdminAssessmentConfigTable2();
+  renderAssessmentCards();
 }
 
 function renderAdminLearnersTable() {
   if (!adminLearnersTableBody) return;
+
+  if (!state.allLearners || state.allLearners.length === 0) {
+    adminLearnersTableBody.innerHTML = `
+      <tr>
+        <td colspan="5" class="py-12 text-center text-slate-400">
+          <i class="fa-solid fa-users text-3xl mb-2 text-slate-300 block"></i>
+          <p class="font-bold text-slate-700 text-sm">No Registered Learners Found</p>
+          <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+            Live database mode is active. When learners sign in with their authorized Google Accounts, their registered profiles and assessment submissions will automatically appear here in real-time.
+          </p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
 
   const filterVal = adminClassFilter?.value || "ALL";
 
@@ -2293,7 +3505,7 @@ function renderAdminLearnersTable() {
       <tr>
         <td colspan="5" class="py-8 text-center text-slate-400">
           <i class="fa-solid fa-users-slash text-2xl mb-1 block"></i>
-          No learners found matching this class filter.
+          No learners found matching the selected class filter (${escapeHtml(filterVal)}).
         </td>
       </tr>
     `;
@@ -2367,6 +3579,98 @@ function renderAdminLearnersTable() {
       }
     });
   });
+}
+
+// ------------------------------------------------------------------------------
+// Admin Continuous Assessment Broadsheet Excel Export Handler
+// Generates official broadsheet compliant with BECE 2026 stanine grading:
+// Columns: S/N, Name of Learner, Class Score (50%), Exams Score (50%), Total, Rank, Remarks (Grade)
+// ------------------------------------------------------------------------------
+async function handleExcelExport() {
+  const filterVal = adminClassFilter?.value || "ALL";
+  const btn = adminExportExcelBtn;
+  const topBtn = adminTopExportExcelBtn;
+  const btnText = adminExportExcelBtnText;
+  const originalHtml = btnText ? btnText.textContent : "Download Excel";
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      if (btnText) {
+        btnText.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-xs"></i> Generating...`;
+      }
+    }
+    if (topBtn) topBtn.disabled = true;
+
+    // Fetch freshest database records for learners, all submissions, and assessments
+    const [learners, submissions, asmts] = await Promise.all([
+      fetchAllLearners(),
+      fetchAllSubmissions(),
+      fetchAssessments(),
+    ]);
+
+    if (!learners || learners.length === 0) {
+      alert("No registered learners found in the database to export.\n\nPlease ensure students have registered or created profiles in Supabase.");
+      return;
+    }
+
+    // Call pure TypeScript Excel generator
+    const { filename, totalExported } = exportBroadsheetExcel(learners, asmts, submissions, filterVal);
+
+    // Notify user
+    setTimeout(() => {
+      alert(`Broadsheet Excel file successfully generated!\n\nFile: ${filename}\nTotal Learners Included: ${totalExported}\nGrading: BECE 2026 Stanine Standard\nScore Weighting: Class Score (50%) + Exam Score (50%) = 100%`);
+    }, 200);
+  } catch (err) {
+    console.error("Excel generation error:", err);
+    alert("Could not generate Excel broadsheet: " + (err.message || "Unknown error"));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      if (btnText) {
+        btnText.textContent = originalHtml || "Download Excel";
+      }
+    }
+    if (topBtn) topBtn.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Clear Mock Data & Start Testing Live Data Handler
+// ------------------------------------------------------------------------------
+async function handleClearMockData() {
+  const confirmed = confirm(
+    "CLEAR MOCK DATA CONFIRMATION:\n\nAre you sure you want to clear all mock demonstration data and browser storage?\n\nThis will remove demo students, mock submissions, and fallback sessions so the portal loads and records pure live data from your Supabase backend."
+  );
+  if (!confirmed) return;
+
+  clearAllMockData();
+  state.user = null;
+  state.profile = null;
+  state.allLearners = [];
+  state.submissions = [];
+  state.assessments = [];
+
+  if (adminLearnersTableBody) {
+    adminLearnersTableBody.innerHTML = `
+      <tr>
+        <td colspan="5" class="py-12 text-center text-slate-400">
+          <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500 block"></i>
+          <span class="font-bold text-slate-700">Connecting to live Supabase database...</span>
+        </td>
+      </tr>
+    `;
+  }
+
+  await checkAuthSession();
+
+  if (state.activeView === "admin") {
+    state.allLearners = await fetchAllLearners();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+  }
+
+  alert("Mock data cleared successfully!\n\nThe portal is now testing with pure live data from your Supabase database.");
 }
 
 // ------------------------------------------------------------------------------
@@ -3212,13 +4516,77 @@ function attachEventListeners() {
     }
   });
 
-  // Role Switcher Toggle
+  // Role Switcher & Routing Actions
   viewModeToggleBtn?.addEventListener("click", toggleViewMode);
-  adminSwitchLearnerBtn?.addEventListener("click", () => {
-    state.activeView = "learner";
-    localStorage.setItem("jhs_view_mode", "learner");
-    renderDashboard();
+  adminSwitchLearnerBtn?.addEventListener("click", () => navigateTo("/learner"));
+  adminGatekeeperLearnerBtn?.addEventListener("click", () => {
+    if (!state.user || state.user.id?.startsWith("demo-") || state.user.id === "lrn-001") {
+      state.user = null;
+      state.profile = null;
+      localStorage.removeItem("jhs_demo_session");
+      localStorage.removeItem("jhs_active_learner");
+    }
+    navigateTo("/learner");
   });
+  document.getElementById("authToAdminBtn")?.addEventListener("click", () => navigateTo("/admin"));
+  adminGatekeeperQuickBtn?.addEventListener("click", authenticateAsAdminEmail);
+  adminGatekeeperGoogleBtn?.addEventListener("click", handleGoogleSignIn);
+  brandLogoLink?.addEventListener("click", (e) => {
+    e.preventDefault();
+    navigateTo(state.activeView === "admin" ? "/admin" : "/learner");
+  });
+
+  // Admin Navigation Sub-Tabs Listeners
+  adminTabOverview?.addEventListener("click", () => navigateTo("/admin"));
+  adminTabQuestions?.addEventListener("click", () => navigateTo("/admin/questions"));
+  adminTabAssessments?.addEventListener("click", () => navigateTo("/admin/assessments"));
+  adminTabMarkingScheme?.addEventListener("click", () => navigateTo("/admin/marking-scheme"));
+  adminTabBroadcast?.addEventListener("click", () => navigateTo("/admin/broadcast"));
+  adminQuestionsNavBtn?.addEventListener("click", () => navigateTo("/admin/questions"));
+
+  // Questions Configuration Listeners
+  addNewQuestionBtn?.addEventListener("click", () => openQuestionEditor());
+  questionTrackFilter?.addEventListener("change", (e) => {
+    state.questionTrackFilter = e.target.value;
+    renderQuestionsConfigView();
+  });
+  document.querySelectorAll(".question-cat-filter").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".question-cat-filter").forEach((b) => {
+        b.className = "question-cat-filter px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer";
+      });
+      btn.className = "question-cat-filter px-3 py-1.5 rounded-xl bg-slate-900 text-white transition cursor-pointer font-bold";
+      state.questionCatFilter = btn.getAttribute("data-category");
+      renderQuestionsConfigView();
+    });
+  });
+
+  // Question Editor Modal Listeners
+  closeQuestionEditorBtn?.addEventListener("click", () => questionEditorModal?.classList.add("hidden"));
+  cancelQuestionEditorBtn?.addEventListener("click", () => questionEditorModal?.classList.add("hidden"));
+  questionEditorForm?.addEventListener("submit", handleQuestionEditorSubmit);
+
+  // Extend Period Modal Listeners
+  closeExtendPeriodBtn?.addEventListener("click", () => extendPeriodModal?.classList.add("hidden"));
+  cancelExtendPeriodBtn?.addEventListener("click", () => extendPeriodModal?.classList.add("hidden"));
+  saveExtendPeriodBtn?.addEventListener("click", handleSaveExtendPeriod);
+  document.querySelectorAll(".quick-extend-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const hours = parseInt(btn.getAttribute("data-hours"), 10) || 24;
+      const newDate = new Date(Date.now() + hours * 3600 * 1000);
+      if (extendCustomDatetimeInput) {
+        extendCustomDatetimeInput.value = newDate.toISOString().slice(0, 16);
+      }
+    });
+  });
+
+  // Assessments 2 Auto-Balance
+  adminAutoBalanceBtn2?.addEventListener("click", autoBalanceAssessmentWeights2);
+
+  // Embedded Marking Scheme Listeners
+  embeddedAnswerKeySelect?.addEventListener("change", (e) => renderEmbeddedAnswerKeyView(e.target.value));
+  printAnswerKeyBtn2?.addEventListener("click", () => window.print());
+
   adminNewBroadcastBtn?.addEventListener("click", () => {
     document.getElementById("broadcastComposerSection")?.scrollIntoView({ behavior: "smooth" });
     notifTitleInput?.focus();
@@ -3239,8 +4607,11 @@ function attachEventListeners() {
   // Broadcast Notification Form
   broadcastNotifForm?.addEventListener("submit", handleBroadcastSubmit);
 
-  // Admin Learners Directory Class Filter
+  // Admin Learners Directory Class Filter, Excel Export & Mock Data Clearing
   adminClassFilter?.addEventListener("change", renderAdminLearnersTable);
+  adminExportExcelBtn?.addEventListener("click", handleExcelExport);
+  adminTopExportExcelBtn?.addEventListener("click", handleExcelExport);
+  adminClearMockBtn?.addEventListener("click", handleClearMockData);
 
   // Floating Chat Widget Handlers
   openChatBtn?.addEventListener("click", () => {

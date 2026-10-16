@@ -81,10 +81,10 @@ code, pre, .font-mono {
   border: 1px solid rgba(226, 232, 240, 0.9);
 }
 
-/* Polished Scrollbar */
+/* Polished Scrollbar System */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -98,6 +98,35 @@ code, pre, .font-mono {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Complete Scrollbar Suppression Utility across all browsers */
+.no-scrollbar,
+.scrollbar-none,
+.hide-scrollbar {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
+  display: none !important; /* Chrome, Safari, Opera */
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Admin Tabs and Interactive Pill Navigation Polish */
+.admin-nav-tab {
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.admin-nav-tab:hover {
+  transform: translateY(-1px);
+}
+.admin-nav-tab:active {
+  transform: translateY(0);
 }
 
 /* Animations */
@@ -156,4 +185,98 @@ code, pre, .font-mono {
 
 .animate-float-balloon {
   animation: float-balloon 3s ease-in-out infinite;
+}
+
+/* ==============================================================================
+   RESPONSIVE SCALING, ICON REDUCTION & COMPACT PROPORTIONAL LAYOUTS
+   ============================================================================== */
+
+/* Icon scaling controls */
+.icon-compact {
+  font-size: 0.875rem !important;
+}
+
+.icon-box-sm {
+  width: 2rem !important;
+  height: 2rem !important;
+}
+
+.icon-box-md {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+}
+
+/* Proportionally scaled compact cards for smaller screens */
+@media (max-width: 640px) {
+  body {
+    font-size: 0.8125rem;
+  }
+
+  /* Compact padding on mobile */
+  main {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    padding-top: 1rem !important;
+    padding-bottom: 2rem !important;
+  }
+
+  .card-responsive {
+    padding: 0.875rem !important;
+    border-radius: 0.875rem !important;
+  }
+
+  /* Ensure text doesn't overflow */
+  h1 {
+    font-size: 1.35rem !important;
+    line-height: 1.25 !important;
+  }
+
+  h2 {
+    font-size: 1.15rem !important;
+  }
+
+  h3 {
+    font-size: 1rem !important;
+  }
+
+  /* Keep modals fully visible inside screen height */
+  .modal-dialog {
+    max-height: calc(100vh - 2rem) !important;
+    margin: 1rem !important;
+    border-radius: 1rem !important;
+  }
+}
+
+/* Height-constrained laptop/tablet screens (e.g., 599px - 720px height) */
+@media (max-height: 700px) {
+  .modal-dialog {
+    max-height: calc(100vh - 1.5rem) !important;
+  }
+
+  .modal-body {
+    max-height: calc(100vh - 7rem) !important;
+    overflow-y: auto !important;
+  }
+
+  #mainHeader {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  #topAnnouncementBar {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+}
+
+/* Spinner loading styling */
+.spinner-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.spinner-btn i {
+  animation: fa-spin 1s infinite linear;
 }

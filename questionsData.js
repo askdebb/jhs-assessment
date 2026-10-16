@@ -1,5 +1,5 @@
 // ==============================================================================
-// Ghana Basic Education Standard (JHS) - Computing, Math & Arts Assessments
+// Ghana Basic Education Standard (JHS) - Pure Computing Continuous Assessment Portal
 // Official NaCCA Syllabus Questions & Verified Answers for Basic 9A & Basic 9B
 // Strict Track Separation: Basic 9A and Basic 9B questions are isolated in separate tracks
 // Anti-Cheating Engine: Question order (Student A != Student B) and Option order are randomized
@@ -586,9 +586,10 @@ export const COMPUTING_CAT2_9B = {
 };
 
 // ------------------------------------------------------------------------------
-// 5. Basic 9A: Mathematics CAT 1 (Real Number System & Indices)
+// 5. Basic 9A: Mathematics CAT 1 [COMMENTED OUT - COMPUTING ONLY]
 // ------------------------------------------------------------------------------
-export const MATH_CAT1_9A = {
+// export const MATH_CAT1_9A = {
+const MATH_CAT1_9A = {
   id: "asmt-003",
   title: "Mathematics CAT 1: Real Numbers (Basic 9A)",
   class_level: "Basic 9A",
@@ -731,9 +732,10 @@ export const MATH_CAT1_9A = {
 };
 
 // ------------------------------------------------------------------------------
-// 6. Basic 9B: Mathematics CAT 1 (Sets, Fractions & Commercial Arithmetic)
+// 6. Basic 9B: Mathematics CAT 1 [COMMENTED OUT - COMPUTING ONLY]
 // ------------------------------------------------------------------------------
-export const MATH_CAT1_9B = {
+// export const MATH_CAT1_9B = {
+const MATH_CAT1_9B = {
   id: "asmt-003-9B",
   title: "Mathematics CAT 1: Real Numbers (Basic 9B)",
   class_level: "Basic 9B",
@@ -876,288 +878,326 @@ export const MATH_CAT1_9B = {
 };
 
 // ------------------------------------------------------------------------------
-// 7. Basic 9A & 9B: Creative Arts Project Work & Theory
+// Computing Quick Quiz (Basic 9)
 // ------------------------------------------------------------------------------
-export const CREATIVE_ARTS_CAT1_9A = {
-  id: "asmt-004",
-  title: "Creative Arts: 2D Cultural Artifact Sketch (Basic 9A)",
-  class_level: "Basic 9A",
-  subject: "Creative Arts",
-  total_points: 20,
-  time_limit_minutes: 20,
-  instructions: "Answer all 10 questions. Your question order and option sequence are uniquely randomized.",
+export const COMPUTING_QUIZ_9A = {
+  id: "asmt-008",
+  title: "Computing Quick Quiz: Hardware & Safety",
+  class_level: "Basic 9",
+  subject: "Computing",
+  total_points: 10,
+  time_limit_minutes: 10,
+  instructions: "Answer all 5 quick quiz questions on hardware devices and cyber ergonomics.",
   questions: [
     {
-      id: "9A-A1-01",
-      prompt: "In Ghanaian traditional visual culture, what philosophical concept does the 'Gye Nyame' Adinkra symbol convey?",
+      id: "9-QZ-01",
+      prompt: "Which of the following devices is classified strictly as an input device for graphical navigation?",
       points: 2,
+      topic: "Computing Hardware",
       options: [
-        "The supremacy and omnipotence of God",
-        "Bravery and military valor",
-        "Humility and patience",
-        "Wisdom and learning"
+        "Optical Mouse",
+        "Liquid Crystal Display (LCD)",
+        "Thermal Printer",
+        "Audio Speaker"
       ],
-      correctAnswer: "The supremacy and omnipotence of God",
-      explanation: "'Gye Nyame' translates to 'Except God', symbolizing the supreme sovereignty of the Almighty."
+      correctAnswer: "Optical Mouse",
+      explanation: "An optical mouse detects movement using a light-emitting diode and photodiode to input coordinates into a GUI."
     },
     {
-      id: "9A-A1-02",
-      prompt: "Which drawing pencil grade produces the darkest, softest lines suitable for shading cultural artifacts?",
+      id: "9-QZ-02",
+      prompt: "To prevent Repetitive Strain Injury (RSI) when typing for prolonged periods, a learner should .......",
       points: 2,
+      topic: "Ergonomics & Health",
       options: [
-        "6B",
-        "4H",
-        "2H",
-        "HB"
+        "Keep wrists relaxed and straight with elbows at a 90-degree angle",
+        "Slouch forward close to the screen",
+        "Bend wrists upwards sharply while typing",
+        "Type continuously for four hours without taking breaks"
       ],
-      correctAnswer: "6B",
-      explanation: "B pencils are soft and dark (blackness). 6B produces deep tonal contrast for artistic shading."
+      correctAnswer: "Keep wrists relaxed and straight with elbows at a 90-degree angle",
+      explanation: "Proper ergonomic typing posture requires level wrists and regular micro-breaks to avoid chronic tendon inflammation."
     },
     {
-      id: "9A-A1-03",
-      prompt: "The Adinkra symbol 'Sankofa' depicted by a bird turning its head backward signifies .......",
+      id: "9-QZ-03",
+      prompt: "What is the primary function of an Uninterruptible Power Supply (UPS) in a school computer laboratory?",
       points: 2,
+      topic: "System Protection",
       options: [
-        "Learning from the past to build the future",
-        "Escaping from danger",
-        "Wealth and prosperous trade",
-        "Unity in family diversity"
+        "Provide emergency battery backup power when electricity supply trips or fluctuates",
+        "Increase Internet bandwidth speed",
+        "Scan removable flash drives for trojans",
+        "Convert analog sound signals to digital files"
       ],
-      correctAnswer: "Learning from the past to build the future",
-      explanation: "'Sankofa' means 'go back and fetch it', teaching that wisdom comes from examining heritage."
+      correctAnswer: "Provide emergency battery backup power when electricity supply trips or fluctuates",
+      explanation: "A UPS delivers short-term battery power during blackouts, giving users time to save work and shut down computers safely."
     },
     {
-      id: "9A-A1-04",
-      prompt: "In 2D visual composition, the distribution of visual weight (symmetrical or asymmetrical) is termed .......",
+      id: "9-QZ-04",
+      prompt: "Which protocol provides cryptographic end-to-end security for viewing web pages safely?",
       points: 2,
+      topic: "Internet Safety",
       options: [
-        "Balance",
-        "Rhythm",
-        "Texture",
-        "Perspective"
+        "HTTPS (HyperText Transfer Protocol Secure)",
+        "HTTP (HyperText Transfer Protocol)",
+        "FTP (File Transfer Protocol)",
+        "SMTP (Simple Mail Transfer Protocol)"
       ],
-      correctAnswer: "Balance",
-      explanation: "Balance ensures elements of design are distributed harmoniously across the picture plane."
+      correctAnswer: "HTTPS (HyperText Transfer Protocol Secure)",
+      explanation: "HTTPS encrypts communications over computer networks via TLS/SSL to safeguard user privacy and sensitive passwords."
     },
     {
-      id: "9A-A1-05",
-      prompt: "Which traditional dye sourced from the badie tree bark is historically used to stamp Adinkra cloths?",
+      id: "9-QZ-05",
+      prompt: "Downloading and redistributing proprietary software without paying the developer violates which legal protection?",
       points: 2,
+      topic: "Cyber Law & Ethics",
       options: [
-        "Adinkra aduru",
-        "Indigo vat dye",
-        "Acrylic polymer",
-        "Charcoal paste"
+        "Copyright & Intellectual Property Law",
+        "Open-Source Creative Commons License",
+        "Public Domain Agreement",
+        "Freedom of Information Act"
       ],
-      correctAnswer: "Adinkra aduru",
-      explanation: "Adinkra aduru is boiled from the bark of the Bridelia ferruginea (badie) tree with iron slag."
-    },
-    {
-      id: "9A-A1-06",
-      prompt: "The lightness or darkness of a color or tone in sketch drawing is referred to as .......",
-      points: 2,
-      options: [
-        "Value",
-        "Hue",
-        "Chroma",
-        "Scale"
-      ],
-      correctAnswer: "Value",
-      explanation: "Value defines the tonal gradient between pure white highlight and deep black shadow."
-    },
-    {
-      id: "9A-A1-07",
-      prompt: "Which Ghanaian woven textile is celebrated worldwide for its colorful geometric patterns and royal symbolism?",
-      points: 2,
-      options: [
-        "Kente Cloth",
-        "Batik tie-dye",
-        "Fugu smock",
-        "Calico"
-      ],
-      correctAnswer: "Kente Cloth",
-      explanation: "Kente (originating from Bonwire, Ashanti) is woven on narrow strip looms with profound symbolic motifs."
-    },
-    {
-      id: "9A-A1-08",
-      prompt: "Drawing using only parallel and intersecting straight lines to create depth and shadow is called .......",
-      points: 2,
-      options: [
-        "Cross-hatching",
-        "Stippling",
-        "Smudging",
-        "Sfumato"
-      ],
-      correctAnswer: "Cross-hatching",
-      explanation: "Cross-hatching overlaps directional lines at varying angles to simulate shade and form."
-    },
-    {
-      id: "9A-A1-09",
-      prompt: "In color theory, which pair of colors are complementary (opposite each other on the color wheel)?",
-      points: 2,
-      options: [
-        "Blue and Orange",
-        "Red and Yellow",
-        "Blue and Green",
-        "Purple and Red"
-      ],
-      correctAnswer: "Blue and Orange",
-      explanation: "Complementary color pairs (Blue/Orange, Red/Green, Yellow/Purple) create maximum visual contrast."
-    },
-    {
-      id: "9A-A1-10",
-      prompt: "The Adinkra symbol 'Dwennimmen' (Ram's Horns) stands for which character virtue?",
-      points: 2,
-      options: [
-        "Humility together with strength",
-        "Fearlessness in battle",
-        "Patience and slowness",
-        "Resourcefulness and wealth"
-      ],
-      correctAnswer: "Humility together with strength",
-      explanation: "'Dwennimmen' reminds that even the strongest ram is humble and gentle in temperament."
+      correctAnswer: "Copyright & Intellectual Property Law",
+      explanation: "Copyright protects creators against unauthorized replication, distribution, or commercial piracy of digital programs."
     }
   ]
 };
 
-export const CREATIVE_ARTS_CAT1_9B = {
-  id: "asmt-004-9B",
-  title: "Creative Arts: 2D Cultural Artifact Sketch (Basic 9B)",
-  class_level: "Basic 9B",
-  subject: "Creative Arts",
+// ------------------------------------------------------------------------------
+// Computing Practical Project Work (Basic 9)
+// ------------------------------------------------------------------------------
+export const COMPUTING_PROJECT_9 = {
+  id: "asmt-007",
+  title: "Computing Practical Project: Visual Algorithms",
+  class_level: "Basic 9",
+  subject: "Computing",
   total_points: 20,
-  time_limit_minutes: 20,
-  instructions: "Answer all 10 questions. Your question order and option sequence are uniquely randomized.",
+  time_limit_minutes: 30,
+  instructions: "Practical task evaluating block programming logic, sequencing, and flowchart tracing under NaCCA standards.",
   questions: [
     {
-      id: "9B-A1-01",
-      prompt: "Which Adinkra symbol depicts a crocodile and a mudfish sharing one stomach, emphasizing unity in community?",
-      points: 2,
+      id: "9-PRJ-01",
+      prompt: "In visual block-based programming (such as Scratch), which category contains blocks that control repetitive execution?",
+      points: 4,
+      topic: "Algorithms & Programming",
       options: [
-        "Funtunfunefu Denkyemfunefu",
-        "Dono Ntoaso",
-        "Epa (Handcuffs)",
-        "Nsoromma"
+        "Control ('repeat', 'forever', 'repeat until')",
+        "Looks ('say', 'think', 'switch costume')",
+        "Sound ('play sound until done')",
+        "Sensing ('touching mouse-pointer?')"
       ],
-      correctAnswer: "Funtunfunefu Denkyemfunefu",
-      explanation: "Siamese crocodiles sharing a belly symbolize democracy, unity, and shared mutual interest."
+      correctAnswer: "Control ('repeat', 'forever', 'repeat until')",
+      explanation: "Control palette blocks govern program flow, iterations, loops, and conditional decision branching."
     },
     {
-      id: "9B-A1-02",
-      prompt: "In three-dimensional form drawing, the highlight represents .......",
-      points: 2,
+      id: "9-PRJ-02",
+      prompt: "When tracing an algorithm to calculate the sum of 5 exam scores, which variable role is required to accumulate the running total?",
+      points: 4,
+      topic: "Algorithms & Logic",
       options: [
-        "The area receiving the most direct light rays",
-        "The cast shadow on the ground",
-        "The core reflective shadow",
-        "The vanishing point"
+        "An accumulator variable initialized to zero (0)",
+        "A constant value set to 100",
+        "A flag boolean variable set to true",
+        "A temporary string variable"
       ],
-      correctAnswer: "The area receiving the most direct light rays",
-      explanation: "The highlight is the lightest, most brilliant tone where light strikes directly."
+      correctAnswer: "An accumulator variable initialized to zero (0)",
+      explanation: "An accumulator variable stores a running sum and must be initialized to 0 prior to iterating through values."
     },
     {
-      id: "9B-A1-03",
-      prompt: "In traditional Ghanaian pottery, what material gives clay vessels their natural terra-cotta reddish hue?",
-      points: 2,
+      id: "9-PRJ-03",
+      prompt: "In standard NaCCA algorithm flowchart design, which geometric shape represents a conditional decision point with True/False paths?",
+      points: 4,
+      topic: "Algorithm Flowcharts",
       options: [
-        "Iron oxide in earthenware clay",
-        "Chemical enamel glaze",
-        "Crushed sea shells",
-        "Tree resin varnish"
+        "Rhombus / Diamond",
+        "Rectangle",
+        "Oval / Rounded Rectangle",
+        "Parallelogram"
       ],
-      correctAnswer: "Iron oxide in earthenware clay",
-      explanation: "Natural iron oxide present in local clays oxidizes during open pit firing to produce terra-cotta tones."
+      correctAnswer: "Rhombus / Diamond",
+      explanation: "A diamond shape represents a comparison or conditional test with two or more exiting flowlines labeled Yes/No or True/False."
     },
     {
-      id: "9B-A1-04",
-      prompt: "Which of the following is a Primary Color in traditional subtractive pigment color theory?",
-      points: 2,
+      id: "9-PRJ-04",
+      prompt: "What is the result of applying a dry-run trace table to a loop that starts at X = 1, adds 3 on each iteration, and terminates when X > 10?",
+      points: 4,
+      topic: "Logic Tracing & Debugging",
       options: [
-        "Red",
-        "Green",
-        "Orange",
-        "Purple"
+        "Loop runs 4 times (X takes values 1, 4, 7, 10, then terminates at 13)",
+        "Loop runs infinitely without termination",
+        "Loop terminates on the first iteration",
+        "Loop generates a syntax error"
       ],
-      correctAnswer: "Red",
-      explanation: "The primary subtractive pigment colors are Red, Yellow, and Blue."
+      correctAnswer: "Loop runs 4 times (X takes values 1, 4, 7, 10, then terminates at 13)",
+      explanation: "Starting at 1: iter 1 has X=1 (adds 3 -> 4); iter 2 has X=4 (adds 3 -> 7); iter 3 has X=7 (adds 3 -> 10); iter 4 has X=10 (adds 3 -> 13). 13 > 10, so loop terminates after 4 cycles."
     },
     {
-      id: "9B-A1-05",
-      prompt: "A quick, preliminary freehand sketch used by an artist to capture gesture or explore initial concepts is a .......",
-      points: 2,
+      id: "9-PRJ-05",
+      prompt: "A student's code contains: 'IF score >= 50 THEN print Pass ELSE print Fail'. If the student tests score = 49.9, what output is produced?",
+      points: 4,
+      topic: "Conditional Testing",
       options: [
-        "Thumbnail sketch / Study",
-        "Final mural",
-        "Blueprint engraving",
-        "Photolithograph"
+        "Fail",
+        "Pass",
+        "Pass and Fail simultaneously",
+        "Runtime Compilation Error"
       ],
-      correctAnswer: "Thumbnail sketch / Study",
-      explanation: "Thumbnail sketches are small, rapid exploratory drawings used to plan composition."
+      correctAnswer: "Fail",
+      explanation: "Since 49.9 is strictly less than 50, the condition evaluates to False, branching execution to the ELSE clause ('Fail')."
+    }
+  ]
+};
+
+// ------------------------------------------------------------------------------
+// Computing End of Term Examination (Basic 9)
+// ------------------------------------------------------------------------------
+export const COMPUTING_EXAM_9 = {
+  id: "asmt-009",
+  title: "Computing End of Term Examination",
+  class_level: "Basic 9",
+  subject: "Computing",
+  total_points: 50,
+  time_limit_minutes: 45,
+  instructions: "Comprehensive terminal assessment covering Ghana Basic 9 NaCCA curriculum strands.",
+  questions: [
+    {
+      id: "9-EXM-01",
+      prompt: "Which unit of the Central Processing Unit (CPU) executes mathematical calculations and logical comparisons?",
+      points: 5,
+      topic: "Computer Architecture",
+      options: [
+        "Arithmetic and Logic Unit (ALU)",
+        "Control Unit (CU)",
+        "Cache Memory",
+        "BIOS ROM"
+      ],
+      correctAnswer: "Arithmetic and Logic Unit (ALU)",
+      explanation: "The ALU carries out arithmetic (+, -, *, /) and comparison operations (<, >, ==) for CPU processing."
     },
     {
-      id: "9B-A1-06",
-      prompt: "The Adinkra symbol 'Akoma' (The Heart) is universally understood to represent .......",
-      points: 2,
+      id: "9-EXM-02",
+      prompt: "Which network topology connects every computer to a central communication device such as a switch or hub?",
+      points: 5,
+      topic: "Computer Networking",
       options: [
-        "Love, patience, and endurance",
-        "Justice and fair trial",
-        "Bravery in war",
-        "Royal heritage"
+        "Star Topology",
+        "Bus Topology",
+        "Ring Topology",
+        "Mesh Topology"
       ],
-      correctAnswer: "Love, patience, and endurance",
-      explanation: "'Akoma' represents love, goodwill, and enduring patience in interpersonal relationships."
+      correctAnswer: "Star Topology",
+      explanation: "In a star topology, each network workstation is connected via independent cables to a central switch or concentrator."
     },
     {
-      id: "9B-A1-07",
-      prompt: "Which carving wood is historically favored for Akan stool carving due to its clean grain and sacred durability?",
-      points: 2,
+      id: "9-EXM-03",
+      prompt: "In spreadsheet software (such as Microsoft Excel or Google Sheets), what formula correctly averages cells B2 to B10?",
+      points: 5,
+      topic: "Spreadsheet Processing",
       options: [
-        "Sese wood (Holarrhena)",
-        "Balsa wood",
-        "Pine softwood",
-        "Bamboo cane"
+        "=AVERAGE(B2:B10)",
+        "=MEAN(B2:B10)",
+        "=AVG(B2-B10)",
+        "=SUM(B2:B10)/TOTAL"
       ],
-      correctAnswer: "Sese wood (Holarrhena)",
-      explanation: "Sese wood is traditionally carved for royal stools and sacred ceremonial regalia."
+      correctAnswer: "=AVERAGE(B2:B10)",
+      explanation: "=AVERAGE(range) is the standard built-in function to compute the arithmetic mean of numeric cells in a range."
     },
     {
-      id: "9B-A1-08",
-      prompt: "Creating the illusion of 3D depth on a flat 2D paper surface using converging lines to a vanishing point is .......",
-      points: 2,
+      id: "9-EXM-04",
+      prompt: "What is the primary role of a primary key in a relational database management system?",
+      points: 5,
+      topic: "Database Management",
       options: [
-        "Linear Perspective",
-        "Optical Illusionism",
-        "Collage montaging",
-        "Impasto application"
+        "Uniquely identifies each individual record in a database table without duplicate rows",
+        "Encrypts the entire database file",
+        "Sorts data alphabetically in reverse order",
+        "Connects the computer to the Internet gateway"
       ],
-      correctAnswer: "Linear Perspective",
-      explanation: "Linear perspective uses converging orthogonals toward vanishing points to create spatial realism."
+      correctAnswer: "Uniquely identifies each individual record in a database table without duplicate rows",
+      explanation: "A primary key constraint guarantees entity integrity by preventing null or duplicate identifiers in a table."
     },
     {
-      id: "9B-A1-09",
-      prompt: "In graphic design, the empty or unmarked area around and between design elements is known as .......",
-      points: 2,
+      id: "9-EXM-05",
+      prompt: "Which file format preserves layout, fonts, and graphical fidelity identically across all operating systems and devices?",
+      points: 5,
+      topic: "Electronic Document Management",
       options: [
-        "Negative space (White space)",
-        "Under-exposure",
-        "Canvas defect",
-        "Dead zone"
+        "PDF (Portable Document Format)",
+        "TXT (Plain Text Document)",
+        "BMP (Bitmap Image File)",
+        "CSV (Comma Separated Values)"
       ],
-      correctAnswer: "Negative space (White space)",
-      explanation: "Negative space gives breathing room and emphasis to positive shapes and focal points."
+      correctAnswer: "PDF (Portable Document Format)",
+      explanation: "PDF, developed by Adobe and standardized under ISO 32000, preserves exact typographic and layout formatting universally."
     },
     {
-      id: "9B-A1-10",
-      prompt: "The Adinkra symbol 'Aya' (The Fern) signifies resilience and defiance because the fern .......",
-      points: 2,
+      id: "9-EXM-06",
+      prompt: "An unsolicited message sent in bulk to millions of email addresses, often advertising fraudulent schemes, is known as .......",
+      points: 5,
+      topic: "Cybersecurity & Email",
       options: [
-        "Can survive in harsh and difficult environments",
-        "Produces bright golden flowers",
-        "Grows only inside royal palaces",
-        "Is used to weave ceremonial kente"
+        "Spam",
+        "Podcast",
+        "Broadband",
+        "Webinar"
       ],
-      correctAnswer: "Can survive in harsh and difficult environments",
-      explanation: "'Aya' means 'I am not afraid of you', representing resilience, endurance, and courage."
+      correctAnswer: "Spam",
+      explanation: "Spam refers to unwanted bulk commercial or malicious communications transmitted over email and messaging systems."
+    },
+    {
+      id: "9-EXM-07",
+      prompt: "In programming, an error that causes a program to run without crashing but produce incorrect results is called a .......",
+      points: 5,
+      topic: "Software Development",
+      options: [
+        "Logical Error",
+        "Syntax Error",
+        "Hardware Failure",
+        "Compilation Trap"
+      ],
+      correctAnswer: "Logical Error",
+      explanation: "A logical error occurs when code follows grammatical syntax rules but algorithmic logic is mathematically or procedurally flawed."
+    },
+    {
+      id: "9-EXM-08",
+      prompt: "Which binary value represents the decimal number 13 in 4-bit binary representation?",
+      points: 5,
+      topic: "Data Representation",
+      options: [
+        "1101",
+        "1011",
+        "1110",
+        "1001"
+      ],
+      correctAnswer: "1101",
+      explanation: "In binary: (1 * 8) + (1 * 4) + (0 * 2) + (1 * 1) = 8 + 4 + 0 + 1 = 13."
+    },
+    {
+      id: "9-EXM-09",
+      prompt: "A firewall functions on a computer or local network primarily as a .......",
+      points: 5,
+      topic: "Network Security",
+      options: [
+        "Barrier monitoring and filtering incoming and outgoing network traffic based on security rules",
+        "Device that speeds up cooling fan rotation",
+        "Specialized battery preventing power surge fires",
+        "Graphic rendering card for game engines"
+      ],
+      correctAnswer: "Barrier monitoring and filtering incoming and outgoing network traffic based on security rules",
+      explanation: "Firewalls inspect data packets to block unauthorized network access while allowing legitimate communication."
+    },
+    {
+      id: "9-EXM-10",
+      prompt: "Ghana's Cyber Security Act, 2020 (Act 1038) criminalizes which of the following activities online?",
+      points: 5,
+      topic: "National Cyber Legislation",
+      options: [
+        "Cyberbullying, identity theft, unauthorized access, and child online exploitation",
+        "Writing computer educational research papers",
+        "Using search engines to look up curriculum notes",
+        "Sending homework submissions through school email portals"
+      ],
+      correctAnswer: "Cyberbullying, identity theft, unauthorized access, and child online exploitation",
+      explanation: "Act 1038 establishes the Cyber Security Authority (CSA) and enacts strict penalties against cyber extortion, fraud, and illicit breaches."
     }
   ]
 };
@@ -1166,31 +1206,144 @@ export const CREATIVE_ARTS_CAT1_9B = {
 // Official Question Packs Registry (Strict Separation between 9A and 9B)
 // ------------------------------------------------------------------------------
 export const ALL_OFFICIAL_QUESTION_PACKS = {
-  // Computing Packs
+  // Computing Continuous Assessment Tests (CATs)
   "asmt-001": COMPUTING_CAT1_9A,
   "asmt-002": COMPUTING_CAT1_9B,
   "asmt-005": COMPUTING_CAT2_9A,
   "asmt-005-9B": COMPUTING_CAT2_9B,
   
-  // Math Packs
-  "asmt-003": MATH_CAT1_9A,
-  "asmt-003-9B": MATH_CAT1_9B,
-  
-  // Creative Arts Packs
-  "asmt-004": CREATIVE_ARTS_CAT1_9A,
-  "asmt-004-9B": CREATIVE_ARTS_CAT1_9B,
+  // Computing Quick Quizzes
+  "asmt-008": COMPUTING_QUIZ_9A,
+  "asmt-008-9B": COMPUTING_QUIZ_9A, // Universal standard
+
+  // Computing Practical Project Work
+  "asmt-007": COMPUTING_PROJECT_9,
+  "asmt-007-9B": COMPUTING_PROJECT_9,
+
+  // Computing Terminal Examination
+  "asmt-009": COMPUTING_EXAM_9,
+  "asmt-009-9B": COMPUTING_EXAM_9,
+
+
+  // Math Packs [COMMENTED OUT - STRICT DIRECTIVE]
+  // "asmt-003": MATH_CAT1_9A,
+  // "asmt-003-9B": MATH_CAT1_9B,
 };
+
+/**
+ * Returns all configured question packs from localStorage or defaults
+ */
+export function getAllConfiguredQuestionPacks() {
+  const local = localStorage.getItem("jhs_configured_questions");
+  if (local) {
+    try {
+      const parsed = JSON.parse(local);
+      return { ...ALL_OFFICIAL_QUESTION_PACKS, ...parsed };
+    } catch (e) {
+      console.warn("Error parsing jhs_configured_questions:", e);
+    }
+  }
+  return { ...ALL_OFFICIAL_QUESTION_PACKS };
+}
+
+/**
+ * Persists an edited or newly added question in an assessment pack
+ */
+export function saveConfiguredQuestion(asmtId, questionData, isNew = false) {
+  const allPacks = getAllConfiguredQuestionPacks();
+  const pack = allPacks[asmtId] || {
+    id: asmtId,
+    title: "Computing Assessment Sitting",
+    subject: "Computing",
+    class_level: "Basic 9",
+    total_points: 20,
+    time_limit_minutes: 15,
+    questions: []
+  };
+
+  const questions = [...(pack.questions || [])];
+  if (isNew) {
+    const newId = `Q-${Date.now()}`;
+    questions.push({ ...questionData, id: newId });
+  } else {
+    const idx = questions.findIndex(q => q.id === questionData.id);
+    if (idx >= 0) {
+      questions[idx] = { ...questions[idx], ...questionData };
+    } else {
+      questions.push(questionData);
+    }
+  }
+
+  const updatedPack = { ...pack, questions };
+  allPacks[asmtId] = updatedPack;
+
+  try {
+    localStorage.setItem("jhs_configured_questions", JSON.stringify(allPacks));
+  } catch (e) {
+    console.error("Failed to save configured questions:", e);
+  }
+
+  return updatedPack;
+}
+
+/**
+ * Deletes a question from an assessment pack
+ */
+export function deleteConfiguredQuestion(asmtId, questionId) {
+  const allPacks = getAllConfiguredQuestionPacks();
+  if (!allPacks[asmtId]) return null;
+
+  const pack = allPacks[asmtId];
+  const questions = (pack.questions || []).filter(q => q.id !== questionId);
+  const updatedPack = { ...pack, questions };
+  allPacks[asmtId] = updatedPack;
+
+  try {
+    localStorage.setItem("jhs_configured_questions", JSON.stringify(allPacks));
+  } catch (e) {
+    console.error("Failed to persist question deletion:", e);
+  }
+
+  return updatedPack;
+}
+
+/**
+ * Updates sitting duration for an assessment pack
+ */
+export function updateAssessmentDuration(asmtId, durationMinutes) {
+  const allPacks = getAllConfiguredQuestionPacks();
+  const pack = allPacks[asmtId] || { id: asmtId, title: "Assessment Sitting", questions: [] };
+  const updatedPack = { ...pack, time_limit_minutes: parseInt(durationMinutes, 10) || 15 };
+  allPacks[asmtId] = updatedPack;
+
+  try {
+    localStorage.setItem("jhs_configured_questions", JSON.stringify(allPacks));
+  } catch (e) {}
+
+  return updatedPack;
+}
 
 /**
  * Returns assessment question pack mapped by assessment ID, learner class level, and optional title.
  * STRICT ENFORCEMENT: Basic 9A learners get 9A questions. Basic 9B learners get 9B questions.
- * They are NEVER mixed!
+ * Checks customized admin questions first!
  */
 export function getAssessmentQuestionPack(asmtId, classLevel = "Basic 9A", asmtTitle = "") {
   const isClass9B = classLevel && (classLevel.includes("9B") || classLevel.includes("3B") || classLevel === "9B");
   const cleanTitle = (asmtTitle || "").toLowerCase();
 
-  // 1. Direct Assessment ID resolution
+  // 1. Check if admin configured custom questions in localStorage
+  const allPacks = getAllConfiguredQuestionPacks();
+  if (allPacks[asmtId] && allPacks[asmtId].questions && allPacks[asmtId].questions.length > 0) {
+    return allPacks[asmtId];
+  }
+
+  // Check parallel 9B track custom pack
+  if (isClass9B && allPacks[`${asmtId}-9B`] && allPacks[`${asmtId}-9B`].questions?.length > 0) {
+    return allPacks[`${asmtId}-9B`];
+  }
+
+  // 2. Direct Assessment ID resolution
   if (asmtId === "asmt-002") {
     return COMPUTING_CAT1_9B;
   }
@@ -1200,25 +1353,31 @@ export function getAssessmentQuestionPack(asmtId, classLevel = "Basic 9A", asmtT
   if (asmtId === "asmt-005") {
     return isClass9B ? COMPUTING_CAT2_9B : COMPUTING_CAT2_9A;
   }
-  if (asmtId === "asmt-003") {
-    return isClass9B ? MATH_CAT1_9B : MATH_CAT1_9A;
+  if (asmtId === "asmt-007") {
+    return COMPUTING_PROJECT_9;
   }
-  if (asmtId === "asmt-004" || asmtId === "asmt-006") {
-    return isClass9B ? CREATIVE_ARTS_CAT1_9B : CREATIVE_ARTS_CAT1_9A;
+  if (asmtId === "asmt-008") {
+    return COMPUTING_QUIZ_9A;
+  }
+  if (asmtId === "asmt-009") {
+    return COMPUTING_EXAM_9;
   }
 
-  // 2. Title & Subject based resolution
-  if (cleanTitle.includes("math")) {
-    return isClass9B ? MATH_CAT1_9B : MATH_CAT1_9A;
+  // 3. Title & Subject based resolution (Strictly Computing Priority)
+  if (cleanTitle.includes("quiz")) {
+    return COMPUTING_QUIZ_9A;
   }
-  if (cleanTitle.includes("creative") || cleanTitle.includes("art")) {
-    return isClass9B ? CREATIVE_ARTS_CAT1_9B : CREATIVE_ARTS_CAT1_9A;
+  if (cleanTitle.includes("project") || cleanTitle.includes("practical")) {
+    return COMPUTING_PROJECT_9;
+  }
+  if (cleanTitle.includes("exam") || cleanTitle.includes("terminal") || cleanTitle.includes("end of term")) {
+    return COMPUTING_EXAM_9;
   }
   if (cleanTitle.includes("cat 2") || cleanTitle.includes("algorithm") || cleanTitle.includes("scratch")) {
     return isClass9B ? COMPUTING_CAT2_9B : COMPUTING_CAT2_9A;
   }
 
-  // 3. Fallback to Computing CAT 1 in respective track
+  // 4. Fallback to Computing CAT 1 in respective track
   return isClass9B ? COMPUTING_CAT1_9B : COMPUTING_CAT1_9A;
 }
 

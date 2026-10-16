@@ -59,7 +59,7 @@ CREATE TRIGGER trg_protect_learner_dob
 CREATE TABLE IF NOT EXISTS public.assessments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
-    subject TEXT NOT NULL, -- 'Computing', 'Mathematics', 'Creative Arts'
+    subject TEXT NOT NULL DEFAULT 'Computing', -- Exclusively 'Computing' (Ghana NaCCA B7-B9 Curriculum)
     class_level TEXT NOT NULL DEFAULT 'Basic 9',
     assessment_type TEXT NOT NULL CHECK (assessment_type IN ('CAT', 'PROJECT_WORK', 'HOME_ASSIGNMENT', 'EXAM')),
     description TEXT,
@@ -241,13 +241,15 @@ BEGIN
     END IF;
 END $$;
 
--- 11. Initial Assessment Tasks Seed (Ghana Standard Curriculum)
+-- 11. Initial Assessment Tasks Seed (Ghana Standard Curriculum - Computing Focus)
+-- Note: Mathematics assessments commented out to preserve Computing intelligence integrity
 INSERT INTO public.assessments (title, subject, class_level, assessment_type, description, max_score, status, deadline, assessment_url)
 VALUES
     ('Computing CAT 1 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test covering Input/Output Hardware, System Software, and Network Topologies.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8'),
     ('Computing CAT 1 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test covering Computing Fundamentals for Basic 9B learners.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), 'https://forms.gle/TaDY59WHMsWYKGH7A'),
-    ('Mathematics CAT 1: Real Numbers', 'Mathematics', 'Basic 9', 'CAT', 'Fractions, Decimals, Ratios, and Percentage word problem evaluation.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '5 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8'),
-    ('Creative Arts: 2D Cultural Artifact Sketch', 'Creative Arts', 'Basic 9', 'PROJECT_WORK', 'Hands-on project work documenting Ghanaian visual heritage symbols and modern creative analysis.', 50.00, 'AVAILABLE', timezone('utc'::text, now() + interval '10 days'), 'https://forms.gle/TaDY59WHMsWYKGH7A')
+    -- ('Mathematics CAT 1: Real Numbers', 'Mathematics', 'Basic 9', 'CAT', 'Fractions, Decimals, Ratios, and Percentage word problem evaluation.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '5 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8'),
+    ('Computing Practical Project 1: Visual Algorithm & Scratch', 'Computing', 'Basic 9', 'PROJECT_WORK', 'Hands-on project work documenting algorithm flowcharts, iterative loops, and Scratch sprite interactions.', 30.00, 'AVAILABLE', timezone('utc'::text, now() + interval '10 days'), 'https://forms.gle/TaDY59WHMsWYKGH7A'),
+    ('Computing End of Term Examination', 'Computing', 'Basic 9', 'EXAM', 'Comprehensive terminal examination evaluating Ghanaian NaCCA B7-B9 Computing curriculum competencies.', 50.00, 'UPCOMING', timezone('utc'::text, now() + interval '14 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8')
 ON CONFLICT DO NOTHING;
 
 -- 12. Initial Broadcast Notifications Seed
