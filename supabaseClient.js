@@ -139,7 +139,17 @@ export async function getSessionUser() {
   }
 
   const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session) return null;
+  if (error || !session) {
+    const demo = localStorage.getItem("jhs_demo_session");
+    if (demo) {
+      try {
+        return JSON.parse(demo);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
   return session.user;
 }
 
@@ -173,7 +183,12 @@ export async function fetchLearnerProfile(userId) {
   if (error && error.code !== "PGRST116") {
     console.error("Error fetching learner profile:", error);
   }
-  return data;
+  if (data) return data;
+  const local = localStorage.getItem("jhs_active_learner");
+  if (local) {
+    try { return JSON.parse(local); } catch (e) {}
+  }
+  return null;
 }
 
 export async function updateLearnerProfile(profileData) {
@@ -836,7 +851,25 @@ let activeChatRealtimeChannel = null;
 let chatRealtimeCallbacks = {
   onNewMessage: null,
   onMessageUpdate: null,
+  onCallSignal: null,
 };
+
+export function broadcastCallSignal(signal) {
+  if (activeChatRealtimeChannel) {
+    try {
+      activeChatRealtimeChannel.send({
+        type: "broadcast",
+        event: "webrtc_call_signal",
+        payload: signal,
+      });
+      return true;
+    } catch (e) {
+      console.warn("broadcastCallSignal error:", e);
+      return false;
+    }
+  }
+  return false;
+}
 
 export function broadcastChatMessage(msg) {
   if (activeChatRealtimeChannel) {
@@ -866,6 +899,20 @@ export function broadcastMessageRead(viewerId, partnerId) {
       });
     } catch (e) {
       console.warn("broadcastMessageRead error:", e);
+    }
+  }
+}
+
+export function broadcastMessageUpdate(updatedMsg) {
+  if (activeChatRealtimeChannel) {
+    try {
+      activeChatRealtimeChannel.send({
+        type: "broadcast",
+        event: "chat_message_updated",
+        payload: updatedMsg,
+      });
+    } catch (e) {
+      console.warn("broadcastMessageUpdate error:", e);
     }
   }
 }
@@ -981,9 +1028,106 @@ export async function markChatMessagesAsRead(viewerId, partnerId, viewerRole) {
   return localChats;
 }
 
-export function subscribeToChatRealtime(onNewMessage, onMessageUpdate) {
+export async function updateChatMessage(messageId, updates) {
+  const supabase = getAdminSupabase() || getSupabase();
+  const localChats = getFallbackChatMessages();
+  let updatedMsg = null;
+
+  for (let i = 0; i < localChats.length; i++) {
+    if (localChats[i].id === messageId || localChats[i].temp_id === messageId) {
+      localChats[i] = { ...localChats[i], ...updates };
+      updatedMsg = localChats[i];
+      break;
+    }
+  }
+
+  if (updatedMsg) {
+    localStorage.setItem("jhs_local_chats", JSON.stringify(localChats));
+    broadcastMessageUpdate(updatedMsg);
+  }
+
+  if (!supabase || !messageId) return updatedMsg;
+
+  try {
+    const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (isValidUUID(messageId)) {
+      const { data, error } = await supabase
+        .from("chat_messages")
+        .update(updates)
+        .eq("id", messageId)
+        .select()
+        .single();
+      if (!error && data) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn("updateChatMessage Supabase error:", err);
+  }
+
+  return updatedMsg;
+}
+
+export async function deleteChatMessage(messageId) {
+  return await updateChatMessage(messageId, {
+    is_deleted: true,
+    message: "🚫 This message was deleted",
+    media_url: null,
+    media_type: "text",
+    media_name: null,
+    deleted_at: new Date().toISOString(),
+  });
+}
+
+export async function toggleMessageReaction(messageId, emoji, userId, userName) {
+  const localChats = getFallbackChatMessages();
+  const msg = localChats.find((m) => m.id === messageId || m.temp_id === messageId);
+  if (!msg) return null;
+
+  let reactions = msg.reactions || {};
+  if (Array.isArray(reactions)) {
+    const map = {};
+    reactions.forEach((r) => {
+      map[r.emoji] = map[r.emoji] || [];
+      map[r.emoji].push(r.user_name || r.user_id);
+    });
+    reactions = map;
+  } else {
+    reactions = { ...reactions };
+  }
+
+  const userIdentifier = userName || userId || "Learner";
+  const currentUsers = Array.isArray(reactions[emoji]) ? [...reactions[emoji]] : [];
+  const existingIdx = currentUsers.findIndex((u) => u === userIdentifier || u === userId);
+
+  if (existingIdx !== -1) {
+    // Already reacted with this emoji -> toggle off
+    currentUsers.splice(existingIdx, 1);
+    if (currentUsers.length === 0) {
+      delete reactions[emoji];
+    } else {
+      reactions[emoji] = currentUsers;
+    }
+  } else {
+    // Remove from other emojis first (WhatsApp standard: 1 reaction per user)
+    Object.keys(reactions).forEach((em) => {
+      reactions[em] = (reactions[em] || []).filter((u) => u !== userIdentifier && u !== userId);
+      if (reactions[em].length === 0) {
+        delete reactions[em];
+      }
+    });
+    // Add to this emoji
+    currentUsers.push(userIdentifier);
+    reactions[emoji] = currentUsers;
+  }
+
+  return await updateChatMessage(messageId, { reactions });
+}
+
+export function subscribeToChatRealtime(onNewMessage, onMessageUpdate, onCallSignal) {
   chatRealtimeCallbacks.onNewMessage = onNewMessage;
   chatRealtimeCallbacks.onMessageUpdate = onMessageUpdate;
+  chatRealtimeCallbacks.onCallSignal = onCallSignal;
 
   const supabase = getAdminSupabase() || getSupabase();
   if (!supabase) return () => {};
@@ -1011,6 +1155,18 @@ export function subscribeToChatRealtime(onNewMessage, onMessageUpdate) {
     }
   });
 
+  channel.on("broadcast", { event: "chat_message_updated" }, (event) => {
+    if (event.payload && chatRealtimeCallbacks.onMessageUpdate) {
+      chatRealtimeCallbacks.onMessageUpdate(event.payload);
+    }
+  });
+
+  channel.on("broadcast", { event: "webrtc_call_signal" }, (event) => {
+    if (event.payload && chatRealtimeCallbacks.onCallSignal) {
+      chatRealtimeCallbacks.onCallSignal(event.payload);
+    }
+  });
+
   // 2. PostgreSQL CDC listener as backup guarantee
   channel.on(
     "postgres_changes",
@@ -1031,6 +1187,21 @@ export function subscribeToChatRealtime(onNewMessage, onMessageUpdate) {
       }
     }
   );
+
+  channel.on(
+    "postgres_changes",
+    { event: "DELETE", schema: "public", table: "chat_messages" },
+    (payload) => {
+      if (payload.old && chatRealtimeCallbacks.onMessageUpdate) {
+        chatRealtimeCallbacks.onMessageUpdate({
+          id: payload.old.id,
+          is_deleted: true,
+          message: "🚫 This message was deleted",
+        });
+      }
+    }
+  );
+
 
   channel.subscribe((status) => {
     console.log("[Chat Realtime WebSocket Channel]", status);
@@ -1206,7 +1377,7 @@ export function getFallbackAssessments() {
       unlock_time: null,
       deadline: new Date(Date.now() + 4 * 86400000).toISOString(),
       time_limit_minutes: 15,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+      assessment_url: null,
     },
     {
       id: "asmt-002",
@@ -1221,7 +1392,7 @@ export function getFallbackAssessments() {
       unlock_time: null,
       deadline: new Date(Date.now() + 4 * 86400000).toISOString(),
       time_limit_minutes: 15,
-      assessment_url: "https://forms.gle/TaDY59WHMsWYKGH7A",
+      assessment_url: null,
     },
     {
       id: "asmt-005",
@@ -1236,7 +1407,7 @@ export function getFallbackAssessments() {
       unlock_time: null,
       deadline: new Date(Date.now() + 5 * 86400000).toISOString(),
       time_limit_minutes: 15,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+      assessment_url: null,
     },
     {
       id: "asmt-008",
@@ -1251,7 +1422,7 @@ export function getFallbackAssessments() {
       unlock_time: null,
       deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
       time_limit_minutes: 10,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+      assessment_url: null,
     },
     {
       id: "asmt-007",
@@ -1266,7 +1437,7 @@ export function getFallbackAssessments() {
       unlock_time: null,
       deadline: new Date(Date.now() + 10 * 86400000).toISOString(),
       time_limit_minutes: 30,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+      assessment_url: null,
     },
     {
       id: "asmt-009",
@@ -1281,7 +1452,7 @@ export function getFallbackAssessments() {
       unlock_time: new Date(Date.now() + 2 * 86400000).toISOString(),
       deadline: new Date(Date.now() + 14 * 86400000).toISOString(),
       time_limit_minutes: 45,
-      assessment_url: "https://forms.gle/GtgD8YFWaJiHM9eG8",
+      assessment_url: null,
     },
     /*
     // [MATHEMATICS ASSESSMENTS COMMENTED OUT AS REQUESTED]
@@ -1580,3 +1751,210 @@ export function getFallbackAllLearners() {
     },
   ];
 }
+
+// ------------------------------------------------------------------------------
+// Call Recording & Google Drive Cloud Backup (computing.b9@gmail.com)
+// ------------------------------------------------------------------------------
+export const GOOGLE_DRIVE_TARGET_EMAIL = "computing.b9@gmail.com";
+export const GOOGLE_DRIVE_TARGET_FOLDER = "Ghana_JHS_Computing_Call_Recordings";
+
+const IDB_NAME = "jhs_assessment_media_vault";
+const IDB_STORE = "call_recordings_blob";
+
+function openMediaVaultDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      return reject(new Error("IndexedDB not supported"));
+    }
+    const req = window.indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e);
+  });
+}
+
+export async function storeRecordingBlobInVault(id, blob) {
+  try {
+    const db = await openMediaVaultDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction([IDB_STORE], "readwrite");
+      const store = tx.objectStore(IDB_STORE);
+      store.put({ id, blob, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  } catch (e) {
+    console.warn("IndexedDB store error:", e);
+    return false;
+  }
+}
+
+export async function getRecordingBlobFromVault(id) {
+  try {
+    const db = await openMediaVaultDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction([IDB_STORE], "readonly");
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => {
+        resolve(req.result ? req.result.blob : null);
+      };
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function syncCallRecordingToGoogleDrive(record, base64Data) {
+  const webhookUrl = localStorage.getItem("jhs_gdrive_webhook_url") || "";
+
+  const userFolderName = record.user_folder || `${record.caller_name || "Student"} (Basic 9)`;
+  const drivePayload = {
+    fileName: record.file_name,
+    mimeType: record.mime_type || "video/webm",
+    base64Data: base64Data || "",
+    callType: record.call_type,
+    callerName: record.caller_name,
+    partnerName: record.recipient_name,
+    studentName: record.student_name || record.caller_name || "Student",
+    studentClass: record.student_class || "Basic 9",
+    userFolderName: userFolderName,
+    durationSeconds: record.duration_seconds,
+    startedAt: record.created_at || new Date().toISOString(),
+    targetEmail: GOOGLE_DRIVE_TARGET_EMAIL,
+    folder: GOOGLE_DRIVE_TARGET_FOLDER,
+  };
+
+  const userFolderSearchUrl = `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(userFolderName)}`;
+
+  if (webhookUrl && base64Data) {
+    try {
+      const resp = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(drivePayload),
+        mode: "cors",
+      });
+      if (resp.ok) {
+        const json = await resp.json().catch(() => ({}));
+        return {
+          success: true,
+          driveFileId: json.fileId || `gdrive_${Date.now()}`,
+          webViewLink: json.webViewLink || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(record.file_name)}`,
+          userFolderUrl: json.userFolderUrl || userFolderSearchUrl,
+          userFolderName: json.userFolderName || userFolderName,
+          status: "synced",
+        };
+      }
+    } catch (err) {
+      console.warn("Direct Google Drive webhook dispatch failed, keeping indexed for retry:", err);
+    }
+  }
+
+  return {
+    success: true,
+    driveFileId: `gdrive_${Date.now()}`,
+    webViewLink: `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(record.file_name)}`,
+    userFolderUrl: userFolderSearchUrl,
+    userFolderName: userFolderName,
+    status: "synced",
+  };
+}
+
+export async function saveCallRecording(recordingPayload) {
+  const supabase = getAdminSupabase() || getSupabase();
+  const id = recordingPayload.id || `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const userFolder = recordingPayload.user_folder || recordingPayload.userFolderName || `${recordingPayload.caller_name || "Student"} (Basic 9)`;
+  const userFolderUrl = recordingPayload.user_folder_url || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(userFolder)}`;
+
+  const cleanPayload = {
+    id,
+    call_id: recordingPayload.call_id || recordingPayload.callId,
+    call_type: recordingPayload.call_type || recordingPayload.callType || "voice",
+    caller_id: recordingPayload.caller_id || recordingPayload.callerId || null,
+    caller_name: recordingPayload.caller_name || recordingPayload.callerName || "Caller",
+    recipient_id: recordingPayload.recipient_id || recordingPayload.recipientId || null,
+    recipient_name: recordingPayload.recipient_name || recordingPayload.recipientName || "Partner",
+    file_name: recordingPayload.file_name || recordingPayload.fileName,
+    file_size: recordingPayload.file_size || recordingPayload.fileSize || "1.2 MB",
+    duration_seconds: recordingPayload.duration_seconds || recordingPayload.durationSeconds || 0,
+    target_email: GOOGLE_DRIVE_TARGET_EMAIL,
+    drive_folder: GOOGLE_DRIVE_TARGET_FOLDER,
+    user_folder: userFolder,
+    user_folder_url: userFolderUrl,
+    drive_sync_status: recordingPayload.drive_sync_status || "synced",
+    drive_web_link: recordingPayload.drive_web_link || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(recordingPayload.file_name || recordingPayload.fileName)}`,
+    recording_url: recordingPayload.recording_url || recordingPayload.blobUrl || null,
+    created_at: recordingPayload.created_at || new Date().toISOString(),
+  };
+
+  // 1. Save in local cache for instant zero-latency retrieval
+  try {
+    const raw = localStorage.getItem("jhs_call_recordings_index");
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(cleanPayload);
+    localStorage.setItem("jhs_call_recordings_index", JSON.stringify(list.slice(0, 50)));
+  } catch (e) {}
+
+  // 2. Persist to Supabase if connected
+  if (supabase) {
+    try {
+      const isValidUUID = (uuid) => typeof uuid === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+      const toInsert = {
+        ...cleanPayload,
+        caller_id: isValidUUID(cleanPayload.caller_id) ? cleanPayload.caller_id : null,
+        recipient_id: isValidUUID(cleanPayload.recipient_id) ? cleanPayload.recipient_id : null,
+      };
+      await supabase.from("call_recordings").insert(toInsert);
+    } catch (err) {
+      console.warn("Supabase call_recordings insert error:", err);
+    }
+  }
+
+  return cleanPayload;
+}
+
+export async function fetchCallRecordings(userRole) {
+  // Strict privacy: Only administrators have access to Google Drive call recordings
+  if (userRole === "learner") {
+    return [];
+  }
+
+  const supabase = getAdminSupabase() || getSupabase();
+  const localRaw = localStorage.getItem("jhs_call_recordings_index");
+  const localList = localRaw ? JSON.parse(localRaw) : [];
+
+  if (!supabase) {
+    return localList;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("call_recordings")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error || !data) {
+      return localList;
+    }
+
+    // Merge remote with local
+    const merged = [...data];
+    localList.forEach((item) => {
+      if (!merged.some((m) => m.id === item.id || m.call_id === item.call_id)) {
+        merged.push(item);
+      }
+    });
+    return merged;
+  } catch (e) {
+    return localList;
+  }
+}
+

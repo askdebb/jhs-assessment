@@ -101,13 +101,34 @@ export interface NotificationItem {
 
 export interface ChatMessage {
   id: string;
+  temp_id?: string;
   sender_id: string;
-  receiver_id: string;
-  message: string;
-  is_read: boolean;
-  created_at: string;
+  recipient_id?: string;
+  receiver_id?: string;
   sender_name?: string;
   sender_avatar?: string;
+  sender_role?: "admin" | "learner";
+  message: string;
+  media_type?: "text" | "image" | "video" | "audio" | "file" | string;
+  media_url?: string | null;
+  media_name?: string | null;
+  media_size?: string | null;
+  audio_duration?: string;
+  read?: boolean;
+  is_read?: boolean;
+  read_at?: string | null;
+  reply_to?: {
+    id: string;
+    sender_name: string;
+    message: string;
+    media_type?: string;
+  } | null;
+  reactions?: Record<string, string[]> | any;
+  is_edited?: boolean;
+  edited_at?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  created_at: string;
 }
 
 export interface AppState {

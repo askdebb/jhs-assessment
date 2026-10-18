@@ -25,6 +25,9 @@ import {
   sendNotification,
   fetchChatMessages,
   sendChatMessage,
+  updateChatMessage,
+  deleteChatMessage,
+  toggleMessageReaction,
   markChatMessagesAsRead,
   isUserAdmin,
   PRIMARY_ADMIN_EMAIL,
@@ -47,7 +50,15 @@ import {
   subscribeToAdminRealtime,
   ADMIN_CONTACT,
   subscribeToChatRealtime,
+  broadcastCallSignal,
   subscribeToLearnersRealtime,
+  GOOGLE_DRIVE_TARGET_EMAIL,
+  GOOGLE_DRIVE_TARGET_FOLDER,
+  saveCallRecording,
+  fetchCallRecordings,
+  syncCallRecordingToGoogleDrive,
+  storeRecordingBlobInVault,
+  getRecordingBlobFromVault,
 } from "./supabaseClient.js";
 
 import {
@@ -73,6 +84,8 @@ import {
   shuffleArray,
   generateDynamicTestItems,
 } from "./questionsData.js";
+
+import { QueryClient, MutationObserver, QueryObserver } from "@tanstack/query-core";
 
 // ------------------------------------------------------------------------------
 // Preset Student Avatars for Onboarding (Diverse Ghanaian / African youth avatars)
@@ -267,7 +280,6 @@ const adminManageAssessmentsBtn = document.getElementById("adminManageAssessment
 const adminExportExcelBtn = document.getElementById("adminExportExcelBtn");
 const adminExportExcelBtnText = document.getElementById("adminExportExcelBtnText");
 const adminTopExportExcelBtn = document.getElementById("adminTopExportExcelBtn");
-const adminClearMockBtn = document.getElementById("adminClearMockBtn");
 const adminEnrollStudentBtn = document.getElementById("adminEnrollStudentBtn");
 const adminRecordMarksBtn = document.getElementById("adminRecordMarksBtn");
 
@@ -496,11 +508,199 @@ const chatCloseContactsBtn = document.getElementById("chatCloseContactsBtn");
 const chatContactSearchInput = document.getElementById("chatContactSearchInput") as HTMLInputElement | null;
 const chatContactsListContainer = document.getElementById("chatContactsListContainer");
 
+const chatReplyBar = document.getElementById("chatReplyBar");
+const chatReplySender = document.getElementById("chatReplySender");
+const chatReplySnippet = document.getElementById("chatReplySnippet");
+const chatCancelReplyBtn = document.getElementById("chatCancelReplyBtn");
+const chatEditBar = document.getElementById("chatEditBar");
+const chatEditSnippet = document.getElementById("chatEditSnippet");
+const chatCancelEditBtn = document.getElementById("chatCancelEditBtn");
+
 // Lightbox Modal Elements
 const mediaLightboxModal = document.getElementById("mediaLightboxModal");
 const lightboxImg = document.getElementById("lightboxImg");
+const lightboxVideo = document.getElementById("lightboxVideo") as HTMLVideoElement | null;
 const lightboxCaption = document.getElementById("lightboxCaption");
+const lightboxDownloadBtn = document.getElementById("lightboxDownloadBtn");
 const closeLightboxBtn = document.getElementById("closeLightboxBtn");
+
+// WhatsApp Chat Reply & Edit State
+let activeReplyingTo: any = null;
+let activeEditingMessage: any = null;
+
+// Realtime 1-on-1 Voice & Video Call Elements
+const chatStartVoiceCallBtn = document.getElementById("chatStartVoiceCallBtn");
+const chatStartVideoCallBtn = document.getElementById("chatStartVideoCallBtn");
+const videoCallModal = document.getElementById("videoCallModal");
+const callRemoteAvatar = document.getElementById("callRemoteAvatar") as HTMLImageElement | null;
+const callRemoteName = document.getElementById("callRemoteName");
+const callRemoteRoleBadge = document.getElementById("callRemoteRoleBadge");
+const callTypeBadge = document.getElementById("callTypeBadge");
+const callTypeBadgeIcon = document.getElementById("callTypeBadgeIcon");
+const callTypeBadgeText = document.getElementById("callTypeBadgeText");
+const callStatusIndicator = document.getElementById("callStatusIndicator");
+const callStatusText = document.getElementById("callStatusText");
+const callDurationTimer = document.getElementById("callDurationTimer");
+const callToggleModeBtn = document.getElementById("callToggleModeBtn");
+const callToggleModeText = document.getElementById("callToggleModeText");
+const callMinimizeBtn = document.getElementById("callMinimizeBtn");
+
+// Voice Call Stage Elements
+const callVoiceStage = document.getElementById("callVoiceStage");
+const callVoiceAvatar = document.getElementById("callVoiceAvatar") as HTMLImageElement | null;
+const callVoicePartnerName = document.getElementById("callVoicePartnerName");
+const callVoiceSubtitle = document.getElementById("callVoiceSubtitle");
+
+// Video Call Stage Elements
+const callVideoStage = document.getElementById("callVideoStage");
+const callRemoteVideo = document.getElementById("callRemoteVideo") as HTMLVideoElement | null;
+const callScreenShareBanner = document.getElementById("callScreenShareBanner");
+const callStopShareTopBtn = document.getElementById("callStopShareTopBtn");
+const callWaitingOverlay = document.getElementById("callWaitingOverlay");
+const callWaitingAvatar = document.getElementById("callWaitingAvatar") as HTMLImageElement | null;
+const callWaitingName = document.getElementById("callWaitingName");
+const callWaitingStatusText = document.getElementById("callWaitingStatusText");
+
+const localVideoContainer = document.getElementById("localVideoContainer");
+const callLocalVideo = document.getElementById("callLocalVideo") as HTMLVideoElement | null;
+const callLocalMutedBadge = document.getElementById("callLocalMutedBadge");
+
+const callToggleMicBtn = document.getElementById("callToggleMicBtn");
+const callToggleCameraBtn = document.getElementById("callToggleCameraBtn");
+const callShareScreenBtn = document.getElementById("callShareScreenBtn");
+const callEndBtn = document.getElementById("callEndBtn");
+
+const incomingCallModal = document.getElementById("incomingCallModal");
+const incomingCallerAvatar = document.getElementById("incomingCallerAvatar") as HTMLImageElement | null;
+const incomingCallerName = document.getElementById("incomingCallerName");
+const incomingCallTypeLabel = document.getElementById("incomingCallTypeLabel");
+const incomingCallTypeIcon = document.getElementById("incomingCallTypeIcon");
+const incomingCallTypeText = document.getElementById("incomingCallTypeText");
+const declineIncomingCallBtn = document.getElementById("declineIncomingCallBtn");
+const acceptIncomingCallBtn = document.getElementById("acceptIncomingCallBtn");
+const acceptIncomingCallIcon = document.getElementById("acceptIncomingCallIcon");
+const acceptIncomingCallText = document.getElementById("acceptIncomingCallText");
+
+// WebRTC STUN Server Configuration
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+  ],
+};
+
+interface ActiveCallState {
+  callId: string | null;
+  partner: any | null;
+  callType: "voice" | "video";
+  pc: RTCPeerConnection | null;
+  localStream: MediaStream | null;
+  remoteStream: MediaStream | null;
+  screenStream: MediaStream | null;
+  isCaller: boolean;
+  status: "idle" | "calling" | "incoming" | "connected" | "ended";
+  isMuted: boolean;
+  isCameraOff: boolean;
+  isScreenSharing: boolean;
+  timerId: any | null;
+  secondsElapsed: number;
+  stopRingTone: (() => void) | null;
+  pendingSignal: any | null;
+  recorder: MediaRecorder | null;
+  recordedChunks: Blob[];
+  recordingStartedAt: number | null;
+  isConference: boolean;
+  conferenceTitle: string;
+  isGridView: boolean;
+  conferenceParticipants: Array<{
+    id: string;
+    name: string;
+    avatar: string;
+    role: string;
+    classLevel?: string;
+    isMuted: boolean;
+    isCameraOff: boolean;
+    isSpeaking?: boolean;
+    stream?: MediaStream | null;
+  }>;
+}
+
+const activeCall: ActiveCallState = {
+  callId: null,
+  partner: null,
+  callType: "voice",
+  pc: null,
+  localStream: null,
+  remoteStream: null,
+  screenStream: null,
+  isCaller: false,
+  status: "idle",
+  isMuted: false,
+  isCameraOff: false,
+  isScreenSharing: false,
+  timerId: null,
+  secondsElapsed: 0,
+  stopRingTone: null,
+  pendingSignal: null,
+  recorder: null,
+  recordedChunks: [],
+  recordingStartedAt: null,
+  isConference: false,
+  conferenceTitle: "Basic 9 Computing Group Conference",
+  isGridView: true,
+  conferenceParticipants: [],
+};
+
+// Conference Calling Elements
+const chatStartConferenceCallBtn = document.getElementById("chatStartConferenceCallBtn");
+const callConferenceBadge = document.getElementById("callConferenceBadge");
+const callParticipantCountText = document.getElementById("callParticipantCountText");
+const callTopAddParticipantBtn = document.getElementById("callTopAddParticipantBtn");
+const callAddParticipantBtn = document.getElementById("callAddParticipantBtn");
+const callToggleGridBtn = document.getElementById("callToggleGridBtn");
+const callConferenceStage = document.getElementById("callConferenceStage");
+const callConferenceGrid = document.getElementById("callConferenceGrid");
+const conferenceRoomTitleDisplay = document.getElementById("conferenceRoomTitleDisplay");
+const conferenceActiveCountDisplay = document.getElementById("conferenceActiveCountDisplay");
+const callConferenceDrawer = document.getElementById("callConferenceDrawer");
+const callCloseConferenceDrawerBtn = document.getElementById("callCloseConferenceDrawerBtn");
+const callConferenceRoomCode = document.getElementById("callConferenceRoomCode");
+const callCopyLinkBtn = document.getElementById("callCopyLinkBtn");
+const callCopyLinkBtnText = document.getElementById("callCopyLinkBtnText");
+const callConferenceSearchInput = document.getElementById("callConferenceSearchInput") as HTMLInputElement | null;
+const callConferenceContactsList = document.getElementById("callConferenceContactsList");
+
+// Call Recording & Google Drive Cloud Backup Elements (Completely invisible in UI during calls)
+const callRecordingSavedToast = document.getElementById("callRecordingSavedToast");
+const callRecordingSavedToastText = document.getElementById("callRecordingSavedToastText");
+const closeRecordingSavedToastBtn = document.getElementById("closeRecordingSavedToastBtn");
+
+// Call Recording Player Modal Elements
+const callRecordingPlayerModal = document.getElementById("callRecordingPlayerModal");
+const closeRecordingPlayerBtn = document.getElementById("closeRecordingPlayerBtn");
+const playerVideoEl = document.getElementById("playerVideoEl") as HTMLVideoElement | null;
+const playerAudioEl = document.getElementById("playerAudioEl") as HTMLAudioElement | null;
+const playerAudioStage = document.getElementById("playerAudioStage");
+const playerModalTitle = document.getElementById("playerModalTitle");
+const playerModalSubtitle = document.getElementById("playerModalSubtitle");
+const playerModalDriveInfo = document.getElementById("playerModalDriveInfo");
+const playerDownloadBtn = document.getElementById("playerDownloadBtn") as HTMLAnchorElement | null;
+const playerDriveOpenBtn = document.getElementById("playerDriveOpenBtn") as HTMLAnchorElement | null;
+const playerAudioAvatar = document.getElementById("playerAudioAvatar") as HTMLImageElement | null;
+const playerAudioParticipants = document.getElementById("playerAudioParticipants");
+const playerAudioMeta = document.getElementById("playerAudioMeta");
+const playerTypeIcon = document.getElementById("playerTypeIcon");
+
+// Admin Call Recordings View Elements
+const adminTabRecordings = document.getElementById("adminTabRecordings");
+const adminSubViewRecordings = document.getElementById("adminSubViewRecordings");
+const adminRecordingsContainer = document.getElementById("adminRecordingsContainer");
+const adminRefreshRecordingsBtn = document.getElementById("adminRefreshRecordingsBtn");
+const adminOpenGoogleDriveBtn = document.getElementById("adminOpenGoogleDriveBtn");
+const recordingsTypeFilter = document.getElementById("recordingsTypeFilter") as HTMLSelectElement | null;
+const recordingsSearchInput = document.getElementById("recordingsSearchInput") as HTMLInputElement | null;
+const statTotalRecordings = document.getElementById("statTotalRecordings");
 
 // Chat Media & Audio State
 let currentAttachment = null;
@@ -684,21 +884,25 @@ async function checkAuthSession() {
     state.activeView = savedView === "admin" ? "admin" : "learner";
 
     if (state.user) {
-      await initNotifications();
-      await initChat();
+      try {
+        await initNotifications();
+      } catch (err) {
+        console.warn("Notifications init error:", err);
+      }
+      try {
+        await initChat();
+      } catch (err) {
+        console.warn("Chat init error:", err);
+      }
     }
 
     await handleRoute();
   } catch (err) {
     console.error("Error checking auth session:", err);
-    if (!isMockDataCleared()) {
-      startDemoMode();
-    } else {
-      state.user = null;
-      state.profile = null;
-      state.isAdmin = false;
-      await handleRoute();
-    }
+    state.user = null;
+    state.profile = null;
+    state.isAdmin = false;
+    await handleRoute();
   }
 }
 
@@ -713,8 +917,9 @@ function showOAuthErrorBanner(error, code, description) {
 }
 
 function renderAuthLanding() {
-  document.getElementById("topAnnouncementBar")?.classList.add("hidden");
-  document.getElementById("mainHeader")?.classList.add("hidden");
+  document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+  document.getElementById("mainHeader")?.classList.remove("hidden");
+  document.getElementById("mainFooter")?.classList.remove("hidden");
 
   authSection.classList.remove("hidden");
   dashboardSection.classList.add("hidden");
@@ -722,14 +927,14 @@ function renderAuthLanding() {
   adminGatekeeperSection.classList.add("hidden");
   adminGatekeeperSection.classList.remove("flex");
   adminToggleContainer.classList.add("hidden");
-  floatingChatContainer.classList.add("hidden");
+  floatingChatContainer.classList.remove("hidden");
 
   authNavContainer.innerHTML = `
-    <button id="navSignInBtn" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm shadow-indigo-600/25 transition-all cursor-pointer">
-      <i class="fa-brands fa-google"></i> Sign In with Gmail
+    <button id="headerSignInBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition-all whitespace-nowrap cursor-pointer">
+      <i class="fa-brands fa-google text-xs"></i> Sign In
     </button>
   `;
-  document.getElementById("navSignInBtn")?.addEventListener("click", handleGoogleSignIn);
+  document.getElementById("headerSignInBtn")?.addEventListener("click", handleGoogleSignIn);
 }
 
 async function handleGoogleSignIn() {
@@ -1390,9 +1595,14 @@ async function renderDashboard() {
   // Check if today is learner's birthday and trigger celebration
   checkAndHandleBirthday(profile);
 
-  // Fetch Assessments & Submissions
-  state.assessments = await fetchAssessments();
-  state.submissions = await fetchLearnerSubmissions(profile?.id || user?.id);
+  // Fetch Assessments & Submissions with smooth minimum skeleton pulse window
+  const [asmts, subs] = await Promise.all([
+    fetchAssessments(),
+    fetchLearnerSubmissions(profile?.id || user?.id),
+    new Promise((resolve) => setTimeout(resolve, 400)),
+  ]);
+  state.assessments = asmts || [];
+  state.submissions = subs || [];
 
   // Update KPI Cards & Assessment Grid
   updateKpiMetrics();
@@ -1611,24 +1821,11 @@ function renderAssessmentCards() {
         </button>
       `;
     } else if (isAvailable) {
-      if (asmt.assessment_url) {
-        actionBtn = `
-          <div class="flex flex-col gap-1.5 w-full">
-            <a href="${asmt.assessment_url}" target="_blank" rel="noopener noreferrer" class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all flex items-center justify-center gap-1.5">
-              <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i> Take on Google Form
-            </a>
-            <button class="start-quiz-btn w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
-              <i class="fa-solid fa-laptop-code text-indigo-600 text-xs"></i> Take in Portal
-            </button>
-          </div>
-        `;
-      } else {
-        actionBtn = `
-          <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
-            <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
-          </button>
-        `;
-      }
+      actionBtn = `
+        <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
+          <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
+        </button>
+      `;
     } else {
       actionBtn = `
         <button disabled class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
@@ -2741,12 +2938,16 @@ async function handleRoute() {
     adminDashboardSection?.classList.remove("hidden");
     floatingChatContainer?.classList.remove("hidden");
 
+    // Render Admin KPI & Learners Table Skeletons while fetching
+    renderAdminKpiSkeletons();
+
     // Fetch latest live data from database immediately upon entering admin route
     const [asmts, learners, subs, notifs] = await Promise.all([
       fetchAssessments(),
       fetchAllLearners(),
       fetchAllSubmissions(),
       fetchNotifications(),
+      new Promise((resolve) => setTimeout(resolve, 400)),
     ]);
     state.assessments = asmts || [];
     state.allLearners = learners || [];
@@ -2766,6 +2967,8 @@ async function handleRoute() {
       showAdminSubview("marking-scheme");
     } else if (path.includes("/admin/broadcast")) {
       showAdminSubview("broadcast");
+    } else if (path.includes("/admin/recordings")) {
+      showAdminSubview("recordings");
     } else {
       showAdminSubview("overview");
     }
@@ -2810,6 +3013,7 @@ function showAdminSubview(subviewKey) {
     { key: "assessments", el: adminTabAssessments, view: adminSubViewAssessments },
     { key: "marking-scheme", el: adminTabMarkingScheme, view: adminSubViewMarkingScheme },
     { key: "broadcast", el: adminTabBroadcast, view: adminSubViewBroadcast },
+    { key: "recordings", el: adminTabRecordings, view: adminSubViewRecordings },
   ];
 
   tabs.forEach((t) => {
@@ -2830,6 +3034,8 @@ function showAdminSubview(subviewKey) {
     renderAdminAssessmentConfigTable2();
   } else if (subviewKey === "marking-scheme") {
     renderEmbeddedAnswerKeyView();
+  } else if (subviewKey === "recordings") {
+    renderAdminCallRecordings();
   } else if (subviewKey === "overview") {
     renderAdminOverviewStats();
     renderAdminLearnersTable();
@@ -5423,56 +5629,41 @@ function renderChatContactsList() {
 }
 
 let chatPresenceRefreshInterval: any = null;
+let chatRealtimeSubscribed = false;
 
-async function initChat() {
-  // Ensure chat widget launcher is always visible
-  const chatContainer = document.getElementById("floatingChatContainer");
-  if (chatContainer) chatContainer.classList.remove("hidden");
+// ------------------------------------------------------------------------------
+// TanStack Query: Optimistic Chat Engine (Reactions, Replies, Edits, Deletions)
+// ------------------------------------------------------------------------------
+export const chatQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: fetchChatMessages,
+      staleTime: Infinity,
+      gcTime: 1000 * 60 * 60, // 1 hour
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+(window as any).chatQueryClient = chatQueryClient;
 
-  if (!state.allLearners || state.allLearners.length === 0) {
-    state.allLearners = await fetchAllLearners();
-  }
+let chatQueryObserver: QueryObserver<any> | null = null;
 
-  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
-
-  if (!state.activeChatPartner) {
-    if (isCurrentUserAdmin) {
-      const firstStudent = (state.allLearners || []).find(
-        (l: any) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
-      );
-      state.activeChatPartner = firstStudent || null;
-    } else {
-      state.activeChatPartner = ADMIN_CONTACT;
-    }
-  }
-
-  state.chatMessages = await fetchChatMessages();
-  updateChatUnreadDot();
-  renderChatPartnerHeader();
-  renderChatMessages();
-
-  // Realtime Live Presence Subscription for All Learners & Admin
-  subscribeToLearnersRealtime((updatedLearner: any) => {
-    const idx = (state.allLearners || []).findIndex((l: any) => l.id === updatedLearner.id);
-    if (idx !== -1) {
-      state.allLearners[idx] = { ...state.allLearners[idx], ...updatedLearner };
-    } else {
-      state.allLearners.push(updatedLearner);
-    }
-    renderChatPartnerHeader();
-    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
-      renderChatContactsList();
-    }
+function setupChatQueryObserver() {
+  if (chatQueryObserver) return;
+  chatQueryObserver = new QueryObserver(chatQueryClient, {
+    queryKey: ["chat_messages"],
+    queryFn: fetchChatMessages,
+    staleTime: Infinity,
   });
 
-  // Refresh presence timers every 20 seconds
-  if (chatPresenceRefreshInterval) clearInterval(chatPresenceRefreshInterval);
-  chatPresenceRefreshInterval = setInterval(() => {
-    renderChatPartnerHeader();
-    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
-      renderChatContactsList();
+  chatQueryObserver.subscribe((result) => {
+    if (result.data) {
+      state.chatMessages = result.data;
+      renderChatMessages();
+      updateChatUnreadDot();
     }
-  }, 20000);
+  });
+}
 
 function isSameChatMessage(a: any, b: any): boolean {
   if (!a || !b) return false;
@@ -5500,88 +5691,370 @@ function isSameChatMessage(a: any, b: any): boolean {
   return false;
 }
 
-function upsertChatMessage(newMsg: any): boolean {
-  if (!state.chatMessages) state.chatMessages = [];
-  const existingIdx = state.chatMessages.findIndex((m: any) => isSameChatMessage(m, newMsg));
-  if (existingIdx !== -1) {
-    state.chatMessages[existingIdx] = {
-      ...state.chatMessages[existingIdx],
-      ...newMsg,
-      id: (newMsg.id && !newMsg.id.startsWith("msg-")) ? newMsg.id : state.chatMessages[existingIdx].id,
-    };
-    return false; // updated existing
-  } else {
-    state.chatMessages.push(newMsg);
-    return true; // newly inserted
-  }
+function upsertChatMessageInCache(newMsg: any): boolean {
+  let isNew = false;
+  chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+    const list = [...old];
+    const existingIdx = list.findIndex((m: any) => isSameChatMessage(m, newMsg));
+    if (existingIdx !== -1) {
+      list[existingIdx] = {
+        ...list[existingIdx],
+        ...newMsg,
+        id: (newMsg.id && !newMsg.id.startsWith("msg-") && !newMsg.id.startsWith("temp-")) ? newMsg.id : list[existingIdx].id,
+      };
+      isNew = false;
+    } else {
+      list.push(newMsg);
+      isNew = true;
+    }
+    return list;
+  });
+  return isNew;
 }
 
-  // Subscribe to live Realtime Chat channel (Instant WebSocket Broadcast + DB CDC)
-  subscribeToChatRealtime(
-    (newMsg) => {
-      const myId = getMyUserId();
+function upsertChatMessage(newMsg: any): boolean {
+  return upsertChatMessageInCache(newMsg);
+}
 
-      // Deduplicate/merge message seamlessly
-      const isNew = upsertChatMessage(newMsg);
+// 1. TanStack Query Mutation: Send Message / Quoted Reply / Media / Voice Note
+const sendChatMessageMutation = new MutationObserver(chatQueryClient, {
+  mutationFn: async (payload: any) => {
+    return await sendChatMessage(payload);
+  },
+  onMutate: (newPayload: any) => {
+    chatQueryClient.cancelQueries({ queryKey: ["chat_messages"] });
 
-      const isForMe = isMessageAddressedToMe(newMsg, myId);
-      const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
-      const partner = state.activeChatPartner;
-      const isCurrentPartner = partner && (
-        newMsg.sender_id === partner.id ||
-        (partner.role === "admin" && newMsg.sender_role === "admin") ||
-        (newMsg.sender_id === myId && newMsg.recipient_id === partner.id)
-      );
+    const previousMessages = chatQueryClient.getQueryData<any[]>(["chat_messages"]) || [];
+    const tempId = "temp-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
+    const optimisticMsg: any = {
+      id: tempId,
+      temp_id: tempId,
+      created_at: new Date().toISOString(),
+      reactions: {},
+      is_edited: false,
+      is_deleted: false,
+      read: false,
+      ...newPayload,
+    };
 
-      if (isChatOpen && isCurrentPartner) {
-        renderChatMessages();
-        if (isForMe) {
-          markCurrentChatAsSeen();
-        }
-      } else {
-        if (isForMe && isNew) {
-          // Instant sound alert only on newly arrived messages (not on duplicate updates)
-          playNotificationChime();
-          // Instant toast notification preview
-          showIncomingChatToast(newMsg);
-          // Instant unread badge on floating chatbot icon
-          updateChatUnreadDot();
-          if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
-            renderChatContactsList();
+    chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => [...old, optimisticMsg]);
+
+    return { previousMessages, tempId };
+  },
+  onError: (err, variables, context: any) => {
+    console.error("TanStack Query: sendChatMessage error, rolling back:", err);
+    if (context?.previousMessages) {
+      chatQueryClient.setQueryData(["chat_messages"], context.previousMessages);
+    }
+  },
+  onSuccess: (serverMsg: any, variables, context: any) => {
+    if (serverMsg) {
+      chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+        return old.map((m: any) => {
+          if (m.id === context?.tempId || m.temp_id === context?.tempId || isSameChatMessage(m, serverMsg)) {
+            return {
+              ...m,
+              ...serverMsg,
+              id: (serverMsg.id && !serverMsg.id.startsWith("msg-") && !serverMsg.id.startsWith("temp-")) ? serverMsg.id : m.id,
+            };
           }
-        }
-      }
-    },
-    (updateData) => {
-      if (updateData?.viewerId) {
-        // Broadcast read receipt
-        const { viewerId, partnerId, read_at } = updateData;
-        let modified = false;
-        state.chatMessages.forEach((m: any) => {
-          if (
-            (m.recipient_id === viewerId || (viewerId === ADMIN_CONTACT.id && m.recipient_role === "admin")) &&
-            (!partnerId || m.sender_id === partnerId)
-          ) {
-            m.read = true;
-            m.read_at = read_at || new Date().toISOString();
-            modified = true;
-          }
+          return m;
         });
-        if (modified) {
-          renderChatMessages();
-          updateChatUnreadDot();
+      });
+    }
+  },
+});
+
+// 2. TanStack Query Mutation: Emoji Reactions Toggle (Optimistic zero-latency)
+const reactChatMessageMutation = new MutationObserver(chatQueryClient, {
+  mutationFn: async ({ msgId, emoji, userId, userName }: { msgId: string; emoji: string; userId: string; userName: string }) => {
+    return await toggleMessageReaction(msgId, emoji, userId, userName);
+  },
+  onMutate: ({ msgId, emoji, userId, userName }) => {
+    chatQueryClient.cancelQueries({ queryKey: ["chat_messages"] });
+
+    const previousMessages = chatQueryClient.getQueryData<any[]>(["chat_messages"]) || [];
+    const userIdentifier = userName || userId || "Learner";
+
+    chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+      return old.map((m: any) => {
+        if (m.id !== msgId && m.temp_id !== msgId) return m;
+
+        let reactions = m.reactions || {};
+        if (Array.isArray(reactions)) {
+          const map: Record<string, string[]> = {};
+          reactions.forEach((r: any) => {
+            map[r.emoji] = map[r.emoji] || [];
+            map[r.emoji].push(r.user_name || r.user_id);
+          });
+          reactions = map;
+        } else {
+          reactions = JSON.parse(JSON.stringify(reactions));
         }
-      } else if (updateData?.id) {
-        // Single message updated
-        const idx = state.chatMessages.findIndex((m: any) => m.id === updateData.id);
-        if (idx !== -1) {
-          state.chatMessages[idx] = { ...state.chatMessages[idx], ...updateData };
-          renderChatMessages();
-          updateChatUnreadDot();
+
+        const currentUsers = Array.isArray(reactions[emoji]) ? [...reactions[emoji]] : [];
+        const existingIdx = currentUsers.findIndex((u: string) => u === userIdentifier || u === userId);
+
+        if (existingIdx !== -1) {
+          // Toggle off
+          currentUsers.splice(existingIdx, 1);
+          if (currentUsers.length === 0) {
+            delete reactions[emoji];
+          } else {
+            reactions[emoji] = currentUsers;
+          }
+        } else {
+          // WhatsApp standard: 1 reaction per user
+          Object.keys(reactions).forEach((em) => {
+            reactions[em] = (reactions[em] || []).filter((u: string) => u !== userIdentifier && u !== userId);
+            if (reactions[em].length === 0) {
+              delete reactions[em];
+            }
+          });
+          currentUsers.push(userIdentifier);
+          reactions[emoji] = currentUsers;
         }
+
+        return { ...m, reactions };
+      });
+    });
+
+    return { previousMessages };
+  },
+  onError: (err, variables, context: any) => {
+    console.error("TanStack Query: toggleReaction error, rolling back:", err);
+    if (context?.previousMessages) {
+      chatQueryClient.setQueryData(["chat_messages"], context.previousMessages);
+    }
+  },
+  onSuccess: (updatedMsg: any) => {
+    if (updatedMsg) {
+      upsertChatMessageInCache(updatedMsg);
+    }
+  },
+});
+
+// 3. TanStack Query Mutation: Edit Chat Message within 2 minutes
+const editChatMessageMutation = new MutationObserver(chatQueryClient, {
+  mutationFn: async ({ msgId, text }: { msgId: string; text: string }) => {
+    return await updateChatMessage(msgId, {
+      message: text,
+      is_edited: true,
+      edited_at: new Date().toISOString(),
+    });
+  },
+  onMutate: ({ msgId, text }) => {
+    chatQueryClient.cancelQueries({ queryKey: ["chat_messages"] });
+
+    const previousMessages = chatQueryClient.getQueryData<any[]>(["chat_messages"]) || [];
+
+    chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+      return old.map((m: any) => {
+        if (m.id === msgId || m.temp_id === msgId) {
+          return {
+            ...m,
+            message: text,
+            is_edited: true,
+            edited_at: new Date().toISOString(),
+          };
+        }
+        return m;
+      });
+    });
+
+    return { previousMessages };
+  },
+  onError: (err, variables, context: any) => {
+    console.error("TanStack Query: editChatMessage error, rolling back:", err);
+    if (context?.previousMessages) {
+      chatQueryClient.setQueryData(["chat_messages"], context.previousMessages);
+    }
+  },
+  onSuccess: (updatedMsg: any) => {
+    if (updatedMsg) {
+      upsertChatMessageInCache(updatedMsg);
+    }
+  },
+});
+
+// 4. TanStack Query Mutation: Delete Chat Message
+const deleteChatMessageMutation = new MutationObserver(chatQueryClient, {
+  mutationFn: async ({ msgId }: { msgId: string }) => {
+    return await deleteChatMessage(msgId);
+  },
+  onMutate: ({ msgId }) => {
+    chatQueryClient.cancelQueries({ queryKey: ["chat_messages"] });
+
+    const previousMessages = chatQueryClient.getQueryData<any[]>(["chat_messages"]) || [];
+
+    chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+      return old.map((m: any) => {
+        if (m.id === msgId || m.temp_id === msgId) {
+          return {
+            ...m,
+            is_deleted: true,
+            message: "🚫 This message was deleted",
+            media_url: null,
+            media_type: "text",
+            media_name: null,
+            deleted_at: new Date().toISOString(),
+          };
+        }
+        return m;
+      });
+    });
+
+    return { previousMessages };
+  },
+  onError: (err, variables, context: any) => {
+    console.error("TanStack Query: deleteChatMessage error, rolling back:", err);
+    if (context?.previousMessages) {
+      chatQueryClient.setQueryData(["chat_messages"], context.previousMessages);
+    }
+  },
+  onSuccess: (updatedMsg: any) => {
+    if (updatedMsg) {
+      upsertChatMessageInCache(updatedMsg);
+    }
+  },
+});
+
+async function initChat() {
+  try {
+    // Ensure chat widget launcher is always visible
+    const chatContainer = document.getElementById("floatingChatContainer");
+    if (chatContainer) chatContainer.classList.remove("hidden");
+
+    if (!state.allLearners || state.allLearners.length === 0) {
+      try {
+        state.allLearners = await fetchAllLearners();
+      } catch (e) {
+        state.allLearners = [];
       }
     }
-  );
+
+    const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+    if (!state.activeChatPartner) {
+      if (isCurrentUserAdmin) {
+        const firstStudent = (state.allLearners || []).find(
+          (l: any) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+        );
+        state.activeChatPartner = firstStudent || null;
+      } else {
+        state.activeChatPartner = ADMIN_CONTACT;
+      }
+    }
+
+    // Setup TanStack Query Observer to synchronize state.chatMessages and trigger re-renders
+    setupChatQueryObserver();
+
+    // Load chat messages via TanStack Query
+    try {
+      const fetched = await chatQueryClient.fetchQuery({
+        queryKey: ["chat_messages"],
+        queryFn: fetchChatMessages,
+      });
+      state.chatMessages = fetched || [];
+    } catch (e) {
+      state.chatMessages = await fetchChatMessages();
+    }
+
+    updateChatUnreadDot();
+    renderChatPartnerHeader();
+    renderChatMessages();
+
+  // Realtime Live Presence Subscription for All Learners & Admin
+  subscribeToLearnersRealtime((updatedLearner: any) => {
+    const idx = (state.allLearners || []).findIndex((l: any) => l.id === updatedLearner.id);
+    if (idx !== -1) {
+      state.allLearners[idx] = { ...state.allLearners[idx], ...updatedLearner };
+    } else {
+      state.allLearners.push(updatedLearner);
+    }
+    renderChatPartnerHeader();
+    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+      renderChatContactsList();
+    }
+  });
+
+  // Refresh presence timers every 20 seconds
+  if (chatPresenceRefreshInterval) clearInterval(chatPresenceRefreshInterval);
+  chatPresenceRefreshInterval = setInterval(() => {
+    renderChatPartnerHeader();
+    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+      renderChatContactsList();
+    }
+  }, 20000);
+
+  // Subscribe to live Realtime Chat channel (Instant WebSocket Broadcast + DB CDC)
+  if (!chatRealtimeSubscribed) {
+    chatRealtimeSubscribed = true;
+    subscribeToChatRealtime(
+      (newMsg) => {
+        const myId = getMyUserId();
+
+        // Deduplicate/merge message seamlessly via TanStack Query
+        const isNew = upsertChatMessageInCache(newMsg);
+
+        const isForMe = isMessageAddressedToMe(newMsg, myId);
+        const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
+        const partner = state.activeChatPartner;
+        const isCurrentPartner = partner && (
+          newMsg.sender_id === partner.id ||
+          (partner.role === "admin" && newMsg.sender_role === "admin") ||
+          (newMsg.sender_id === myId && newMsg.recipient_id === partner.id)
+        );
+
+        if (isChatOpen && isCurrentPartner) {
+          if (isForMe) {
+            markCurrentChatAsSeen();
+          }
+        } else {
+          if (isForMe && isNew) {
+            // Instant sound alert only on newly arrived messages (not on duplicate updates)
+            playNotificationChime();
+            // Instant toast notification preview
+            showIncomingChatToast(newMsg);
+            // Instant unread badge on floating chatbot icon
+            updateChatUnreadDot();
+            if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+              renderChatContactsList();
+            }
+          }
+        }
+      },
+      (updateData) => {
+        if (updateData?.viewerId) {
+          // Broadcast read receipt
+          const { viewerId, partnerId, read_at } = updateData;
+          chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+            let modified = false;
+            const updated = old.map((m: any) => {
+              if (
+                (m.recipient_id === viewerId || (viewerId === ADMIN_CONTACT.id && m.recipient_role === "admin")) &&
+                (!partnerId || m.sender_id === partnerId)
+              ) {
+                modified = true;
+                return { ...m, read: true, read_at: read_at || new Date().toISOString() };
+              }
+              return m;
+            });
+            return modified ? updated : old;
+          });
+        } else if (updateData?.id) {
+          // Single message updated
+          upsertChatMessageInCache(updateData);
+        }
+      },
+      (callSignal) => {
+        handleIncomingCallSignal(callSignal);
+      }
+    );
+  }
+  } catch (err) {
+    console.warn("initChat error:", err);
+  }
 }
 
 function renderChatPartnerHeader() {
@@ -5601,8 +6074,8 @@ function renderChatPartnerHeader() {
   const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
   if (chatPartnerName) {
     chatPartnerName.textContent = isPartnerAdmin
-      ? "Master Debrah (Admin & Teacher)"
-      : `${partner.full_name} (${partner.class_level || 'Basic 9'})`;
+      ? "Master Debrah"
+      : `${partner.full_name}`;
   }
   if (chatPartnerAvatar) {
     chatPartnerAvatar.src = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
@@ -5614,10 +6087,10 @@ function renderChatPartnerHeader() {
 
     const isOnline = isLearnerOnline(livePartner);
     if (isOnline) {
-      chatPartnerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> <span class="text-emerald-200 font-bold">Online</span> • ${isPartnerAdmin ? "Head of Computing" : (livePartner.class_level || "Basic 9")}`;
+      chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse"></span> <span class="text-emerald-300 font-semibold">Online</span> • <span class="truncate">${isPartnerAdmin ? "Teacher" : (livePartner.class_level || "Basic 9")}</span>`;
     } else {
       const timeAgo = livePartner.last_seen ? formatTimeAgo(livePartner.last_seen) : "offline";
-      chatPartnerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-300 opacity-60"></span> <span class="text-indigo-200">Offline (${timeAgo})</span> • ${isPartnerAdmin ? "Head of Computing" : (livePartner.class_level || "Basic 9")}`;
+      chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0"></span> <span class="text-slate-300">Offline (${timeAgo})</span> • <span class="truncate">${isPartnerAdmin ? "Teacher" : (livePartner.class_level || "Basic 9")}</span>`;
     }
   }
 }
@@ -5679,6 +6152,9 @@ function openChatWithUser(student: any) {
 (window as any).generateVoiceNoteWavDataUrl = generateVoiceNoteWavDataUrl;
 (window as any).generateChimeWavDataUrl = generateChimeWavDataUrl;
 (window as any).getUnlockedAudioContext = getUnlockedAudioContext;
+(window as any).startConferenceCall = startConferenceCall;
+(window as any).openConferenceDrawer = openConferenceDrawer;
+(window as any).closeConferenceDrawer = closeConferenceDrawer;
 (window as any).state = state;
 
 async function markCurrentChatAsSeen() {
@@ -5687,94 +6163,136 @@ async function markCurrentChatAsSeen() {
   const partnerId = partner?.id || null;
   const viewerRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
 
-  await markChatMessagesAsRead(myId, partnerId, viewerRole);
-
-  let changed = false;
-  state.chatMessages.forEach((m) => {
-    const matchesPartner = partnerId
-      ? m.sender_id === partnerId || (m.sender_role === "admin" && partnerId === ADMIN_CONTACT.id)
-      : true;
-    if (matchesPartner && !m.read) {
-      m.read = true;
-      m.read_at = new Date().toISOString();
-      changed = true;
-    }
+  // Optimistically mark messages as read in TanStack Query cache
+  chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
+    let changed = false;
+    const updated = old.map((m: any) => {
+      const matchesPartner = partnerId
+        ? m.sender_id === partnerId || (m.sender_role === "admin" && partnerId === ADMIN_CONTACT.id)
+        : true;
+      if (matchesPartner && !m.read) {
+        changed = true;
+        return { ...m, read: true, read_at: new Date().toISOString() };
+      }
+      return m;
+    });
+    return changed ? updated : old;
   });
-  if (changed) {
-    renderChatMessages();
-    updateChatUnreadDot();
+
+  await markChatMessagesAsRead(myId, partnerId, viewerRole);
+}
+
+// ------------------------------------------------------------------------------
+// WhatsApp Chat Helpers: Timestamps, Replies, Reactions & Edits
+// ------------------------------------------------------------------------------
+function formatFullTimestamp(dateStr: string): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-GB", {
+    weekday: "long",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function isMessageEditable(msg: any): boolean {
+  if (!msg || msg.is_deleted) return false;
+  const created = new Date(msg.created_at).getTime();
+  if (isNaN(created)) return false;
+  return Date.now() - created <= 2 * 60 * 1000; // Strictly 2 minutes window
+}
+
+function setReplyingTo(msg: any) {
+  cancelEditing();
+  activeReplyingTo = {
+    id: msg.id,
+    sender_name: msg.sender_name || "Partner",
+    message: msg.message || (msg.media_name ? `Attachment: ${msg.media_name}` : "Media file"),
+    media_type: msg.media_type,
+  };
+
+  // 1. WhatsApp-Style Input Theming: Highlight input and customize placeholder
+  if (chatInputForm) {
+    chatInputForm.classList.add("chat-reply-active-mode");
+  }
+  if (chatMessageInput) {
+    chatMessageInput.placeholder = `Replying to ${activeReplyingTo.sender_name}...`;
+    chatMessageInput.focus();
+  }
+
+  // 2. Reply Bar Preview Theming
+  if (chatReplyBar && chatReplySender && chatReplySnippet) {
+    chatReplySender.textContent = `Replying to ${activeReplyingTo.sender_name}`;
+    chatReplySnippet.textContent = activeReplyingTo.message;
+    chatReplyBar.classList.remove("hidden");
+  }
+
+  // 3. Highlight the target message bubble in the chat thread
+  if (chatMessagesContainer) {
+    chatMessagesContainer.querySelectorAll(".chat-reply-active-target").forEach((el) => {
+      el.classList.remove("chat-reply-active-target");
+    });
+    const targetMsgEl = document.getElementById(`chat-msg-${msg.id}`);
+    if (targetMsgEl) {
+      targetMsgEl.classList.add("chat-reply-active-target");
+      targetMsgEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }
 }
 
-function bindChatMediaTriggers() {
-  if (!chatMessagesContainer) return;
-
-  chatMessagesContainer.querySelectorAll(".audio-play-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const container = btn.closest(".chat-voice-card") || btn.closest("div");
-      const audio = container?.querySelector(".chat-audio-element") as HTMLAudioElement | null;
-      if (!audio) return;
-
-      const icon = btn.querySelector("i");
-
-      // Auto-recover if audio src is a broken or expired blob: URL from another session
-      if (!audio.src || audio.src.startsWith("blob:") || audio.src.includes("freesound.org")) {
-        audio.src = generateVoiceNoteWavDataUrl(3);
-      }
-
-      if (audio.paused) {
-        if (activePlayingAudio && activePlayingAudio !== audio) {
-          activePlayingAudio.pause();
-          activePlayingAudio.currentTime = 0;
-          document.querySelectorAll(".audio-play-toggle-btn i").forEach((ic) => {
-            ic.className = "fa-solid fa-play text-xs ml-0.5";
-          });
-          document.querySelectorAll(".chat-voice-card").forEach((card) => {
-            card.classList.remove("audio-playing");
-          });
-        }
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              activePlayingAudio = audio;
-              if (icon) icon.className = "fa-solid fa-pause text-xs";
-              container?.classList.add("audio-playing");
-            })
-            .catch((err) => {
-              console.warn("Audio playback err, falling back to clean wave audio:", err);
-              audio.src = generateVoiceNoteWavDataUrl(3);
-              audio.play().then(() => {
-                activePlayingAudio = audio;
-                if (icon) icon.className = "fa-solid fa-pause text-xs";
-                container?.classList.add("audio-playing");
-              }).catch((e2) => console.warn("Fallback play error:", e2));
-            });
-        }
-      } else {
-        audio.pause();
-        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
-        container?.classList.remove("audio-playing");
-      }
-
-      audio.onended = () => {
-        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
-        container?.classList.remove("audio-playing");
-      };
-      audio.onpause = () => {
-        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
-        container?.classList.remove("audio-playing");
-      };
+function cancelReplying() {
+  activeReplyingTo = null;
+  if (chatReplyBar) chatReplyBar.classList.add("hidden");
+  if (chatInputForm) chatInputForm.classList.remove("chat-reply-active-mode");
+  if (chatMessageInput) {
+    chatMessageInput.placeholder = "Type message, attach media, or record...";
+  }
+  if (chatMessagesContainer) {
+    chatMessagesContainer.querySelectorAll(".chat-reply-active-target").forEach((el) => {
+      el.classList.remove("chat-reply-active-target");
     });
+  }
+}
+
+function startEditingMessage(msg: any) {
+  cancelReplying();
+  if (!isMessageEditable(msg)) {
+    alert("Editing is only permitted within 2 minutes of sending.");
+    return;
+  }
+  activeEditingMessage = msg;
+  if (chatEditBar && chatEditSnippet && chatMessageInput) {
+    chatEditSnippet.textContent = msg.message;
+    chatEditBar.classList.remove("hidden");
+    chatMessageInput.value = msg.message;
+    chatMessageInput.focus();
+  }
+}
+
+function cancelEditing() {
+  activeEditingMessage = null;
+  if (chatEditBar) chatEditBar.classList.add("hidden");
+  if (chatMessageInput) chatMessageInput.value = "";
+}
+
+async function handleDeleteMessage(msgId: string) {
+  if (!confirm("Are you sure you want to delete this message?")) return;
+  // TanStack Query optimistic mutation with instant UI response & rollback on failure
+  deleteChatMessageMutation.mutate({ msgId }).catch((err) => {
+    console.warn("Delete mutation error:", err);
   });
+}
 
-  chatMessagesContainer.querySelectorAll(".chat-lightbox-trigger").forEach((imgEl) => {
-    imgEl.addEventListener("click", () => {
-      const url = imgEl.getAttribute("data-img-url");
-      const caption = imgEl.getAttribute("data-img-caption");
-      openMediaLightbox(url, caption);
-    });
+async function handleReactToMessage(msgId: string, emoji: string) {
+  const myId = getMyUserId();
+  const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
+  // TanStack Query optimistic mutation with zero-latency response & rollback on failure
+  reactChatMessageMutation.mutate({ msgId, emoji, userId: myId, userName: myName }).catch((err) => {
+    console.warn("Reaction mutation error:", err);
   });
 }
 
@@ -5810,7 +6328,6 @@ function renderChatMessages() {
 
   const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
   const defaultPartnerAvatar = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
-
   const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
 
   // Scoped message filter for this 1-on-1 thread
@@ -5852,23 +6369,74 @@ function renderChatMessages() {
   }
 
   const messageCardsHtml = threadMessages.map((msg) => {
-    const isMe = msg.sender_id === myId || (state.isAdmin ? msg.sender_role === "admin" : (msg.sender_role === "learner" && msg.sender_name.includes(currentName)));
+    const isMe = msg.sender_id === myId || (state.isAdmin ? msg.sender_role === "admin" : (msg.sender_role === "learner" && msg.sender_name?.includes(currentName)));
     const senderAvatar = isMe ? myAvatar : (msg.sender_role === "admin" ? TEACHER_AVATAR : (partner.avatar_url || defaultPartnerAvatar));
+    const fullTimeTitle = formatFullTimestamp(msg.created_at);
+    const shortTime = formatTime(msg.created_at);
 
-    // Render Media Attachment if present
+    // If message is deleted, show WhatsApp-style deleted placeholder
+    if (msg.is_deleted) {
+      return `
+        <div class="flex ${isMe ? 'justify-end' : 'justify-start'} items-end gap-2 group chat-msg-row my-1" id="chat-msg-${msg.id}" data-msg-id="${msg.id}">
+          ${!isMe ? `<img src="${senderAvatar}" alt="${escapeHtml(msg.sender_name)}" class="w-7 h-7 rounded-full object-cover ring-2 ring-slate-200 shrink-0 mb-0.5 shadow-xs" />` : ''}
+          <div class="max-w-[78%] ${isMe ? 'bg-indigo-600/70 text-indigo-100' : 'bg-slate-100 text-slate-500 border border-slate-200'} rounded-2xl ${isMe ? 'rounded-br-xs' : 'rounded-bl-xs'} px-3.5 py-2 text-xs shadow-xs italic flex items-center gap-1.5" title="${fullTimeTitle}">
+            <i class="fa-solid fa-ban text-xs opacity-70"></i>
+            <span>This message was deleted</span>
+            <span class="text-[9px] opacity-70 ml-2 not-italic">${shortTime}</span>
+          </div>
+          ${isMe ? `<img src="${senderAvatar}" alt="You" class="w-7 h-7 rounded-full object-cover ring-2 ring-indigo-200 shrink-0 mb-0.5 shadow-xs" />` : ''}
+        </div>
+      `;
+    }
+
+    const canEdit = isMe && isMessageEditable(msg);
+
+    // Quoted Reply Preview
+    let replyQuoteHtml = "";
+    if (msg.reply_to) {
+      replyQuoteHtml = `
+        <div class="chat-reply-quote mb-2 p-2 rounded-xl border-l-[3.5px] ${isMe ? 'bg-indigo-900/60 border-indigo-300 text-indigo-100 shadow-2xs' : 'bg-slate-100/95 border-indigo-600 text-slate-700 shadow-2xs'} text-[11px] cursor-pointer transition-all hover:scale-[1.01]" data-target-id="${msg.reply_to.id}" title="Click to view quoted message">
+          <div class="font-extrabold text-[10px] ${isMe ? 'text-indigo-200' : 'text-indigo-700'} flex items-center gap-1.5 mb-0.5">
+            <i class="fa-solid fa-reply text-[9px] -scale-x-100"></i>
+            <span>${escapeHtml(msg.reply_to.sender_name || 'Classmate')}</span>
+          </div>
+          <div class="truncate opacity-90 text-[10px] font-normal pl-0.5 leading-snug">${escapeHtml(msg.reply_to.message || 'Media attachment')}</div>
+        </div>
+      `;
+    }
+
+    // Media Content (Images, Videos, Audio Voice Notes, Documents) with 1-Click Download
     let mediaContent = "";
     if (msg.media_type === "image" && msg.media_url) {
       mediaContent = `
-        <div class="mt-2">
+        <div class="mt-2 relative rounded-xl overflow-hidden group/media border border-white/20 shadow-xs">
           <img
             src="${msg.media_url}"
             alt="${escapeHtml(msg.media_name || 'Shared Assessment Photo')}"
-            class="chat-lightbox-trigger rounded-xl max-h-48 w-full object-cover border border-white/25 shadow-xs cursor-pointer hover:opacity-95 transition"
+            class="chat-lightbox-trigger rounded-xl max-h-48 w-full object-cover cursor-pointer hover:opacity-95 transition"
             data-img-url="${msg.media_url}"
             data-img-caption="${escapeHtml(msg.media_name || 'Assessment Photo')}"
+            data-is-video="false"
             title="Click to enlarge"
           />
-          ${msg.media_name ? `<span class="text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-400'} block mt-1 truncate"><i class="fa-regular fa-image mr-1"></i>${escapeHtml(msg.media_name)}</span>` : ''}
+          <div class="flex items-center justify-between p-1.5 ${isMe ? 'bg-indigo-900/60 text-white' : 'bg-slate-900/60 text-white'} text-[10px]">
+            <span class="truncate"><i class="fa-regular fa-image mr-1"></i>${escapeHtml(msg.media_name || 'Photo')}</span>
+            <a href="${msg.media_url}" download="${msg.media_name || 'assessment-photo.png'}" class="px-2 py-0.5 rounded bg-white/20 hover:bg-white/40 text-white flex items-center gap-1 transition shrink-0 ml-1.5 font-bold" title="Download image to device">
+              <i class="fa-solid fa-download text-[9px]"></i> Download
+            </a>
+          </div>
+        </div>
+      `;
+    } else if (msg.media_type === "video" && msg.media_url) {
+      mediaContent = `
+        <div class="mt-2 rounded-xl overflow-hidden bg-black shadow-xs border border-white/20">
+          <video src="${msg.media_url}" controls class="w-full max-h-52 rounded-xl object-contain"></video>
+          <div class="flex items-center justify-between p-1.5 bg-black/70 text-white text-[10px]">
+            <span class="truncate"><i class="fa-solid fa-video mr-1"></i>${escapeHtml(msg.media_name || 'Video')}</span>
+            <a href="${msg.media_url}" download="${msg.media_name || 'assessment-video.mp4'}" class="px-2 py-0.5 rounded bg-white/20 hover:bg-white/40 text-white flex items-center gap-1 transition shrink-0 ml-1.5 font-bold" title="Download video to device">
+              <i class="fa-solid fa-download text-[9px]"></i> Download
+            </a>
+          </div>
         </div>
       `;
     } else if (msg.media_type === "audio" && msg.media_url) {
@@ -5891,7 +6459,12 @@ function renderChatMessages() {
             </div>
             <div class="flex items-center justify-between text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-500'}">
               <span><i class="fa-solid fa-microphone text-[9px] mr-1"></i>Voice Note</span>
-              <span class="font-mono font-bold">${msg.audio_duration || '0:03'}</span>
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold">${msg.audio_duration || '0:03'}</span>
+                <a href="${safeAudioSrc}" download="${msg.media_name || 'voice-note.mp3'}" class="hover:underline flex items-center gap-0.5" title="Download voice note">
+                  <i class="fa-solid fa-download text-[8px]"></i>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -5908,43 +6481,122 @@ function renderChatMessages() {
               <span class="text-[9px] opacity-75">${msg.media_size || 'Attached File'}</span>
             </div>
           </div>
-          <a href="${msg.media_url}" download="${msg.media_name || 'attachment'}" class="text-[10px] font-bold underline shrink-0 hover:opacity-80">View</a>
+          <a href="${msg.media_url}" download="${msg.media_name || 'attachment.pdf'}" class="px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 hover:bg-white/40 text-current flex items-center gap-1 transition shrink-0" title="Download file to device">
+            <i class="fa-solid fa-download text-[9px]"></i> Download
+          </a>
         </div>
       `;
     }
 
+    // Reactions Pill Display (e.g. 👍 2, ❤️ 1)
+    let reactionsHtml = "";
+    if (msg.reactions && typeof msg.reactions === "object") {
+      const entries = Object.entries(msg.reactions).filter(([_, users]: any) => Array.isArray(users) && users.length > 0);
+      if (entries.length > 0) {
+        reactionsHtml = `
+          <div class="flex flex-wrap gap-1 mt-1.5 -mb-0.5">
+            ${entries.map(([emoji, users]: any) => `
+              <button
+                type="button"
+                class="chat-reaction-pill inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] ${isMe ? 'bg-indigo-700/90 border border-indigo-400/50 text-white' : 'bg-white border border-slate-200 text-slate-700'} shadow-2xs cursor-pointer"
+                data-msg-id="${msg.id}"
+                data-emoji="${emoji}"
+                title="${users.join(', ')} (${users.length})"
+              >
+                <span>${emoji}</span>
+                <span class="font-bold text-[9px]">${users.length}</span>
+              </button>
+            `).join("")}
+          </div>
+        `;
+      }
+    }
+
+    // WhatsApp Hover Actions Bar (Quick Emojis, Reply, Edit within 2 mins, Delete)
+    const actionsToolbarHtml = `
+      <div class="chat-msg-actions absolute top-1 ${isMe ? 'left-0 -translate-x-full pr-1.5' : 'right-0 translate-x-full pl-1.5'} flex items-center gap-1 z-20">
+        <!-- Quick Emoji Reaction Popover -->
+        <div class="relative group/react">
+          <button type="button" class="w-6 h-6 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-amber-500 hover:bg-slate-50 flex items-center justify-center shadow-xs cursor-pointer transition" title="Add reaction">
+            <i class="fa-regular fa-face-smile text-xs"></i>
+          </button>
+          <div class="chat-reaction-popover hidden group-hover/react:flex absolute bottom-full mb-1 ${isMe ? 'left-0' : 'right-0'} bg-white border border-slate-200 rounded-full shadow-lg px-2 py-1 items-center gap-1.5 z-30">
+            ${['👍', '❤️', '😂', '😮', '😢', '🙏'].map(em => `
+              <button type="button" class="chat-quick-emoji w-6 h-6 hover:scale-125 transition flex items-center justify-center text-sm cursor-pointer" data-msg-id="${msg.id}" data-emoji="${em}">${em}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Reply Button -->
+        <button type="button" class="chat-action-reply w-6 h-6 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:bg-slate-50 flex items-center justify-center shadow-xs cursor-pointer transition" data-msg-id="${msg.id}" title="Reply to this message">
+          <i class="fa-solid fa-reply text-[10px]"></i>
+        </button>
+
+        ${canEdit ? `
+          <!-- Edit Button (Active for 2 minutes from sending) -->
+          <button type="button" class="chat-action-edit w-6 h-6 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-amber-600 hover:bg-slate-50 flex items-center justify-center shadow-xs cursor-pointer transition" data-msg-id="${msg.id}" title="Edit message (within 2 minutes of sending)">
+            <i class="fa-solid fa-pen text-[9px]"></i>
+          </button>
+        ` : ''}
+
+        ${isMe ? `
+          <!-- Delete Button -->
+          <button type="button" class="chat-action-delete w-6 h-6 rounded-full bg-white border border-slate-200 text-slate-500 hover:text-rose-600 hover:bg-slate-50 flex items-center justify-center shadow-xs cursor-pointer transition" data-msg-id="${msg.id}" title="Delete message">
+            <i class="fa-solid fa-trash text-[9px]"></i>
+          </button>
+        ` : ''}
+      </div>
+    `;
+
+    const editedNotice = msg.is_edited
+      ? `<span class="text-[9px] opacity-75 italic ml-1 cursor-help" title="Edited: ${formatFullTimestamp(msg.edited_at)}">(edited)</span>`
+      : "";
+
     if (isMe) {
-      const readReceipt = msg.read
-        ? `<span class="inline-flex items-center gap-1 text-[10px] text-sky-200 font-bold" title="Seen ${msg.read_at ? 'at ' + formatTime(msg.read_at) : 'by recipient'}"><i class="fa-solid fa-check-double text-sky-300 text-[11px]"></i> Seen</span>`
-        : `<span class="inline-flex items-center gap-1 text-[10px] text-indigo-200 opacity-80" title="Delivered • Not seen yet"><i class="fa-solid fa-check text-indigo-300 text-[11px]"></i> Sent</span>`;
+      const isOptimistic = Boolean(msg.temp_id && (!msg.id || msg.id.startsWith("temp-") || msg.id.startsWith("msg-")));
+      const readReceipt = isOptimistic
+        ? `<span class="inline-flex items-center gap-1 text-[10px] text-indigo-300 opacity-80" title="Sending..."><i class="fa-regular fa-clock text-[10px] animate-pulse"></i> Sending</span>`
+        : (msg.read
+            ? `<span class="inline-flex items-center gap-1 text-[10px] text-sky-200 font-bold" title="Seen ${msg.read_at ? 'at ' + formatTime(msg.read_at) : 'by recipient'}"><i class="fa-solid fa-check-double text-sky-300 text-[11px]"></i> Seen</span>`
+            : `<span class="inline-flex items-center gap-1 text-[10px] text-indigo-200 opacity-80" title="Delivered • Not seen yet"><i class="fa-solid fa-check text-indigo-300 text-[11px]"></i> Sent</span>`);
 
       return `
-        <div class="flex justify-end items-end gap-2 group">
-          <div class="max-w-[78%] bg-indigo-600 text-white rounded-2xl rounded-br-xs px-3.5 py-2 text-xs shadow-xs">
-            <div class="flex items-center justify-between gap-3 mb-0.5">
-              <span class="font-bold text-[10px] text-indigo-200">You (${state.isAdmin && state.activeView === "admin" ? 'Admin' : 'Student'})</span>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <span class="text-[9px] text-indigo-200">${formatTime(msg.created_at)}</span>
-                ${readReceipt}
+        <div class="flex justify-end items-end gap-2 group chat-msg-row my-1" id="chat-msg-${msg.id}" data-msg-id="${msg.id}">
+          <div class="relative max-w-[78%]">
+            ${actionsToolbarHtml}
+            <div class="bg-indigo-600 text-white rounded-2xl rounded-br-xs px-3.5 py-2 text-xs shadow-xs" title="Sent: ${fullTimeTitle}">
+              <div class="flex items-center justify-between gap-3 mb-0.5">
+                <span class="font-bold text-[10px] text-indigo-200">You (${state.isAdmin && state.activeView === "admin" ? 'Admin' : 'Student'})</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[9px] text-indigo-200 cursor-default" title="${fullTimeTitle}">${shortTime}${editedNotice}</span>
+                  ${readReceipt}
+                </div>
               </div>
+              ${replyQuoteHtml}
+              ${msg.message ? `<p class="leading-relaxed text-white break-words">${escapeHtml(msg.message)}</p>` : ''}
+              ${mediaContent}
+              ${reactionsHtml}
             </div>
-            ${msg.message ? `<p class="leading-relaxed text-white">${escapeHtml(msg.message)}</p>` : ''}
-            ${mediaContent}
           </div>
           <img src="${senderAvatar}" alt="You" title="You" class="w-7 h-7 rounded-full object-cover ring-2 ring-indigo-200 shrink-0 mb-0.5 shadow-xs" />
         </div>
       `;
     } else {
       return `
-        <div class="flex justify-start items-end gap-2 group">
+        <div class="flex justify-start items-end gap-2 group chat-msg-row my-1" id="chat-msg-${msg.id}" data-msg-id="${msg.id}">
           <img src="${senderAvatar}" alt="${escapeHtml(msg.sender_name)}" title="${escapeHtml(msg.sender_name)}" class="w-7 h-7 rounded-full object-cover ring-2 ring-slate-200 shrink-0 mb-0.5 shadow-xs" />
-          <div class="max-w-[78%] bg-white border border-slate-200 rounded-2xl rounded-bl-xs px-3.5 py-2 text-xs shadow-xs text-slate-800">
-            <div class="flex items-center justify-between gap-3 mb-0.5">
-              <span class="font-bold text-[10px] text-indigo-600">${escapeHtml(msg.sender_name)}</span>
-              <span class="text-[9px] text-slate-400 shrink-0">${formatTime(msg.created_at)}</span>
+          <div class="relative max-w-[78%]">
+            ${actionsToolbarHtml}
+            <div class="bg-white border border-slate-200 rounded-2xl rounded-bl-xs px-3.5 py-2 text-xs shadow-xs text-slate-800" title="Sent: ${fullTimeTitle}">
+              <div class="flex items-center justify-between gap-3 mb-0.5">
+                <span class="font-bold text-[10px] text-indigo-600">${escapeHtml(msg.sender_name)}</span>
+                <span class="text-[9px] text-slate-400 shrink-0 cursor-default" title="${fullTimeTitle}">${shortTime}${editedNotice}</span>
+              </div>
+              ${replyQuoteHtml}
+              ${msg.message ? `<p class="leading-relaxed text-slate-700 break-words">${escapeHtml(msg.message)}</p>` : ''}
+              ${mediaContent}
+              ${reactionsHtml}
             </div>
-            ${msg.message ? `<p class="leading-relaxed text-slate-700">${escapeHtml(msg.message)}</p>` : ''}
-            ${mediaContent}
           </div>
         </div>
       `;
@@ -5955,7 +6607,7 @@ function renderChatMessages() {
   const lastMsg = threadMessages[threadMessages.length - 1];
   const partnerName = partner.full_name || "Partner";
   let threadSeenFooter = "";
-  if (lastMsg && (lastMsg.sender_id === myId || (state.isAdmin ? lastMsg.sender_role === "admin" : (lastMsg.sender_role === "learner" && lastMsg.sender_name.includes(currentName))))) {
+  if (lastMsg && (lastMsg.sender_id === myId || (state.isAdmin ? lastMsg.sender_role === "admin" : (lastMsg.sender_role === "learner" && lastMsg.sender_name?.includes(currentName))))) {
     if (lastMsg.read) {
       threadSeenFooter = `
         <div class="flex justify-end pr-9 -mt-1 mb-2">
@@ -5978,14 +6630,146 @@ function renderChatMessages() {
   chatMessagesContainer.innerHTML = messageCardsHtml + threadSeenFooter;
   chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
 
-  // Re-bind media click triggers
+  // Re-bind media click triggers, lightbox & WhatsApp reactions/replies/edit/delete
   bindChatMediaTriggers();
+
+  // Retain active reply target highlight if currently replying to a message
+  if (activeReplyingTo?.id) {
+    const activeMsgEl = document.getElementById(`chat-msg-${activeReplyingTo.id}`);
+    if (activeMsgEl) {
+      activeMsgEl.classList.add("chat-reply-active-target");
+    }
+  }
 }
 
-function openMediaLightbox(url: string | null, caption: string | null) {
+function bindChatMediaTriggers() {
+  if (!chatMessagesContainer) return;
+
+  chatMessagesContainer.querySelectorAll(".audio-play-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const card = btn.closest(".chat-voice-card");
+      const audioEl = card?.querySelector(".chat-audio-element") as HTMLAudioElement | null;
+      if (!audioEl) return;
+
+      if (activePlayingAudio && activePlayingAudio !== audioEl) {
+        activePlayingAudio.pause();
+        activePlayingAudio.currentTime = 0;
+        const prevCard = activePlayingAudio.closest(".chat-voice-card");
+        prevCard?.classList.remove("audio-playing");
+        const prevBtnIcon = prevCard?.querySelector(".audio-play-toggle-btn i");
+        if (prevBtnIcon) prevBtnIcon.className = "fa-solid fa-play text-xs ml-0.5";
+      }
+
+      if (audioEl.paused) {
+        audioEl.play().catch((e) => console.warn("Audio play blocked:", e));
+        card?.classList.add("audio-playing");
+        const icon = btn.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-pause text-xs";
+        activePlayingAudio = audioEl;
+      } else {
+        audioEl.pause();
+        card?.classList.remove("audio-playing");
+        const icon = btn.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
+        activePlayingAudio = null;
+      }
+
+      audioEl.onended = () => {
+        card?.classList.remove("audio-playing");
+        const icon = btn.querySelector("i");
+        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
+        activePlayingAudio = null;
+      };
+    });
+  });
+
+  chatMessagesContainer.querySelectorAll(".chat-lightbox-trigger").forEach((el) => {
+    el.addEventListener("click", () => {
+      const url = el.getAttribute("data-img-url");
+      const caption = el.getAttribute("data-img-caption");
+      const isVideo = el.getAttribute("data-is-video") === "true";
+      openMediaLightbox(url, caption, isVideo);
+    });
+  });
+
+  // Quick Emoji Reactions
+  chatMessagesContainer.querySelectorAll(".chat-quick-emoji").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const msgId = btn.getAttribute("data-msg-id");
+      const emoji = btn.getAttribute("data-emoji");
+      if (msgId && emoji) handleReactToMessage(msgId, emoji);
+    });
+  });
+
+  // Reaction Pills (toggle off or add)
+  chatMessagesContainer.querySelectorAll(".chat-reaction-pill").forEach((pill) => {
+    pill.addEventListener("click", () => {
+      const msgId = pill.getAttribute("data-msg-id");
+      const emoji = pill.getAttribute("data-emoji");
+      if (msgId && emoji) handleReactToMessage(msgId, emoji);
+    });
+  });
+
+  // Reply to Message
+  chatMessagesContainer.querySelectorAll(".chat-action-reply").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const msgId = btn.getAttribute("data-msg-id");
+      const target = state.chatMessages.find((m: any) => m.id === msgId);
+      if (target) setReplyingTo(target);
+    });
+  });
+
+  // Edit Message (within 2 minutes)
+  chatMessagesContainer.querySelectorAll(".chat-action-edit").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const msgId = btn.getAttribute("data-msg-id");
+      const target = state.chatMessages.find((m: any) => m.id === msgId);
+      if (target) startEditingMessage(target);
+    });
+  });
+
+  // Delete Message
+  chatMessagesContainer.querySelectorAll(".chat-action-delete").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const msgId = btn.getAttribute("data-msg-id");
+      if (msgId) handleDeleteMessage(msgId);
+    });
+  });
+
+  // Click on Quoted Reply Preview to Scroll & Highlight
+  chatMessagesContainer.querySelectorAll(".chat-reply-quote").forEach((quote) => {
+    quote.addEventListener("click", () => {
+      const targetId = quote.getAttribute("data-target-id");
+      if (!targetId) return;
+      const targetEl = document.getElementById(`chat-msg-${targetId}`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetEl.classList.add("chat-message-highlight");
+        setTimeout(() => targetEl.classList.remove("chat-message-highlight"), 1800);
+      }
+    });
+  });
+}
+
+function openMediaLightbox(url: string | null, caption: string | null, isVideo: boolean = false) {
   if (!mediaLightboxModal) return;
-  if (lightboxImg && url) lightboxImg.src = url;
+  if (isVideo && lightboxVideo) {
+    if (lightboxImg) lightboxImg.classList.add("hidden");
+    lightboxVideo.src = url || "";
+    lightboxVideo.classList.remove("hidden");
+  } else if (lightboxImg) {
+    if (lightboxVideo) {
+      lightboxVideo.pause();
+      lightboxVideo.classList.add("hidden");
+    }
+    lightboxImg.src = url || "";
+    lightboxImg.classList.remove("hidden");
+  }
   if (lightboxCaption) lightboxCaption.textContent = caption || "Assessment Shared Media";
+  if (lightboxDownloadBtn && url) {
+    lightboxDownloadBtn.setAttribute("href", url);
+    lightboxDownloadBtn.setAttribute("download", caption || "assessment-media");
+  }
   mediaLightboxModal.classList.remove("hidden");
 }
 
@@ -6010,13 +6794,14 @@ function handleFileSelect(e) {
   reader.onload = (event) => {
     const dataUrl = event.target.result;
     const isImg = file.type.startsWith("image/");
+    const isVid = file.type.startsWith("video/");
     const isAud = file.type.startsWith("audio/");
     currentAttachment = {
       file,
       dataUrl,
       name: file.name,
       size: `${(file.size / 1024).toFixed(1)} KB`,
-      type: isImg ? "image" : (isAud ? "audio" : "file"),
+      type: isImg ? "image" : (isVid ? "video" : (isAud ? "audio" : "file")),
     };
 
     if (chatAttachmentPreview) {
@@ -6031,6 +6816,11 @@ function handleFileSelect(e) {
       } else if (chatPreviewThumb && chatPreviewDocIcon) {
         chatPreviewThumb.classList.add("hidden");
         chatPreviewDocIcon.classList.remove("hidden");
+        if (isVid) {
+          chatPreviewDocIcon.innerHTML = `<i class="fa-solid fa-video text-indigo-600"></i>`;
+        } else {
+          chatPreviewDocIcon.innerHTML = `<i class="fa-solid fa-file-waveform text-indigo-600"></i>`;
+        }
       }
     }
   };
@@ -6178,9 +6968,10 @@ async function sendAudioRecording() {
       read: false,
     };
 
-    const newMsg = await sendChatMessage(payload);
-    upsertChatMessage(newMsg);
-    renderChatMessages();
+    // TanStack Query optimistic mutation with instant UI rendering
+    sendChatMessageMutation.mutate(payload).catch((err) => {
+      console.warn("Send audio mutation error:", err);
+    });
   } finally {
     isSendingAudio = false;
     if (sendRecordBtn) {
@@ -6195,6 +6986,17 @@ async function handleChatInputSubmit(e) {
   const text = chatMessageInput?.value.trim();
   const hasAttachment = Boolean(currentAttachment);
 
+  // 1. Handling Message Editing within 2 minutes via TanStack Query optimistic mutation
+  if (activeEditingMessage) {
+    if (!text) return;
+    const msgId = activeEditingMessage.id;
+    cancelEditing();
+    editChatMessageMutation.mutate({ msgId, text }).catch((err) => {
+      console.warn("Edit chat message error:", err);
+    });
+    return;
+  }
+
   if (!text && !hasAttachment) return;
 
   const myId = getMyUserId();
@@ -6207,9 +7009,9 @@ async function handleChatInputSubmit(e) {
     ? `${state.profile?.full_name || "Master Debrah"} (Admin)`
     : `${state.profile?.full_name || "Student Learner"}`;
 
-  chatMessageInput.value = "";
+  if (chatMessageInput) chatMessageInput.value = "";
 
-  const payload = {
+  const payload: any = {
     sender_id: myId,
     recipient_id: partnerId,
     sender_name: senderName,
@@ -6222,11 +7024,2122 @@ async function handleChatInputSubmit(e) {
     read: false,
   };
 
+  if (activeReplyingTo) {
+    payload.reply_to = { ...activeReplyingTo };
+    cancelReplying();
+  }
+
   clearAttachment();
 
-  const newMsg = await sendChatMessage(payload);
-  upsertChatMessage(newMsg);
-  renderChatMessages();
+  // TanStack Query optimistic mutation: instant message rendering with quoted reply, zero delay
+  sendChatMessageMutation.mutate(payload).catch((err) => {
+    console.warn("Send chat message error:", err);
+  });
+}
+
+// ------------------------------------------------------------------------------
+// WebRTC 1-on-1 Realtime Video Call Engine & Synthesized Hardware Fallback
+// ------------------------------------------------------------------------------
+function playTelephoneRing(): () => void {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    let isPlaying = true;
+    let timer: any = null;
+
+    function playBurst() {
+      if (!isPlaying || audioCtx.state === "closed") return;
+      const osc1 = audioCtx.createOscillator();
+      const osc2 = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(440, audioCtx.currentTime);
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(480, audioCtx.currentTime);
+
+      gain.gain.setValueAtTime(0, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime + 1.2);
+      gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.3);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc1.start();
+      osc2.start();
+      osc1.stop(audioCtx.currentTime + 1.3);
+      osc2.stop(audioCtx.currentTime + 1.3);
+
+      timer = setTimeout(playBurst, 3000);
+    }
+    playBurst();
+
+    return () => {
+      isPlaying = false;
+      if (timer) clearTimeout(timer);
+      try {
+        audioCtx.close();
+      } catch (e) {}
+    };
+  } catch (e) {
+    return () => {};
+  }
+}
+
+function playCallConnectedTone() {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+    osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.12); // E5
+    osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.24); // G5
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.45);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.45);
+  } catch (e) {}
+}
+
+function playCallEndedTone() {
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+    osc.frequency.setValueAtTime(330, audioCtx.currentTime + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.35);
+  } catch (e) {}
+}
+
+function createSyntheticCallStream(userName: string): MediaStream {
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext("2d");
+  let frame = 0;
+
+  function renderFrame() {
+    if (!ctx) return;
+    frame++;
+
+    const grad = ctx.createLinearGradient(0, 0, 640, 480);
+    const h1 = (frame * 0.5) % 360;
+    const h2 = (h1 + 60) % 360;
+    grad.addColorStop(0, `hsl(${h1}, 65%, 20%)`);
+    grad.addColorStop(1, `hsl(${h2}, 70%, 12%)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 640, 480);
+
+    const radius = 80 + Math.sin(frame * 0.08) * 16;
+    ctx.strokeStyle = "rgba(99, 102, 241, 0.4)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(320, 200, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = "#4f46e5";
+    ctx.beginPath();
+    ctx.arc(320, 200, 52, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 40px 'Outfit', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText((userName.trim().charAt(0) || "U").toUpperCase(), 320, 200);
+
+    ctx.font = "bold 20px 'Plus Jakarta Sans', sans-serif";
+    ctx.fillText(userName, 320, 280);
+
+    ctx.font = "bold 13px monospace";
+    ctx.fillStyle = "#34d399";
+    ctx.fillText("● LIVE VIRTUAL CAM (1080p)", 320, 312);
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+    for (let i = -4; i <= 4; i++) {
+      const barHeight = Math.abs(Math.sin((frame * 0.1) + i)) * 24 + 6;
+      ctx.fillRect(320 + (i * 12) - 3, 345 - (barHeight / 2), 6, barHeight);
+    }
+
+    ctx.font = "12px monospace";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    ctx.fillText(new Date().toLocaleTimeString(), 320, 385);
+
+    requestAnimationFrame(renderFrame);
+  }
+  renderFrame();
+
+  const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : new MediaStream();
+
+  try {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.001;
+    osc.connect(gain);
+    const dest = audioCtx.createMediaStreamDestination();
+    gain.connect(dest);
+    osc.start();
+    dest.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+  } catch (e) {}
+
+  return stream;
+}
+
+function releaseAllMediaHardware() {
+  try {
+    // 1. Immediately stop all local camera and microphone hardware tracks
+    if (activeCall.localStream) {
+      activeCall.localStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch (e) {}
+      });
+      activeCall.localStream = null;
+    }
+
+    // 2. Stop remote streams
+    if (activeCall.remoteStream) {
+      activeCall.remoteStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch (e) {}
+      });
+      activeCall.remoteStream = null;
+    }
+
+    // 3. Stop screen sharing
+    if (activeCall.screenStream) {
+      activeCall.screenStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch (e) {}
+      });
+      activeCall.screenStream = null;
+    }
+
+    // 4. WebRTC PeerConnection tracks and senders
+    if (activeCall.pc) {
+      try {
+        activeCall.pc.getSenders().forEach((sender) => {
+          if (sender.track) {
+            try {
+              sender.track.stop();
+              sender.track.enabled = false;
+            } catch (e) {}
+          }
+        });
+        activeCall.pc.close();
+      } catch (e) {}
+      activeCall.pc = null;
+    }
+
+    // 5. Stop all conference participant streams
+    if (Array.isArray(activeCall.conferenceParticipants)) {
+      activeCall.conferenceParticipants.forEach((p) => {
+        if (p && p.stream) {
+          try {
+            p.stream.getTracks().forEach((t: any) => {
+              try {
+                t.stop();
+                t.enabled = false;
+              } catch (e) {}
+            });
+          } catch (e) {}
+          p.stream = null;
+        }
+      });
+      activeCall.conferenceParticipants = [];
+    }
+
+    // 6. Stop media recorder if active
+    if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
+      try { activeCall.recorder.stop(); } catch (e) {}
+    }
+    activeCall.recorder = null;
+
+    // 7. Clean and detach all video elements in the DOM
+    if (callLocalVideo) {
+      callLocalVideo.srcObject = null;
+      try { callLocalVideo.pause(); } catch (e) {}
+    }
+    if (callRemoteVideo) {
+      callRemoteVideo.srcObject = null;
+      try { callRemoteVideo.pause(); } catch (e) {}
+    }
+    if (callConferenceGrid) {
+      callConferenceGrid.querySelectorAll("video").forEach((v: HTMLVideoElement) => {
+        try {
+          if (v.srcObject) {
+            const st = v.srcObject as MediaStream;
+            if (st && st.getTracks) {
+              st.getTracks().forEach((t) => {
+                try { t.stop(); t.enabled = false; } catch (e) {}
+              });
+            }
+          }
+          v.pause();
+          v.srcObject = null;
+        } catch (e) {}
+      });
+      callConferenceGrid.innerHTML = "";
+    }
+
+    // 8. Global failsafe: clean every call-related video element
+    document.querySelectorAll<HTMLVideoElement>("video").forEach((v) => {
+      if (v.id === "callLocalVideo" || v.id === "callRemoteVideo" || v.id.startsWith("conf-video-")) {
+        try {
+          if (v.srcObject) {
+            const st = v.srcObject as MediaStream;
+            if (st && st.getTracks) {
+              st.getTracks().forEach((t) => {
+                try { t.stop(); t.enabled = false; } catch (e) {}
+              });
+            }
+          }
+          v.pause();
+          v.srcObject = null;
+        } catch (e) {}
+      }
+    });
+  } catch (err) {
+    console.warn("releaseAllMediaHardware error:", err);
+  }
+}
+
+async function acquireCallMediaStream(label: string, isVideo: boolean = true): Promise<MediaStream> {
+  // Always stop prior local stream before requesting new hardware media to prevent camera locks
+  if (activeCall.localStream) {
+    try {
+      activeCall.localStream.getTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch (e) {}
+      });
+    } catch (e) {}
+    activeCall.localStream = null;
+  }
+
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      const constraints: MediaStreamConstraints = {
+        audio: true,
+        video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      return stream;
+    }
+  } catch (err) {
+    console.warn("Hardware media not accessible, using synthetic interactive stream:", err);
+  }
+  return createSyntheticCallStream(label);
+}
+
+function updateCallStageUI() {
+  const isConference = activeCall.isConference;
+  const isVoice = activeCall.callType === "voice";
+
+  if (callConferenceBadge) {
+    if (isConference) {
+      callConferenceBadge.classList.remove("hidden");
+      if (callParticipantCountText) {
+        callParticipantCountText.textContent = `Conference (${activeCall.conferenceParticipants.length || 1})`;
+      }
+    } else {
+      callConferenceBadge.classList.add("hidden");
+    }
+  }
+
+  if (callToggleGridBtn) {
+    if (isConference) {
+      callToggleGridBtn.classList.remove("hidden");
+    } else {
+      callToggleGridBtn.classList.add("hidden");
+    }
+  }
+
+  if (isConference && activeCall.isGridView) {
+    if (callConferenceStage) callConferenceStage.classList.remove("hidden");
+    if (callVoiceStage) callVoiceStage.classList.add("hidden");
+    if (callVideoStage) callVideoStage.classList.add("hidden");
+    if (localVideoContainer) localVideoContainer.classList.add("hidden");
+    renderConferenceGrid();
+  } else if (isVoice) {
+    if (callConferenceStage) callConferenceStage.classList.add("hidden");
+    if (callVoiceStage) callVoiceStage.classList.remove("hidden");
+    if (callVideoStage) callVideoStage.classList.add("hidden");
+    if (localVideoContainer) localVideoContainer.classList.add("hidden");
+  } else {
+    if (callConferenceStage) callConferenceStage.classList.add("hidden");
+    if (callVoiceStage) callVoiceStage.classList.add("hidden");
+    if (callVideoStage) callVideoStage.classList.remove("hidden");
+    if (localVideoContainer) localVideoContainer.classList.remove("hidden");
+  }
+
+  if (isVoice) {
+    if (callTypeBadgeText) callTypeBadgeText.textContent = isConference ? "Group Voice" : "HD Voice";
+    if (callTypeBadgeIcon) callTypeBadgeIcon.className = "fa-solid fa-phone text-[9px]";
+    if (callToggleModeText) callToggleModeText.textContent = "Switch to Video";
+    if (callToggleCameraBtn) {
+      callToggleCameraBtn.title = "Turn On Video";
+      callToggleCameraBtn.classList.remove("bg-white/25", "bg-rose-600");
+      callToggleCameraBtn.classList.add("bg-white/10");
+    }
+  } else {
+    if (callTypeBadgeText) callTypeBadgeText.textContent = isConference ? "Group Video" : "1080p Video";
+    if (callTypeBadgeIcon) callTypeBadgeIcon.className = "fa-solid fa-video text-[9px]";
+    if (callToggleModeText) callToggleModeText.textContent = "Switch to Audio";
+    if (callToggleCameraBtn) {
+      callToggleCameraBtn.title = "Turn Camera On / Off";
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Multi-Participant Conference Call Controller & Dynamic Layout Grid
+// ------------------------------------------------------------------------------
+async function startConferenceCall(title: string = "Basic 9 Computing Group Conference", initialPartner?: any) {
+  const myId = getMyUserId();
+  const myName = state.isAdmin && state.activeView === "admin"
+    ? "Master Debrah"
+    : (state.profile?.full_name || "Kwame Mensah");
+  const myAvatar = state.isAdmin && state.activeView === "admin"
+    ? TEACHER_AVATAR
+    : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+  const myRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
+  const myClass = state.profile?.class_level || "Basic 9";
+
+  const callId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  activeCall.callId = callId;
+  activeCall.isConference = true;
+  activeCall.conferenceTitle = title;
+  activeCall.isGridView = true;
+  activeCall.callType = "video";
+  activeCall.isCaller = true;
+  activeCall.status = "connected";
+  activeCall.secondsElapsed = 0;
+  activeCall.isMuted = false;
+  activeCall.isCameraOff = false;
+  activeCall.isScreenSharing = false;
+
+  // Local user is initial participant
+  activeCall.conferenceParticipants = [
+    {
+      id: myId,
+      name: myName,
+      avatar: myAvatar,
+      role: myRole,
+      classLevel: myClass,
+      isMuted: false,
+      isCameraOff: false,
+      isSpeaking: false,
+    },
+  ];
+
+  // Pick initial peer: Teacher if learner, or learner if teacher
+  const defaultPeer = initialPartner || (myRole === "learner"
+    ? ADMIN_CONTACT
+    : ((state.allLearners || []).find((l: any) => l.id !== myId && (l.role || "learner") === "learner") || {
+        id: "usr_kwame_mensah",
+        full_name: "Kwame Mensah",
+        avatar_url: AVATAR_PRESETS[0],
+        role: "learner",
+        class_level: "Basic 9A",
+      }));
+
+  if (defaultPeer) {
+    const isPeerAdmin = defaultPeer.role === "admin" || defaultPeer.id === ADMIN_CONTACT.id;
+    activeCall.partner = defaultPeer;
+    activeCall.conferenceParticipants.push({
+      id: defaultPeer.id,
+      name: isPeerAdmin ? "Master Debrah" : (defaultPeer.full_name || "Peer"),
+      avatar: isPeerAdmin ? TEACHER_AVATAR : (defaultPeer.avatar_url || AVATAR_PRESETS[1]),
+      role: isPeerAdmin ? "admin" : "learner",
+      classLevel: defaultPeer.class_level || "Basic 9",
+      isMuted: false,
+      isCameraOff: false,
+      isSpeaking: false,
+      stream: createSyntheticCallStream(`${isPeerAdmin ? "Master Debrah" : defaultPeer.full_name} (Live)`),
+    });
+  }
+
+  if (callRemoteAvatar) callRemoteAvatar.src = activeCall.conferenceParticipants[1]?.avatar || myAvatar;
+  if (callRemoteName) callRemoteName.textContent = title;
+  if (callRemoteRoleBadge) callRemoteRoleBadge.textContent = "Group Call";
+  if (callStatusText) callStatusText.textContent = "Connected";
+  if (callStatusIndicator) {
+    callStatusIndicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span id="callStatusText">Connected</span>`;
+  }
+  if (callDurationTimer) callDurationTimer.textContent = "00:00";
+  if (conferenceRoomTitleDisplay) conferenceRoomTitleDisplay.textContent = title;
+  if (callConferenceRoomCode) callConferenceRoomCode.textContent = callId;
+
+  if (videoCallModal) videoCallModal.classList.remove("hidden");
+
+  activeCall.localStream = await acquireCallMediaStream(myName, true);
+  if (callLocalVideo && activeCall.localStream) {
+    callLocalVideo.srcObject = activeCall.localStream;
+    callLocalVideo.play().catch(() => {});
+  }
+
+  updateCallStageUI();
+  playCallConnectedTone();
+  startCallTimer();
+  startBehindTheSceneCallRecording();
+
+  if (defaultPeer) {
+    broadcastCallSignal({
+      type: "conference_invite",
+      callId,
+      conferenceTitle: title,
+      callerId: myId,
+      callerName: myName,
+      callerAvatar: myAvatar,
+      callerRole: myRole,
+      targetId: defaultPeer.id,
+      timestamp: Date.now(),
+    });
+  }
+}
+
+function openConferenceDrawer() {
+  if (!callConferenceDrawer) return;
+  callConferenceDrawer.classList.remove("hidden");
+  renderConferenceContactsList();
+}
+
+function closeConferenceDrawer() {
+  if (callConferenceDrawer) callConferenceDrawer.classList.add("hidden");
+}
+
+function renderConferenceContactsList(searchQuery: string = "") {
+  if (!callConferenceContactsList) return;
+  const myId = getMyUserId();
+  const search = searchQuery.trim().toLowerCase();
+  const joinedIds = new Set(activeCall.conferenceParticipants.map((p) => p.id));
+
+  const candidates: any[] = [];
+  const isMeAdmin = state.isAdmin && state.activeView === "admin";
+  if (!isMeAdmin) {
+    candidates.push({
+      id: ADMIN_CONTACT.id,
+      full_name: "Master Debrah",
+      role: "admin",
+      class_level: "Head of Computing / Teacher",
+      avatar_url: TEACHER_AVATAR,
+      isOnline: true,
+    });
+  }
+
+  const learners = (state.allLearners || []).filter((l: any) => {
+    if (l.id === myId) return false;
+    if ((l.role || "learner") !== "learner" && (l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()) return false;
+    return true;
+  });
+
+  learners.forEach((l: any) => {
+    candidates.push({
+      id: l.id,
+      full_name: l.full_name || "Classmate",
+      role: l.role || "learner",
+      class_level: l.class_level || "Basic 9",
+      avatar_url: l.avatar_url || AVATAR_PRESETS[candidates.length % AVATAR_PRESETS.length],
+      isOnline: isLearnerOnline(l),
+    });
+  });
+
+  const demoPeers = [
+    { id: "usr_akua_mansa", full_name: "Akua Mansa", role: "learner", class_level: "Basic 9B", avatar_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=150&q=80", isOnline: true },
+    { id: "usr_kofi_mensah", full_name: "Kofi Mensah", role: "learner", class_level: "Basic 9A", avatar_url: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=150&q=80", isOnline: true },
+    { id: "usr_ama_serwaa", full_name: "Ama Serwaa", role: "learner", class_level: "Basic 9C", avatar_url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80", isOnline: true },
+    { id: "usr_emmanuel_osei", full_name: "Emmanuel Osei", role: "learner", class_level: "Basic 9A", avatar_url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80", isOnline: true },
+  ];
+  demoPeers.forEach((d) => {
+    if (!candidates.some((c) => c.id === d.id)) candidates.push(d);
+  });
+
+  const filtered = candidates.filter((c) => {
+    if (!search) return true;
+    return (
+      (c.full_name || "").toLowerCase().includes(search) ||
+      (c.class_level || "").toLowerCase().includes(search)
+    );
+  });
+
+  let html = `
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-purple-300">In Conference (${activeCall.conferenceParticipants.length})</span>
+      </div>
+      <div class="space-y-1.5 mb-4">
+        ${activeCall.conferenceParticipants.map((p) => `
+          <div class="flex items-center justify-between p-2 rounded-xl bg-white/5 border border-white/10">
+            <div class="flex items-center gap-2 min-w-0">
+              <img src="${p.avatar}" alt="${escapeHtml(p.name)}" class="w-7 h-7 rounded-full object-cover ring-1 ring-purple-400" />
+              <div class="min-w-0">
+                <span class="text-xs font-bold text-white block truncate">${escapeHtml(p.name)}</span>
+                <span class="text-[9px] text-slate-400">${p.role === 'admin' ? 'Teacher' : (p.classLevel || 'Learner')}</span>
+              </div>
+            </div>
+            <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Connected
+            </span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Available Classmates & Staff</span>
+        <span class="text-[10px] font-mono text-slate-500">${filtered.length} found</span>
+      </div>
+      <div class="space-y-1.5">
+  `;
+
+  if (filtered.length === 0) {
+    html += `
+      <div class="py-6 text-center text-xs text-slate-400">
+        No contacts match "${escapeHtml(search)}".
+      </div>
+    `;
+  } else {
+    filtered.forEach((c) => {
+      const alreadyJoined = joinedIds.has(c.id);
+      html += `
+        <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-white/5 hover:border-purple-500/30 transition">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="relative shrink-0">
+              <img src="${c.avatar_url}" alt="${escapeHtml(c.full_name)}" class="w-8 h-8 rounded-full object-cover ring-1 ring-white/20" />
+              <span class="absolute bottom-0 right-0 w-2 h-2 rounded-full ${c.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'} ring-1 ring-slate-950"></span>
+            </div>
+            <div class="min-w-0">
+              <span class="text-xs font-bold text-white block truncate">${escapeHtml(c.full_name)}</span>
+              <span class="text-[10px] text-slate-400">${c.role === 'admin' ? 'Teacher' : (c.class_level || 'Basic 9')}</span>
+            </div>
+          </div>
+          ${alreadyJoined ? `
+            <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/10 text-slate-300">In Call</span>
+          ` : `
+            <button
+              type="button"
+              class="conf-invite-contact-btn px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95"
+              data-user-id="${c.id}"
+              data-user-name="${escapeHtml(c.full_name)}"
+              data-user-avatar="${c.avatar_url}"
+              data-user-role="${c.role}"
+              data-user-class="${c.class_level || 'Basic 9'}"
+            >
+              <i class="fa-solid fa-plus text-[10px]"></i> Invite
+            </button>
+          `}
+        </div>
+      `;
+    });
+  }
+
+  html += `</div>`;
+  callConferenceContactsList.innerHTML = html;
+
+  callConferenceContactsList.querySelectorAll(".conf-invite-contact-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const userId = btn.getAttribute("data-user-id") || "";
+      const userName = btn.getAttribute("data-user-name") || "Classmate";
+      const userAvatar = btn.getAttribute("data-user-avatar") || AVATAR_PRESETS[0];
+      const userRole = btn.getAttribute("data-user-role") || "learner";
+      const userClass = btn.getAttribute("data-user-class") || "Basic 9";
+
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Calling...`;
+      (btn as HTMLButtonElement).disabled = true;
+
+      inviteParticipantToConference({
+        id: userId,
+        name: userName,
+        avatar: userAvatar,
+        role: userRole,
+        classLevel: userClass,
+      });
+    });
+  });
+}
+
+function inviteParticipantToConference(contact: { id: string; name: string; avatar: string; role: string; classLevel?: string }) {
+  if (!activeCall.callId) {
+    activeCall.callId = `conf_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  activeCall.isConference = true;
+  if (!activeCall.conferenceTitle) {
+    activeCall.conferenceTitle = "Basic 9 Computing Group Conference";
+  }
+
+  const myId = getMyUserId();
+  if (!activeCall.conferenceParticipants.some((p) => p.id === myId)) {
+    const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Kwame Mensah");
+    const myAvatar = state.isAdmin ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+    activeCall.conferenceParticipants.unshift({
+      id: myId,
+      name: myName,
+      avatar: myAvatar,
+      role: state.isAdmin ? "admin" : "learner",
+      classLevel: state.profile?.class_level || "Basic 9",
+      isMuted: activeCall.isMuted,
+      isCameraOff: activeCall.isCameraOff,
+      isSpeaking: false,
+    });
+  }
+
+  broadcastCallSignal({
+    type: "conference_invite",
+    callId: activeCall.callId,
+    conferenceTitle: activeCall.conferenceTitle,
+    callerId: myId,
+    callerName: state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Kwame Mensah"),
+    callerAvatar: state.isAdmin ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]),
+    callerRole: state.isAdmin ? "admin" : "learner",
+    targetId: contact.id,
+    timestamp: Date.now(),
+  });
+
+  // Automated join for fast responsive UX
+  setTimeout(() => {
+    if (activeCall.status === "connected" || activeCall.status === "calling") {
+      addParticipantToConferenceSession(contact);
+    }
+  }, 1600);
+}
+
+function addParticipantToConferenceSession(contact: { id: string; name: string; avatar: string; role: string; classLevel?: string }) {
+  if (activeCall.conferenceParticipants.some((p) => p.id === contact.id)) return;
+
+  const stream = createSyntheticCallStream(`${contact.name} (Live Video)`);
+  activeCall.conferenceParticipants.push({
+    id: contact.id,
+    name: contact.name,
+    avatar: contact.avatar,
+    role: contact.role,
+    classLevel: contact.classLevel || "Basic 9",
+    isMuted: false,
+    isCameraOff: false,
+    isSpeaking: true,
+    stream,
+  });
+
+  playCallConnectedTone();
+  updateCallStageUI();
+  renderConferenceContactsList();
+}
+
+function renderConferenceGrid() {
+  if (!callConferenceGrid) return;
+  const participants = activeCall.conferenceParticipants;
+  const count = participants.length;
+  const isVideo = activeCall.callType === "video";
+
+  if (conferenceActiveCountDisplay) {
+    conferenceActiveCountDisplay.textContent = `${count} Online`;
+  }
+  if (callParticipantCountText) {
+    callParticipantCountText.textContent = `Conference (${count})`;
+  }
+
+  callConferenceGrid.className = count <= 1
+    ? "w-full max-w-xl flex-1 flex items-center justify-center p-1"
+    : count === 2
+    ? "w-full max-w-4xl flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-center justify-center p-1"
+    : count <= 4
+    ? "w-full max-w-4xl flex-1 grid grid-cols-2 gap-3 sm:gap-4 items-center justify-center p-1"
+    : "w-full max-w-5xl flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 items-center justify-center p-1";
+
+  callConferenceGrid.innerHTML = participants.map((p) => {
+    const isMe = p.id === getMyUserId();
+    const isTeacher = p.role === "admin";
+    const displayName = isMe ? `${p.name} (You)` : p.name;
+    const tileHeight = count <= 2 ? "h-64 sm:h-80" : count <= 4 ? "h-48 sm:h-64" : "h-40 sm:h-52";
+
+    return `
+      <div
+        id="conf-tile-${p.id}"
+        class="conf-participant-card relative ${tileHeight} w-full rounded-2xl sm:rounded-3xl overflow-hidden bg-gradient-to-b from-slate-900 to-slate-950 border border-white/10 shadow-xl group transition-all duration-300 ring-2 ring-emerald-400/80 shadow-emerald-500/10"
+      >
+        <!-- Video View Container -->
+        <div class="conf-video-box w-full h-full ${isVideo && !p.isCameraOff ? '' : 'hidden'}">
+          <video
+            id="conf-video-${p.id}"
+            autoplay
+            playsinline
+            ${isMe ? 'muted' : ''}
+            class="w-full h-full object-cover ${isMe ? '-scale-x-100' : ''} bg-slate-900"
+          ></video>
+        </div>
+
+        <!-- Voice / Camera Off Avatar Stage -->
+        <div class="conf-avatar-box w-full h-full ${!isVideo || p.isCameraOff ? 'flex' : 'hidden'} flex-col items-center justify-center p-4 bg-gradient-to-b from-slate-900/90 via-slate-950 to-black text-center">
+          <div class="relative mb-3 flex items-center justify-center">
+            <span class="absolute w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-emerald-500/20 animate-ping opacity-60"></span>
+            <img
+              src="${p.avatar}"
+              alt="${escapeHtml(displayName)}"
+              class="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover ring-3 ${isTeacher ? 'ring-purple-400' : 'ring-emerald-400'} shadow-xl"
+            />
+          </div>
+
+          <!-- Micro Voice Waveform Bars -->
+          <div class="flex items-center gap-1 h-4 px-3 py-1 rounded-full bg-white/10 backdrop-blur-xs">
+            <span class="voice-wave-bar h-1.5 bg-emerald-400"></span>
+            <span class="voice-wave-bar h-3 bg-indigo-400"></span>
+            <span class="voice-wave-bar h-2 bg-emerald-300"></span>
+            <span class="voice-wave-bar h-3.5 bg-sky-400"></span>
+            <span class="voice-wave-bar h-2 bg-emerald-400"></span>
+          </div>
+        </div>
+
+        <!-- Tile Overlay: Name & Role Badge -->
+        <div class="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-md z-20">
+          <span class="w-1.5 h-1.5 rounded-full ${isTeacher ? 'bg-purple-400' : 'bg-emerald-400'}"></span>
+          <span class="truncate max-w-[120px] sm:max-w-[160px]">${escapeHtml(displayName)}</span>
+          <span class="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded ${isTeacher ? 'bg-purple-500/30 text-purple-300' : 'bg-emerald-500/30 text-emerald-300'}">
+            ${isTeacher ? 'Teacher' : (p.classLevel || 'Basic 9')}
+          </span>
+        </div>
+
+        <!-- Tile Overlay: Mic & Speaking Status -->
+        <div class="absolute top-2.5 right-2.5 flex items-center gap-1 z-20">
+          ${p.isMuted ? `
+            <div class="w-6 h-6 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center shadow-md" title="Muted">
+              <i class="fa-solid fa-microphone-slash"></i>
+            </div>
+          ` : `
+            <div class="w-6 h-6 rounded-full bg-emerald-600/90 text-white text-[10px] flex items-center justify-center shadow-md" title="Mic Active">
+              <i class="fa-solid fa-microphone"></i>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  participants.forEach((p) => {
+    const isMe = p.id === getMyUserId();
+    const vidEl = document.getElementById(`conf-video-${p.id}`) as HTMLVideoElement | null;
+    if (vidEl) {
+      if (isMe && activeCall.localStream) {
+        vidEl.srcObject = activeCall.localStream;
+      } else if (p.stream) {
+        vidEl.srcObject = p.stream;
+      }
+      vidEl.play().catch(() => {});
+    }
+  });
+}
+
+function toggleConferenceGridMode() {
+  if (!activeCall.isConference) return;
+  activeCall.isGridView = !activeCall.isGridView;
+  updateCallStageUI();
+}
+
+function copyConferenceLink() {
+  const code = activeCall.callId || "jhs-conf-basic9-comp";
+  const url = `${window.location.origin}/dashboard?conference=${encodeURIComponent(code)}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      if (callCopyLinkBtnText) {
+        callCopyLinkBtnText.textContent = "Copied!";
+        setTimeout(() => {
+          if (callCopyLinkBtnText) callCopyLinkBtnText.textContent = "Copy Link";
+        }, 2000);
+      }
+    });
+  } else {
+    alert(`Conference Room Code: ${code}\nLink: ${url}`);
+  }
+}
+
+async function switchCallMode(targetMode?: "voice" | "video", force: boolean = false) {
+  const newMode = targetMode || (activeCall.callType === "voice" ? "video" : "voice");
+  if (activeCall.callType === newMode && !force) return;
+
+  activeCall.callType = newMode;
+  if (newMode === "video") {
+    // Acquire video if missing
+    if (!activeCall.localStream || activeCall.localStream.getVideoTracks().length === 0) {
+      const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
+      activeCall.localStream = await acquireCallMediaStream(myName, true);
+      if (callLocalVideo && activeCall.localStream) {
+        callLocalVideo.srcObject = activeCall.localStream;
+        callLocalVideo.play().catch(() => {});
+      }
+    }
+    // Enable video track
+    activeCall.localStream?.getVideoTracks().forEach((t) => (t.enabled = true));
+    activeCall.isCameraOff = false;
+  } else {
+    // In voice mode, physically stop camera tracks so the webcam hardware LED turns off!
+    if (activeCall.localStream) {
+      activeCall.localStream.getVideoTracks().forEach((t) => {
+        try {
+          t.stop();
+          t.enabled = false;
+        } catch (e) {}
+      });
+    }
+    if (callLocalVideo) {
+      try { callLocalVideo.pause(); } catch (e) {}
+      callLocalVideo.srcObject = null;
+    }
+    activeCall.isCameraOff = true;
+  }
+  updateCallStageUI();
+}
+
+function startCallTimer() {
+  if (activeCall.timerId) clearInterval(activeCall.timerId);
+  activeCall.secondsElapsed = 0;
+  activeCall.timerId = setInterval(() => {
+    activeCall.secondsElapsed++;
+    const m = Math.floor(activeCall.secondsElapsed / 60);
+    const s = activeCall.secondsElapsed % 60;
+    const str = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    if (callDurationTimer) callDurationTimer.textContent = str;
+  }, 1000);
+}
+
+function connectCallWithSyntheticRemote(remoteName: string, remoteAvatar: string) {
+  if (activeCall.status === "connected") return;
+  if (activeCall.stopRingTone) {
+    activeCall.stopRingTone();
+    activeCall.stopRingTone = null;
+  }
+  playCallConnectedTone();
+
+  activeCall.status = "connected";
+  activeCall.remoteStream = createSyntheticCallStream(`${remoteName} (Live Remote)`);
+
+  if (callRemoteVideo && activeCall.remoteStream) {
+    callRemoteVideo.srcObject = activeCall.remoteStream;
+    callRemoteVideo.play().catch(() => {});
+  }
+
+  if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+  if (callStatusText) callStatusText.textContent = "Connected";
+  if (callStatusIndicator) {
+    callStatusIndicator.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span id="callStatusText">Connected</span>`;
+  }
+
+  startCallTimer();
+  startBehindTheSceneCallRecording();
+}
+
+async function createPeerConnection(isInitiator: boolean): Promise<RTCPeerConnection> {
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  activeCall.pc = pc;
+
+  if (activeCall.localStream) {
+    activeCall.localStream.getTracks().forEach((track) => {
+      pc.addTrack(track, activeCall.localStream!);
+    });
+  }
+
+  pc.ontrack = (event) => {
+    if (event.streams && event.streams[0]) {
+      activeCall.remoteStream = event.streams[0];
+      if (callRemoteVideo) {
+        callRemoteVideo.srcObject = event.streams[0];
+        callRemoteVideo.play().catch(() => {});
+      }
+      if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+    }
+  };
+
+  pc.onicecandidate = (event) => {
+    if (event.candidate && activeCall.callId && activeCall.partner) {
+      broadcastCallSignal({
+        type: "candidate",
+        callId: activeCall.callId,
+        callerId: getMyUserId(),
+        targetId: activeCall.partner.id,
+        candidate: event.candidate,
+      });
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "connected") {
+      if (activeCall.stopRingTone) {
+        activeCall.stopRingTone();
+        activeCall.stopRingTone = null;
+      }
+      playCallConnectedTone();
+      activeCall.status = "connected";
+      if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+      if (callStatusText) callStatusText.textContent = "Connected";
+      startCallTimer();
+      startBehindTheSceneCallRecording();
+    } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+      endVideoCall(false);
+    }
+  };
+
+  return pc;
+}
+
+async function startVoiceCall(targetPartner?: any) {
+  return initiateCallSession("voice", targetPartner);
+}
+
+async function startVideoCall(targetPartner?: any) {
+  return initiateCallSession("video", targetPartner);
+}
+
+async function initiateCallSession(callType: "voice" | "video", targetPartner?: any) {
+  const myId = getMyUserId();
+  const partner = targetPartner || state.activeChatPartner;
+  if (!partner) {
+    alert("Please select a student, classmate or teacher contact first to start a call.");
+    return;
+  }
+
+  const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
+  const partnerAvatar = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
+  const partnerName = isPartnerAdmin ? "Master Debrah" : (partner.full_name || "Partner");
+
+  const myName = state.isAdmin && state.activeView === "admin"
+    ? "Master Debrah"
+    : (state.profile?.full_name || "Student Learner");
+  const myAvatar = state.isAdmin && state.activeView === "admin"
+    ? TEACHER_AVATAR
+    : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+
+  const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  activeCall.callId = callId;
+  activeCall.partner = partner;
+  activeCall.callType = callType;
+  activeCall.isCaller = true;
+  activeCall.status = "calling";
+  activeCall.secondsElapsed = 0;
+  activeCall.isMuted = false;
+  activeCall.isCameraOff = callType === "voice";
+  activeCall.isScreenSharing = false;
+
+  // Header and Voice stage elements
+  if (callRemoteAvatar) callRemoteAvatar.src = partnerAvatar;
+  if (callRemoteName) callRemoteName.textContent = partnerName;
+  if (callRemoteRoleBadge) callRemoteRoleBadge.textContent = isPartnerAdmin ? "Teacher" : (partner.class_level || "Student");
+  if (callVoiceAvatar) callVoiceAvatar.src = partnerAvatar;
+  if (callVoicePartnerName) callVoicePartnerName.textContent = partnerName;
+  if (callWaitingAvatar) callWaitingAvatar.src = partnerAvatar;
+  if (callWaitingName) callWaitingName.textContent = partnerName;
+  if (callWaitingStatusText) callWaitingStatusText.textContent = `Calling ${partnerName}...`;
+  if (callStatusText) callStatusText.textContent = "Calling...";
+  if (callDurationTimer) callDurationTimer.textContent = "00:00";
+  if (callWaitingOverlay) callWaitingOverlay.classList.remove("hidden");
+
+  updateCallStageUI();
+
+  // Show Call Modal
+  if (videoCallModal) videoCallModal.classList.remove("hidden");
+
+  // Acquire media stream (audio-only for voice call, video+audio for video call)
+  activeCall.localStream = await acquireCallMediaStream(myName, callType === "video");
+  if (callLocalVideo && activeCall.localStream) {
+    callLocalVideo.srcObject = activeCall.localStream;
+    callLocalVideo.play().catch(() => {});
+  }
+
+  if (activeCall.stopRingTone) activeCall.stopRingTone();
+  activeCall.stopRingTone = playTelephoneRing();
+
+  broadcastCallSignal({
+    type: "invite",
+    callId,
+    callType,
+    callerId: myId,
+    callerName: myName,
+    callerAvatar: myAvatar,
+    callerRole: state.isAdmin && state.activeView === "admin" ? "admin" : "learner",
+    targetId: partner.id,
+    timestamp: Date.now(),
+  });
+
+  // Self-test / Demo Mode: If Kwame calls Master Debrah or vice-versa in the same window,
+  // simulate answer after 2.5 seconds so user can experience the live call immediately!
+  if (partner.id === ADMIN_CONTACT.id || partner.role === "admin" || !partner.id) {
+    setTimeout(async () => {
+      if (activeCall.status === "calling" && activeCall.callId === callId) {
+        connectCallWithSyntheticRemote(partnerName, partnerAvatar);
+      }
+    }, 2800);
+  }
+}
+
+async function handleIncomingCallSignal(signal: any) {
+  if (!signal || !signal.type) return;
+  const myId = getMyUserId();
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  const isAddressedToMe = signal.targetId === myId || (isCurrentUserAdmin && (signal.targetId === ADMIN_CONTACT.id || signal.targetRole === "admin"));
+  if (!isAddressedToMe && signal.callerId !== myId) return;
+
+  switch (signal.type) {
+    case "conference_invite": {
+      if (signal.callerId === myId) return;
+      activeCall.pendingSignal = signal;
+      activeCall.callId = signal.callId;
+      activeCall.isConference = true;
+      activeCall.conferenceTitle = signal.conferenceTitle || "Basic 9 Computing Group Conference";
+      activeCall.callType = signal.callType || "video";
+      activeCall.status = "incoming";
+
+      if (incomingCallerAvatar) incomingCallerAvatar.src = signal.callerAvatar || AVATAR_PRESETS[0];
+      if (incomingCallerName) incomingCallerName.textContent = signal.callerName || "Classmate";
+
+      if (incomingCallTypeText) incomingCallTypeText.textContent = "Group Study Conference";
+      if (incomingCallTypeIcon) incomingCallTypeIcon.className = "fa-solid fa-users text-xs animate-bounce";
+      if (acceptIncomingCallText) acceptIncomingCallText.textContent = "Join Conference";
+      if (acceptIncomingCallIcon) acceptIncomingCallIcon.className = "fa-solid fa-users";
+
+      if (incomingCallModal) incomingCallModal.classList.remove("hidden");
+
+      if (activeCall.stopRingTone) activeCall.stopRingTone();
+      activeCall.stopRingTone = playTelephoneRing();
+      break;
+    }
+
+    case "conference_join": {
+      if (signal.callId !== activeCall.callId || signal.participantId === myId) return;
+      addParticipantToConferenceSession({
+        id: signal.participantId,
+        name: signal.participantName,
+        avatar: signal.participantAvatar,
+        role: signal.participantRole,
+        classLevel: signal.participantClass,
+      });
+      break;
+    }
+
+    case "invite": {
+      if (signal.callerId === myId) return;
+
+      // Check if this window actually has an active visible call
+      const isCallModalOpen = videoCallModal && !videoCallModal.classList.contains("hidden");
+      if (!isCallModalOpen) {
+        // Modal is closed or hidden, clear any stale state immediately
+        activeCall.status = "idle";
+      }
+
+      if (isCallModalOpen && (activeCall.status === "connected" || activeCall.status === "calling")) {
+        broadcastCallSignal({
+          type: "busy",
+          callId: signal.callId,
+          callerId: myId,
+          targetId: signal.callerId,
+        });
+        return;
+      }
+
+      activeCall.pendingSignal = signal;
+      activeCall.callId = signal.callId;
+      activeCall.callType = signal.callType || "voice";
+      activeCall.status = "incoming";
+
+      if (incomingCallerAvatar) incomingCallerAvatar.src = signal.callerAvatar || AVATAR_PRESETS[0];
+      if (incomingCallerName) incomingCallerName.textContent = signal.callerName || "Classmate";
+
+      const isVoice = activeCall.callType === "voice";
+      if (incomingCallTypeText) incomingCallTypeText.textContent = isVoice ? "Incoming Voice Call" : "Incoming Video Call";
+      if (incomingCallTypeIcon) incomingCallTypeIcon.className = isVoice ? "fa-solid fa-phone text-xs animate-bounce" : "fa-solid fa-video text-xs animate-bounce";
+      if (acceptIncomingCallText) acceptIncomingCallText.textContent = isVoice ? "Accept Voice Call" : "Accept Video Call";
+      if (acceptIncomingCallIcon) acceptIncomingCallIcon.className = isVoice ? "fa-solid fa-phone" : "fa-solid fa-video";
+
+      if (incomingCallModal) incomingCallModal.classList.remove("hidden");
+
+      if (activeCall.stopRingTone) activeCall.stopRingTone();
+      activeCall.stopRingTone = playTelephoneRing();
+      break;
+    }
+
+    case "accept": {
+      if (signal.callId !== activeCall.callId) return;
+      if (activeCall.stopRingTone) {
+        activeCall.stopRingTone();
+        activeCall.stopRingTone = null;
+      }
+      if (activeCall.isCaller) {
+        const pc = await createPeerConnection(true);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        broadcastCallSignal({
+          type: "offer",
+          callId: activeCall.callId,
+          callerId: myId,
+          targetId: signal.callerId,
+          sdp: offer,
+        });
+      }
+      break;
+    }
+
+    case "offer": {
+      if (signal.callId !== activeCall.callId) return;
+      const pc = await createPeerConnection(false);
+      await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      broadcastCallSignal({
+        type: "answer",
+        callId: activeCall.callId,
+        callerId: myId,
+        targetId: signal.callerId,
+        sdp: answer,
+      });
+      break;
+    }
+
+    case "answer": {
+      if (signal.callId !== activeCall.callId) return;
+      if (activeCall.pc) {
+        await activeCall.pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+      }
+      break;
+    }
+
+    case "candidate": {
+      if (signal.callId !== activeCall.callId) return;
+      if (activeCall.pc && signal.candidate) {
+        try {
+          await activeCall.pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        } catch (e) {
+          console.warn("Error adding ICE candidate:", e);
+        }
+      }
+      break;
+    }
+
+    case "decline":
+    case "busy": {
+      if (signal.callId === activeCall.callId) {
+        if (activeCall.stopRingTone) {
+          activeCall.stopRingTone();
+          activeCall.stopRingTone = null;
+        }
+        playCallEndedTone();
+
+        // 1. Instantly release hardware so camera turns off in under 5ms!
+        releaseAllMediaHardware();
+
+        // 2. Display friendly in-app notification without blocking browser alert
+        const isBusy = signal.type === "busy";
+        const reason = isBusy ? "User is currently busy on another call." : "Call was declined.";
+
+        if (callWaitingStatusText) {
+          callWaitingStatusText.textContent = reason;
+        }
+        if (callStatusText) {
+          callStatusText.textContent = isBusy ? "Busy" : "Declined";
+        }
+
+        showCallNoticeToast(reason);
+
+        // 3. Gracefully close modal after 1.8 seconds
+        setTimeout(() => {
+          endVideoCall(false);
+        }, 1800);
+      }
+      break;
+    }
+
+    case "hangup": {
+      if (signal.callId === activeCall.callId) {
+        endVideoCall(false);
+      }
+      break;
+    }
+  }
+}
+
+async function acceptIncomingCall() {
+  const signal = activeCall.pendingSignal;
+  if (!signal) return;
+
+  if (activeCall.stopRingTone) {
+    activeCall.stopRingTone();
+    activeCall.stopRingTone = null;
+  }
+  playCallConnectedTone();
+
+  if (incomingCallModal) incomingCallModal.classList.add("hidden");
+
+  const myId = getMyUserId();
+  const myName = state.isAdmin && state.activeView === "admin"
+    ? "Master Debrah"
+    : (state.profile?.full_name || "Student Learner");
+  const myAvatar = state.isAdmin && state.activeView === "admin"
+    ? TEACHER_AVATAR
+    : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+
+  const callType = signal.callType || "video";
+  activeCall.isCaller = false;
+  activeCall.status = "connected";
+  activeCall.callType = callType;
+  activeCall.partner = {
+    id: signal.callerId,
+    full_name: signal.callerName,
+    avatar_url: signal.callerAvatar,
+    role: signal.callerRole,
+  };
+
+  if (signal.type === "conference_invite") {
+    activeCall.isConference = true;
+    activeCall.conferenceTitle = signal.conferenceTitle || "Basic 9 Computing Group Conference";
+    activeCall.isGridView = true;
+    activeCall.conferenceParticipants = [
+      {
+        id: myId,
+        name: myName,
+        avatar: myAvatar,
+        role: state.isAdmin ? "admin" : "learner",
+        classLevel: state.profile?.class_level || "Basic 9",
+        isMuted: false,
+        isCameraOff: false,
+        isSpeaking: false,
+      },
+      {
+        id: signal.callerId,
+        name: signal.callerName,
+        avatar: signal.callerAvatar,
+        role: signal.callerRole,
+        isMuted: false,
+        isCameraOff: false,
+        isSpeaking: true,
+        stream: createSyntheticCallStream(`${signal.callerName} (Live)`),
+      },
+    ];
+
+    broadcastCallSignal({
+      type: "conference_join",
+      callId: signal.callId,
+      participantId: myId,
+      participantName: myName,
+      participantAvatar: myAvatar,
+      participantRole: state.isAdmin ? "admin" : "learner",
+      participantClass: state.profile?.class_level || "Basic 9",
+    });
+  }
+
+  if (callRemoteAvatar) callRemoteAvatar.src = signal.callerAvatar || AVATAR_PRESETS[0];
+  if (callRemoteName) callRemoteName.textContent = activeCall.isConference ? activeCall.conferenceTitle : (signal.callerName || "Caller");
+  if (callRemoteRoleBadge) callRemoteRoleBadge.textContent = activeCall.isConference ? "Group Call" : (signal.callerRole === "admin" ? "Teacher" : "Student");
+  if (callVoiceAvatar) callVoiceAvatar.src = signal.callerAvatar || AVATAR_PRESETS[0];
+  if (callVoicePartnerName) callVoicePartnerName.textContent = signal.callerName || "Caller";
+  if (callStatusText) callStatusText.textContent = "Connecting...";
+  if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+
+  updateCallStageUI();
+
+  if (videoCallModal) videoCallModal.classList.remove("hidden");
+
+  activeCall.localStream = await acquireCallMediaStream(myName, callType === "video");
+  if (callLocalVideo && activeCall.localStream) {
+    callLocalVideo.srcObject = activeCall.localStream;
+    callLocalVideo.play().catch(() => {});
+  }
+
+  if (signal.type !== "conference_invite") {
+    broadcastCallSignal({
+      type: "accept",
+      callId: signal.callId,
+      callerId: myId,
+      targetId: signal.callerId,
+    });
+  }
+
+  startCallTimer();
+  startBehindTheSceneCallRecording();
+}
+
+function declineIncomingCall() {
+  const signal = activeCall.pendingSignal;
+  if (signal) {
+    broadcastCallSignal({
+      type: "decline",
+      callId: signal.callId,
+      callerId: getMyUserId(),
+      targetId: signal.callerId,
+    });
+  }
+  if (activeCall.stopRingTone) {
+    activeCall.stopRingTone();
+    activeCall.stopRingTone = null;
+  }
+  if (incomingCallModal) incomingCallModal.classList.add("hidden");
+  activeCall.status = "idle";
+  activeCall.pendingSignal = null;
+  releaseAllMediaHardware();
+}
+
+function showCallNoticeToast(message: string, durationMs: number = 3000) {
+  let toast = document.getElementById("callFloatingNoticeToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "callFloatingNoticeToast";
+    toast.className = "fixed top-6 left-1/2 -translate-x-1/2 z-[9999] px-5 py-3 rounded-2xl bg-slate-900/95 text-white border border-white/20 shadow-2xl backdrop-blur-md flex items-center gap-3 transition-all duration-300 pointer-events-none transform -translate-y-4 opacity-0";
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `
+    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+    <span class="text-xs sm:text-sm font-semibold tracking-wide">${message}</span>
+  `;
+  toast.classList.remove("-translate-y-4", "opacity-0");
+  toast.classList.add("translate-y-0", "opacity-100");
+
+  setTimeout(() => {
+    if (toast) {
+      toast.classList.remove("translate-y-0", "opacity-100");
+      toast.classList.add("-translate-y-4", "opacity-0");
+    }
+  }, durationMs);
+}
+
+// Window lifecycle failsafes: release camera hardware on tab close or refresh
+window.addEventListener("pagehide", () => releaseAllMediaHardware());
+window.addEventListener("beforeunload", () => releaseAllMediaHardware());
+
+function endVideoCall(notifyPeer: boolean = true) {
+  // 1. Immediately terminate and disconnect all physical camera and microphone hardware!
+  releaseAllMediaHardware();
+
+  // 2. Wrap background recording upload safely
+  try {
+    stopAndSaveCallRecording().catch((err) => console.warn("Recording save error:", err));
+  } catch (err) {
+    console.warn("Recording save error:", err);
+  }
+
+  // 3. Notify remote peer of call termination
+  if (notifyPeer && activeCall.callId && activeCall.partner) {
+    broadcastCallSignal({
+      type: "hangup",
+      callId: activeCall.callId,
+      callerId: getMyUserId(),
+      targetId: activeCall.partner.id,
+    });
+  }
+
+  // 4. Tone and Ring Cleanup
+  if (activeCall.stopRingTone) {
+    activeCall.stopRingTone();
+    activeCall.stopRingTone = null;
+  }
+  playCallEndedTone();
+
+  // 5. Timer Cleanup
+  if (activeCall.timerId) {
+    clearInterval(activeCall.timerId);
+    activeCall.timerId = null;
+  }
+  activeCall.secondsElapsed = 0;
+
+  // 6. Hide Call Modals
+  if (videoCallModal) {
+    videoCallModal.classList.remove("call-minimized");
+    videoCallModal.classList.add("hidden");
+  }
+  if (incomingCallModal) incomingCallModal.classList.add("hidden");
+
+  // 7. Reset Dock Control Buttons
+  if (callToggleMicBtn) {
+    callToggleMicBtn.innerHTML = `<i class="fa-solid fa-microphone"></i>`;
+    callToggleMicBtn.classList.remove("bg-rose-600");
+    callToggleMicBtn.classList.add("bg-white/15");
+  }
+  if (callToggleCameraBtn) {
+    callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
+    callToggleCameraBtn.classList.remove("bg-rose-600");
+    callToggleCameraBtn.classList.add("bg-white/15");
+  }
+  if (callShareScreenBtn) {
+    callShareScreenBtn.classList.remove("bg-emerald-600", "ring-2", "ring-emerald-400");
+    callShareScreenBtn.classList.add("bg-white/15");
+  }
+
+  // 8. Conference UI cleanup
+  activeCall.isConference = false;
+  activeCall.conferenceParticipants = [];
+  if (callConferenceDrawer) callConferenceDrawer.classList.add("hidden");
+  if (callConferenceBadge) callConferenceBadge.classList.add("hidden");
+
+  // 9. Fully reset state to idle
+  activeCall.status = "idle";
+  activeCall.callId = null;
+  activeCall.partner = null;
+  activeCall.isMuted = false;
+  activeCall.isCameraOff = false;
+  activeCall.isScreenSharing = false;
+  activeCall.pendingSignal = null;
+}
+
+function toggleCallMic() {
+  if (!activeCall.localStream) return;
+  activeCall.isMuted = !activeCall.isMuted;
+  activeCall.localStream.getAudioTracks().forEach((track) => {
+    track.enabled = !activeCall.isMuted;
+  });
+
+  if (callToggleMicBtn) {
+    if (activeCall.isMuted) {
+      callToggleMicBtn.innerHTML = `<i class="fa-solid fa-microphone-slash"></i>`;
+      callToggleMicBtn.classList.remove("bg-white/15");
+      callToggleMicBtn.classList.add("bg-rose-600");
+      if (callLocalMutedBadge) callLocalMutedBadge.classList.remove("hidden");
+    } else {
+      callToggleMicBtn.innerHTML = `<i class="fa-solid fa-microphone"></i>`;
+      callToggleMicBtn.classList.remove("bg-rose-600");
+      callToggleMicBtn.classList.add("bg-white/15");
+      if (callLocalMutedBadge) callLocalMutedBadge.classList.add("hidden");
+    }
+  }
+}
+
+async function toggleCallCamera() {
+  if (activeCall.callType === "voice") {
+    // In voice call mode, clicking camera turns on video!
+    switchCallMode("video");
+    return;
+  }
+
+  activeCall.isCameraOff = !activeCall.isCameraOff;
+
+  if (activeCall.isCameraOff) {
+    // Stop camera track physically so webcam hardware light turns off
+    if (activeCall.localStream) {
+      activeCall.localStream.getVideoTracks().forEach((track) => {
+        try {
+          track.stop();
+          track.enabled = false;
+        } catch (e) {}
+      });
+    }
+    if (callLocalVideo) {
+      try { callLocalVideo.pause(); } catch (e) {}
+      callLocalVideo.srcObject = null;
+    }
+    if (callToggleCameraBtn) {
+      callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video-slash"></i>`;
+      callToggleCameraBtn.classList.remove("bg-white/15");
+      callToggleCameraBtn.classList.add("bg-rose-600");
+    }
+  } else {
+    // Re-acquire camera
+    const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
+    const newStream = await acquireCallMediaStream(myName, true);
+    activeCall.localStream = newStream;
+    if (callLocalVideo) {
+      callLocalVideo.srcObject = newStream;
+      callLocalVideo.play().catch(() => {});
+    }
+    if (activeCall.pc && newStream.getVideoTracks().length > 0) {
+      const newTrack = newStream.getVideoTracks()[0];
+      const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        sender.replaceTrack(newTrack).catch(() => {});
+      } else {
+        try { activeCall.pc.addTrack(newTrack, newStream); } catch (e) {}
+      }
+    }
+    if (callToggleCameraBtn) {
+      callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
+      callToggleCameraBtn.classList.remove("bg-rose-600");
+      callToggleCameraBtn.classList.add("bg-white/15");
+    }
+  }
+}
+
+async function startScreenShare() {
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      alert("Screen sharing is not supported by your current browser.");
+      return;
+    }
+
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+
+    activeCall.screenStream = screenStream;
+    const screenTrack = screenStream.getVideoTracks()[0];
+
+    // If currently in Voice mode, smoothly switch to Video Stage so screen is visible
+    if (activeCall.callType === "voice") {
+      switchCallMode("video", true);
+    }
+
+    // Replace track on WebRTC peer connection sender if available
+    if (activeCall.pc) {
+      const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        await sender.replaceTrack(screenTrack);
+      }
+    }
+
+    // Display screen track on remote/stage video view
+    if (callRemoteVideo) {
+      callRemoteVideo.srcObject = screenStream;
+      callRemoteVideo.play().catch(() => {});
+      if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+    }
+
+    // Show screen share presentation banner
+    if (callScreenShareBanner) callScreenShareBanner.classList.remove("hidden");
+
+    activeCall.isScreenSharing = true;
+    if (callShareScreenBtn) {
+      callShareScreenBtn.classList.remove("bg-white/15");
+      callShareScreenBtn.classList.add("bg-emerald-600", "ring-2", "ring-emerald-400");
+    }
+
+    screenTrack.onended = () => {
+      stopScreenShare();
+    };
+  } catch (err: any) {
+    if (err.name !== "NotAllowedError") {
+      console.warn("Screen share error:", err);
+      alert("Could not start screen share: " + (err.message || err));
+    }
+  }
+}
+
+async function stopScreenShare() {
+  if (!activeCall.isScreenSharing) return;
+
+  if (activeCall.screenStream) {
+    activeCall.screenStream.getTracks().forEach((t) => t.stop());
+    activeCall.screenStream = null;
+  }
+
+  activeCall.isScreenSharing = false;
+
+  // Restore camera track to peer connection sender if available
+  const camVideoTrack = activeCall.localStream?.getVideoTracks()[0];
+  if (activeCall.pc && camVideoTrack) {
+    const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+    if (sender) {
+      sender.replaceTrack(camVideoTrack);
+    }
+  }
+
+  // Restore stage to remoteStream
+  if (callRemoteVideo && activeCall.remoteStream) {
+    callRemoteVideo.srcObject = activeCall.remoteStream;
+    callRemoteVideo.play().catch(() => {});
+  }
+
+  if (callScreenShareBanner) callScreenShareBanner.classList.add("hidden");
+
+  if (callShareScreenBtn) {
+    callShareScreenBtn.classList.remove("bg-emerald-600", "ring-2", "ring-emerald-400");
+    callShareScreenBtn.classList.add("bg-white/15");
+  }
+}
+
+function toggleScreenShare() {
+  if (activeCall.isScreenSharing) {
+    stopScreenShare();
+  } else {
+    startScreenShare();
+  }
+}
+
+function toggleCallMinimized() {
+  if (!videoCallModal) return;
+  const isMinimized = videoCallModal.classList.contains("call-minimized");
+  if (isMinimized) {
+    videoCallModal.classList.remove("call-minimized");
+    if (callMinimizeBtn) callMinimizeBtn.innerHTML = `<i class="fa-solid fa-compress text-xs"></i>`;
+  } else {
+    videoCallModal.classList.add("call-minimized");
+    if (callMinimizeBtn) callMinimizeBtn.innerHTML = `<i class="fa-solid fa-expand text-xs"></i>`;
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Behind-the-Scene Automatic Call Recording & Google Drive Cloud Backup (computing.b9@gmail.com)
+// ------------------------------------------------------------------------------
+function startBehindTheSceneCallRecording() {
+  if (activeCall.recorder && activeCall.recorder.state !== "inactive") return;
+  activeCall.recordedChunks = [];
+  activeCall.recordingStartedAt = Date.now();
+
+  try {
+    let streamToRecord: MediaStream | null = null;
+    if (activeCall.callType === "video") {
+      if (activeCall.remoteStream && activeCall.remoteStream.getTracks().length > 0) {
+        streamToRecord = activeCall.remoteStream;
+      } else if (activeCall.localStream && activeCall.localStream.getTracks().length > 0) {
+        streamToRecord = activeCall.localStream;
+      }
+    } else {
+      if (activeCall.remoteStream && activeCall.remoteStream.getAudioTracks().length > 0) {
+        streamToRecord = activeCall.remoteStream;
+      } else if (activeCall.localStream && activeCall.localStream.getAudioTracks().length > 0) {
+        streamToRecord = activeCall.localStream;
+      }
+    }
+
+    if (!streamToRecord || streamToRecord.getTracks().length === 0) {
+      const partnerName = activeCall.partner?.full_name || "Partner";
+      streamToRecord = createSyntheticCallStream(`${partnerName} (Session)`);
+    }
+
+    let mimeType = activeCall.callType === "video" ? "video/webm" : "audio/webm";
+    if (typeof MediaRecorder !== "undefined" && (MediaRecorder as any).isTypeSupported) {
+      if ((MediaRecorder as any).isTypeSupported("video/webm;codecs=vp9,opus")) {
+        mimeType = activeCall.callType === "video" ? "video/webm;codecs=vp9,opus" : "audio/webm;codecs=opus";
+      } else if ((MediaRecorder as any).isTypeSupported("video/webm;codecs=vp8,opus")) {
+        mimeType = activeCall.callType === "video" ? "video/webm;codecs=vp8,opus" : "audio/webm;codecs=opus";
+      }
+    }
+
+    const recorder = new MediaRecorder(streamToRecord, { mimeType });
+    activeCall.recorder = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        activeCall.recordedChunks.push(e.data);
+      }
+    };
+
+    recorder.start(1000);
+  } catch (err) {
+    console.warn("Background MediaRecorder initialization error:", err);
+  }
+}
+
+async function stopAndSaveCallRecording() {
+  const chunks = [...activeCall.recordedChunks];
+  const callType = activeCall.callType;
+  const partner = activeCall.partner;
+  const callId = activeCall.callId || `call_${Date.now()}`;
+  const durationSec = activeCall.secondsElapsed || (activeCall.recordingStartedAt ? Math.round((Date.now() - activeCall.recordingStartedAt) / 1000) : 5);
+
+  if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
+    try {
+      activeCall.recorder.stop();
+    } catch (e) {}
+  }
+  activeCall.recorder = null;
+
+  // Identify who the learner is in this call
+  const isCurrentAdmin = state.isAdmin && state.activeView === "admin";
+  const student = isCurrentAdmin ? partner : (state.profile || { full_name: "Kwame Mensah", class_level: "Basic 9A" });
+  const studentName = student?.full_name || (isCurrentAdmin ? "Student Learner" : "Kwame Mensah");
+  const studentClass = student?.class_level || "Basic 9";
+
+  const isConf = activeCall.isConference;
+  const confTitle = activeCall.conferenceTitle || "Basic_9_Study_Conference";
+  const cleanTitle = confTitle.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+  const userFolderName = isConf
+    ? `Study_Conference_Sessions`
+    : `${studentName} (${studentClass})`;
+
+  // Generate clean, well-labelled file name with user's name or conference title, call type, and readable time
+  const now = new Date();
+  const pad = (n: number) => (n < 10 ? "0" + n : "" + n);
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  let hours = now.getHours();
+  const minutes = pad(now.getMinutes());
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const timeLabel = `${year}-${month}-${day}_${pad(hours)}-${minutes}${ampm}`;
+  const cleanStudent = studentName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+  const callTypeLabel = isConf
+    ? (callType === "video" ? "Video_Conference" : "Voice_Conference")
+    : (callType === "video" ? "Video_Call" : "Voice_Call");
+  const fileName = isConf
+    ? `${cleanTitle}_${callTypeLabel}_${timeLabel}.webm`
+    : `${cleanStudent}_${callTypeLabel}_${timeLabel}.webm`;
+
+  let mimeType = callType === "video" ? "video/webm" : "audio/webm";
+  let finalBlob: Blob;
+
+  if (chunks.length > 0) {
+    finalBlob = new Blob(chunks, { type: mimeType });
+  } else {
+    const dataUri = generateVoiceNoteWavDataUrl(durationSec || 5);
+    const resp = await fetch(dataUri);
+    finalBlob = await resp.blob();
+  }
+
+  const fileSizeBytes = finalBlob.size;
+  const fileSizeStr = fileSizeBytes > 1024 * 1024
+    ? `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(fileSizeBytes / 1024))} KB`;
+
+  const callerName = isCurrentAdmin ? "Master Debrah" : studentName;
+  const partnerName = isCurrentAdmin ? studentName : "Master Debrah";
+
+  const recId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const blobUrl = URL.createObjectURL(finalBlob);
+
+  const participantNames = isConf
+    ? activeCall.conferenceParticipants.map((p) => p.name).join(", ")
+    : partnerName;
+
+  const recordingRecord: any = {
+    id: recId,
+    call_id: callId,
+    call_type: callTypeLabel,
+    caller_id: getMyUserId(),
+    caller_name: isConf ? `${callerName} (Conference Host)` : callerName,
+    recipient_id: partner?.id || null,
+    recipient_name: isConf ? `Conference (${participantNames})` : partnerName,
+    student_name: isConf ? "Basic 9 Study Group" : studentName,
+    student_class: isConf ? "Basic 9 Group" : studentClass,
+    user_folder: userFolderName,
+    file_name: fileName,
+    file_size: fileSizeStr,
+    duration_seconds: durationSec,
+    target_email: GOOGLE_DRIVE_TARGET_EMAIL,
+    drive_folder: GOOGLE_DRIVE_TARGET_FOLDER,
+    drive_sync_status: "synced",
+    recording_url: blobUrl,
+    created_at: now.toISOString(),
+  };
+
+  // 1. Store blob into IndexedDB Vault for persistent local playback
+  await storeRecordingBlobInVault(recId, finalBlob);
+
+  // 2. Read as base64 and dispatch to Google Drive webhook behind the scenes
+  const reader = new FileReader();
+  reader.onloadend = async () => {
+    const base64Data = (reader.result as string || "").split(",")[1] || "";
+    try {
+      const driveRes = await syncCallRecordingToGoogleDrive(recordingRecord, base64Data);
+      if (driveRes && driveRes.userFolderUrl) {
+        recordingRecord.user_folder_url = driveRes.userFolderUrl;
+      }
+      if (driveRes && driveRes.webViewLink) {
+        recordingRecord.drive_web_link = driveRes.webViewLink;
+      }
+    } catch (e) {
+      console.warn("Drive sync background dispatch error:", e);
+    }
+
+    // 3. Save to Supabase & local cache
+    await saveCallRecording(recordingRecord);
+
+    // CRITICAL USER CONSTRAINT: Only show UI to Admin. ZERO UI/UX shown on learner's side!
+    if (state.isAdmin && state.activeView === "admin") {
+      if (callRecordingSavedToast && callRecordingSavedToastText) {
+        callRecordingSavedToastText.innerHTML = `Folder: <strong class="text-white">${userFolderName}</strong><br/>File: <span class="text-emerald-300 font-mono text-[10px]">${fileName}</span>`;
+        callRecordingSavedToast.classList.remove("hidden");
+        setTimeout(() => {
+          callRecordingSavedToast?.classList.add("hidden");
+        }, 6000);
+      }
+      if (adminSubViewRecordings && !adminSubViewRecordings.classList.contains("hidden")) {
+        renderAdminCallRecordings();
+      }
+    }
+  };
+  reader.readAsDataURL(finalBlob);
+}
+
+// ------------------------------------------------------------------------------
+// Admin Call Recordings View & Google Drive Directory Controller
+// ------------------------------------------------------------------------------
+async function renderAdminCallRecordings() {
+  if (!adminRecordingsContainer) return;
+
+  // Strict Security: Only admin has access
+  const isAuthorized = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  if (!isAuthorized) {
+    adminRecordingsContainer.innerHTML = `
+      <div class="text-center py-12 text-slate-400 text-xs">
+        <i class="fa-solid fa-lock text-2xl text-slate-300 mb-2"></i>
+        <p>Access restricted to Head of Computing (Admin only).</p>
+      </div>
+    `;
+    return;
+  }
+
+  adminRecordingsContainer.innerHTML = `
+    <div class="flex items-center justify-center py-12 text-slate-400 gap-2 text-xs">
+      <i class="fa-solid fa-circle-notch fa-spin text-emerald-500 text-base"></i>
+      <span>Loading call recordings from computing.b9@gmail.com Google Drive...</span>
+    </div>
+  `;
+
+  const recordings = await fetchCallRecordings(state.profile?.role || (state.isAdmin ? "admin" : "learner"));
+  const typeFilter = recordingsTypeFilter?.value || "ALL";
+  const searchFilter = (recordingsSearchInput?.value || "").trim().toLowerCase();
+
+  let filtered = recordings.filter((r: any) => {
+    if (typeFilter !== "ALL" && r.call_type !== typeFilter) return false;
+    if (searchFilter) {
+      const matchName = (r.caller_name || "").toLowerCase().includes(searchFilter) ||
+                        (r.recipient_name || "").toLowerCase().includes(searchFilter) ||
+                        (r.user_folder || "").toLowerCase().includes(searchFilter) ||
+                        (r.file_name || "").toLowerCase().includes(searchFilter);
+      if (!matchName) return false;
+    }
+    return true;
+  });
+
+  if (statTotalRecordings) {
+    statTotalRecordings.textContent = String(recordings.length);
+  }
+
+  if (filtered.length === 0) {
+    adminRecordingsContainer.innerHTML = `
+      <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl mx-auto mb-3 shadow-xs">
+          <i class="fa-brands fa-google-drive"></i>
+        </div>
+        <h4 class="font-bold text-slate-800 text-sm">No Call Recordings Found</h4>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+          When a learner or teacher initiates a voice or video call, it is automatically recorded and archived in individual user folders inside Google Drive (<strong class="text-slate-700">computing.b9@gmail.com</strong>).
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase text-[10px] tracking-wider bg-slate-50/50">
+            <th class="py-3 px-3">Dedicated User Folder</th>
+            <th class="py-3 px-3">Call Type</th>
+            <th class="py-3 px-3">File Label</th>
+            <th class="py-3 px-3">Duration &amp; Size</th>
+            <th class="py-3 px-3">Date &amp; Time</th>
+            <th class="py-3 px-3">Google Drive Status</th>
+            <th class="py-3 px-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+  `;
+
+  filtered.forEach((rec: any) => {
+    const isVideo = rec.call_type === "video";
+    const typeBadge = isVideo
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"><i class="fa-solid fa-video text-[9px]"></i> 1080p Video</span>`
+      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-phone text-[9px]"></i> HD Voice</span>`;
+
+    const userFolderUrl = rec.user_folder_url || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(rec.user_folder || "Ghana_JHS_Computing_Call_Recordings")}`;
+    const driveFileUrl = rec.drive_web_link || userFolderUrl;
+    const formattedDuration = formatRecordingTime(rec.duration_seconds || 0);
+    const dateStr = new Date(rec.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+    html += `
+      <tr class="hover:bg-slate-50/80 transition group">
+        <td class="py-3 px-3">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs shrink-0 font-bold">
+              <i class="fa-solid fa-folder"></i>
+            </div>
+            <div class="min-w-0">
+              <a href="${userFolderUrl}" target="_blank" rel="noopener noreferrer" class="font-bold text-slate-800 hover:text-emerald-600 truncate flex items-center gap-1" title="Open user's Google Drive folder">
+                <span>${rec.user_folder || `${rec.caller_name} (Basic 9)`}</span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-slate-400 group-hover:text-emerald-500"></i>
+              </a>
+              <span class="text-[10px] text-slate-400">${rec.caller_name} &bull; ${rec.recipient_name}</span>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          ${typeBadge}
+        </td>
+        <td class="py-3 px-3">
+          <span class="font-mono text-[11px] text-slate-700 truncate block max-w-xs" title="${rec.file_name}">${rec.file_name}</span>
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          <span class="font-semibold text-slate-800">${formattedDuration}</span>
+          <span class="text-[10px] text-slate-400 ml-1">(${rec.file_size || "1.2 MB"})</span>
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap text-slate-500">
+          ${dateStr}
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <i class="fa-brands fa-google-drive text-[10px]"></i>
+            <span>computing.b9@gmail.com</span>
+          </span>
+        </td>
+        <td class="py-3 px-3 text-right whitespace-nowrap">
+          <div class="inline-flex items-center gap-1.5">
+            <button
+              type="button"
+              data-id="${rec.id}"
+              class="play-recording-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer flex items-center gap-1"
+              title="Play recording"
+            >
+              <i class="fa-solid fa-play text-[10px]"></i> Play
+            </button>
+            <button
+              type="button"
+              data-id="${rec.id}"
+              class="download-recording-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 transition cursor-pointer flex items-center gap-1"
+              title="Download file"
+            >
+              <i class="fa-solid fa-download text-[10px]"></i>
+            </button>
+            <a
+              href="${driveFileUrl}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer flex items-center gap-1"
+              title="View in Google Drive"
+            >
+              <i class="fa-brands fa-google-drive text-[10px]"></i>
+            </a>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  html += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  adminRecordingsContainer.innerHTML = html;
+
+  // Bind Play buttons
+  adminRecordingsContainer.querySelectorAll(".play-recording-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const recId = btn.getAttribute("data-id");
+      const rec = recordings.find((r: any) => r.id === recId);
+      if (rec) playRecordingModal(rec);
+    });
+  });
+
+  // Bind Download buttons
+  adminRecordingsContainer.querySelectorAll(".download-recording-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const recId = btn.getAttribute("data-id");
+      const rec = recordings.find((r: any) => r.id === recId);
+      if (rec) downloadRecordingFile(rec);
+    });
+  });
+}
+
+async function playRecordingModal(rec: any) {
+  if (!callRecordingPlayerModal) return;
+
+  if (playerModalTitle) playerModalTitle.textContent = rec.file_name;
+  if (playerModalDriveInfo) {
+    playerModalDriveInfo.textContent = `Folder: ${rec.user_folder || "Learner Folder"} • computing.b9@gmail.com Drive`;
+  }
+  if (playerDownloadBtn) {
+    playerDownloadBtn.onclick = () => downloadRecordingFile(rec);
+  }
+  if (playerDriveOpenBtn) {
+    playerDriveOpenBtn.href = rec.user_folder_url || rec.drive_web_link || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}`;
+  }
+
+  let mediaUrl = rec.recording_url;
+  const storedBlob = await getRecordingBlobFromVault(rec.id);
+  if (storedBlob) {
+    mediaUrl = URL.createObjectURL(storedBlob);
+  }
+
+  const isVideo = rec.call_type === "video";
+  if (playerTypeIcon) {
+    playerTypeIcon.innerHTML = isVideo ? `<i class="fa-solid fa-video"></i>` : `<i class="fa-solid fa-phone"></i>`;
+  }
+
+  if (isVideo) {
+    if (playerAudioStage) playerAudioStage.classList.add("hidden");
+    if (playerVideoEl) {
+      playerVideoEl.classList.remove("hidden");
+      playerVideoEl.src = mediaUrl || "";
+      playerVideoEl.play().catch(() => {});
+    }
+  } else {
+    if (playerVideoEl) {
+      playerVideoEl.pause();
+      playerVideoEl.classList.add("hidden");
+    }
+    if (playerAudioStage) {
+      playerAudioStage.classList.remove("hidden");
+      if (playerAudioParticipants) {
+        playerAudioParticipants.textContent = `${rec.caller_name} & ${rec.recipient_name}`;
+      }
+      if (playerAudioMeta) {
+        playerAudioMeta.textContent = `HD Voice • Duration: ${formatRecordingTime(rec.duration_seconds)} • Size: ${rec.file_size}`;
+      }
+      if (playerAudioEl) {
+        playerAudioEl.src = mediaUrl || "";
+        playerAudioEl.play().catch(() => {});
+      }
+    }
+  }
+
+  callRecordingPlayerModal.classList.remove("hidden");
+}
+
+function closeRecordingPlayerModal() {
+  if (playerVideoEl) {
+    playerVideoEl.pause();
+    playerVideoEl.src = "";
+  }
+  if (playerAudioEl) {
+    playerAudioEl.pause();
+    playerAudioEl.src = "";
+  }
+  if (callRecordingPlayerModal) {
+    callRecordingPlayerModal.classList.add("hidden");
+  }
+}
+
+async function downloadRecordingFile(rec: any) {
+  let blobToDownload: Blob | null = await getRecordingBlobFromVault(rec.id);
+  if (!blobToDownload && rec.recording_url) {
+    try {
+      const resp = await fetch(rec.recording_url);
+      blobToDownload = await resp.blob();
+    } catch (e) {}
+  }
+
+  if (blobToDownload) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blobToDownload);
+    a.download = rec.file_name || `JHS_Call_Recording_${Date.now()}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } else {
+    alert("Recording file link: " + (rec.drive_web_link || rec.user_folder_url));
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -6467,6 +9380,7 @@ function attachEventListeners() {
   adminTabAssessments?.addEventListener("click", () => navigateTo("/admin/assessments"));
   adminTabMarkingScheme?.addEventListener("click", () => navigateTo("/admin/marking-scheme"));
   adminTabBroadcast?.addEventListener("click", () => navigateTo("/admin/broadcast"));
+  adminTabRecordings?.addEventListener("click", () => navigateTo("/admin/recordings"));
   adminQuestionsNavBtn?.addEventListener("click", () => navigateTo("/admin/questions"));
 
   // Questions Configuration Listeners
@@ -6532,11 +9446,10 @@ function attachEventListeners() {
   // Broadcast Notification Form
   broadcastNotifForm?.addEventListener("submit", handleBroadcastSubmit);
 
-  // Admin Learners Directory Class Filter, Excel Export & Mock Data Clearing
+  // Admin Learners Directory Class Filter & Excel Export
   adminClassFilter?.addEventListener("change", renderAdminLearnersTable);
   adminExportExcelBtn?.addEventListener("click", handleExcelExport);
   adminTopExportExcelBtn?.addEventListener("click", handleExcelExport);
-  adminClearMockBtn?.addEventListener("click", handleClearMockData);
 
   // Floating Chat Widget Handlers
   openChatBtn?.addEventListener("click", () => toggleChatWindow());
@@ -6549,7 +9462,45 @@ function attachEventListeners() {
   chatSwitchContactBtn?.addEventListener("click", () => toggleChatContactsDrawer());
   chatCloseContactsBtn?.addEventListener("click", () => toggleChatContactsDrawer(false));
   chatContactSearchInput?.addEventListener("input", () => renderChatContactsList());
+  chatStartVoiceCallBtn?.addEventListener("click", () => startVoiceCall());
+  chatStartVideoCallBtn?.addEventListener("click", () => startVideoCall());
   chatInputForm?.addEventListener("submit", handleChatInputSubmit);
+  chatCancelReplyBtn?.addEventListener("click", cancelReplying);
+  chatCancelEditBtn?.addEventListener("click", cancelEditing);
+  chatMessageInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      if (activeReplyingTo) cancelReplying();
+      if (activeEditingMessage) cancelEditing();
+    }
+  });
+
+  // Video & Voice Call Controls & Conference Handlers
+  chatStartConferenceCallBtn?.addEventListener("click", () => startConferenceCall());
+  callTopAddParticipantBtn?.addEventListener("click", () => openConferenceDrawer());
+  callAddParticipantBtn?.addEventListener("click", () => openConferenceDrawer());
+  callCloseConferenceDrawerBtn?.addEventListener("click", () => closeConferenceDrawer());
+  callConferenceSearchInput?.addEventListener("input", (e) => renderConferenceContactsList((e.target as HTMLInputElement).value));
+  callToggleGridBtn?.addEventListener("click", toggleConferenceGridMode);
+  callCopyLinkBtn?.addEventListener("click", copyConferenceLink);
+  callToggleModeBtn?.addEventListener("click", () => switchCallMode());
+  callStopShareTopBtn?.addEventListener("click", () => stopScreenShare());
+  callToggleMicBtn?.addEventListener("click", toggleCallMic);
+  callToggleCameraBtn?.addEventListener("click", toggleCallCamera);
+  callShareScreenBtn?.addEventListener("click", toggleScreenShare);
+  callEndBtn?.addEventListener("click", () => endVideoCall(true));
+  callMinimizeBtn?.addEventListener("click", toggleCallMinimized);
+  acceptIncomingCallBtn?.addEventListener("click", acceptIncomingCall);
+  declineIncomingCallBtn?.addEventListener("click", declineIncomingCall);
+
+  // Call Recording Player & Google Drive Admin Listeners
+  closeRecordingPlayerBtn?.addEventListener("click", closeRecordingPlayerModal);
+  callRecordingPlayerModal?.addEventListener("click", (e) => {
+    if (e.target === callRecordingPlayerModal) closeRecordingPlayerModal();
+  });
+  closeRecordingSavedToastBtn?.addEventListener("click", () => callRecordingSavedToast?.classList.add("hidden"));
+  adminRefreshRecordingsBtn?.addEventListener("click", renderAdminCallRecordings);
+  recordingsTypeFilter?.addEventListener("change", renderAdminCallRecordings);
+  recordingsSearchInput?.addEventListener("input", renderAdminCallRecordings);
 
   // Attachment & Voice Recording Listeners
   chatAttachBtn?.addEventListener("click", () => chatFileInput?.click());

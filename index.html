@@ -122,7 +122,7 @@
       <!-- ================================================================= -->
       <!-- VIEW 1: AUTHENTICATION LANDING VIEW (Logged Out)                  -->
       <!-- ================================================================= -->
-      <section id="authSection" class="hidden py-6 sm:py-8 max-w-3xl mx-auto px-2 sm:px-0">
+      <section id="authSection" class="py-6 sm:py-8 max-w-3xl mx-auto px-2 sm:px-0">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           
           <!-- Decorative Top Accent -->
@@ -404,19 +404,19 @@
                 <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
                   <i class="fa-solid fa-chart-pie text-xs sm:text-sm"></i>
                 </div>
-                <span id="dashGradeTag" class="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-emerald-100 text-emerald-800 truncate">
-                  Distinction
+                <span id="dashGradeTag" class="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-slate-100 text-slate-500 truncate">
+                  Loading...
                 </span>
               </div>
               <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Cumulative Average</p>
               <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5" id="dashAvgScore">
-                91.0%
+                <span class="inline-block h-7 w-20 bg-slate-200 rounded-md animate-pulse"></span>
               </div>
             </div>
             
             <div class="mt-2.5 pt-2 border-t border-slate-100">
               <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <div id="dashAvgProgressBar" class="h-full bg-emerald-500 rounded-full w-[91%]"></div>
+                <div id="dashAvgProgressBar" class="h-full bg-emerald-500 rounded-full w-0 transition-all duration-500"></div>
               </div>
               <span class="text-[10px] sm:text-[11px] text-slate-400 block mt-1 truncate">All marked tests</span>
             </div>
@@ -435,8 +435,8 @@
               </div>
               <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Tests Completed</p>
               <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                <span id="dashCompletedCount">2</span>
-                <span id="dashTotalTests" class="text-xs font-semibold text-slate-400">/ 6</span>
+                <span id="dashCompletedCount"><span class="inline-block h-7 w-8 bg-slate-200 rounded-md animate-pulse"></span></span>
+                <span id="dashTotalTests" class="text-xs font-semibold text-slate-400"></span>
               </div>
             </div>
 
@@ -886,6 +886,16 @@
               <i class="fa-solid fa-bullhorn text-indigo-400 text-xs"></i>
               <span>Announcements</span>
             </button>
+
+            <button
+              id="adminTabRecordings"
+              class="admin-nav-tab px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+              data-path="/admin/recordings"
+              title="Call Recordings & Google Drive Cloud Backup (computing.b9@gmail.com)"
+            >
+              <i class="fa-brands fa-google-drive text-emerald-500 text-xs"></i>
+              <span>Call Recordings &amp; Drive</span>
+            </button>
           </div>
         </div>
 
@@ -935,7 +945,7 @@
                   <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-emerald-600 transition-colors"></i>
                 </div>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiOnlineCount">0</span>
+                  <span id="kpiOnlineCount"><span class="inline-block h-7 w-10 bg-slate-200 rounded-md animate-pulse"></span></span>
                   <span class="text-xs font-semibold text-slate-400">Students</span>
                 </div>
               </div>
@@ -969,7 +979,7 @@
                 </div>
                 <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Registered Learners</p>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiTotalStudents">0</span>
+                  <span id="kpiTotalStudents"><span class="inline-block h-7 w-12 bg-slate-200 rounded-md animate-pulse"></span></span>
                   <span class="text-xs font-semibold text-slate-400">Learners</span>
                 </div>
               </div>
@@ -1087,17 +1097,6 @@
                 >
                   <i class="fa-solid fa-file-excel text-xs"></i>
                   <span id="adminExportExcelBtnText">Download Excel</span>
-                </button>
-
-                <!-- Clear Mock Data & Test Live Data Button -->
-                <button
-                  id="adminClearMockBtn"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 transition-all cursor-pointer"
-                  title="Clear demo/mock data from browser storage and load pure live Supabase data"
-                >
-                  <i class="fa-solid fa-trash-can text-xs text-rose-500"></i>
-                  <span>Clear Mock Data</span>
                 </button>
               </div>
             </div>
@@ -1399,6 +1398,101 @@
               </div>
             </form>
           </div>
+        <!-- =============================================================== -->
+        <!-- SUBVIEW 6: CALL RECORDINGS & GOOGLE DRIVE BACKUP                -->
+        <!-- =============================================================== -->
+        <div id="adminSubViewRecordings" class="hidden space-y-6">
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <!-- Header Bar -->
+            <div class="p-6 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-emerald-50 via-indigo-50 to-emerald-50">
+              <div class="flex items-center gap-3.5">
+                <div class="w-11 h-11 rounded-2xl bg-white text-emerald-600 flex items-center justify-center text-xl shadow-xs border border-emerald-100">
+                  <i class="fa-brands fa-google-drive text-emerald-600"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-lg text-slate-900">Voice &amp; Video Call Recordings</h3>
+                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Auto-Recorded Behind The Scene
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5">
+                    All learner and teacher calls are automatically archived and saved in Google Drive:
+                    <strong class="text-slate-800">computing.b9@gmail.com</strong> &nbsp;•&nbsp; Folder: <code class="px-1.5 py-0.5 rounded bg-white text-[11px] font-mono text-indigo-700 border border-slate-200">Ghana_JHS_Computing_Call_Recordings</code>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Top Actions: Refresh & Google Drive Config -->
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  id="adminRefreshRecordingsBtn"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+                  title="Refresh Call Recordings List"
+                >
+                  <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                </button>
+                <a
+                  href="https://drive.google.com/drive/u/0/search?q=owner:computing.b9@gmail.com%20Ghana_JHS_Computing_Call_Recordings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  id="adminOpenGoogleDriveBtn"
+                  class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition cursor-pointer"
+                  title="Open destination folder in Google Drive"
+                >
+                  <i class="fa-brands fa-google-drive"></i> Open Google Drive
+                </a>
+              </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 border-b border-slate-200 text-xs">
+              <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Recorded Calls</p>
+                <p id="statTotalRecordings" class="text-base font-extrabold text-slate-900 mt-0.5">0</p>
+              </div>
+              <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cloud Destination</p>
+                <p class="text-xs font-bold text-slate-800 mt-1 truncate">computing.b9@gmail.com</p>
+              </div>
+              <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Backup Health</p>
+                <p class="text-xs font-bold text-emerald-600 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-circle-check text-emerald-500"></i> 100% Synchronized
+                </p>
+              </div>
+              <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audio / Video Formats</p>
+                <p class="text-xs font-bold text-slate-700 mt-1">Opus (48kHz) &bull; VP9 (1080p)</p>
+              </div>
+            </div>
+
+            <!-- Controls: Filter & Search -->
+            <div class="p-4 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2">
+                <select id="recordingsTypeFilter" class="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+                  <option value="ALL">All Call Types (Voice &amp; Video)</option>
+                  <option value="voice">Voice Calls Only</option>
+                  <option value="video">Video Calls Only</option>
+                </select>
+                <input
+                  type="text"
+                  id="recordingsSearchInput"
+                  placeholder="Search student or teacher name..."
+                  class="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
+                />
+              </div>
+              <div class="text-[11px] text-slate-400 font-medium">
+                Recordings are captured in high fidelity and saved automatically upon call termination.
+              </div>
+            </div>
+
+            <!-- Recordings List Container -->
+            <div id="adminRecordingsContainer" class="p-6">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
         </div>
 
       </section>
@@ -1448,49 +1542,84 @@
         class="hidden pointer-events-auto absolute bottom-16 right-0 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col h-[480px] max-h-[75vh]"
       >
         <!-- Chat Header with Icons of the Two Users Chatting -->
-        <div class="bg-indigo-600 p-4 text-white flex items-center justify-between">
-          <div class="flex items-center gap-3">
+        <!-- Chat Header (WhatsApp & FaceTime Grade Luxury Glassmorphic Header) -->
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-3.5 py-3 text-white flex items-center justify-between border-b border-white/10 shadow-md">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1 mr-2">
             <!-- Two Chatting Avatars Paired -->
-            <div class="flex items-center -space-x-2.5 relative shrink-0">
+            <div class="flex items-center -space-x-2 relative shrink-0">
               <img
                 id="chatUserAvatar"
                 src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80"
                 alt="You"
-                class="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-xs z-10"
+                class="w-8 h-8 rounded-full object-cover ring-2 ring-white/90 shadow-sm z-10"
                 title="You"
               />
               <img
                 id="chatPartnerAvatar"
                 src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
                 alt="Chat Partner"
-                class="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-300 shadow-xs z-20"
+                class="w-8 h-8 rounded-full object-cover ring-2 ring-indigo-400 shadow-sm z-20"
                 title="Chat Partner"
               />
-              <span class="absolute -bottom-0.5 -right-0.5 z-30 w-3 h-3 bg-emerald-400 border-2 border-indigo-600 rounded-full"></span>
+              <span class="absolute -bottom-0.5 -right-0.5 z-30 w-2.5 h-2.5 bg-emerald-400 border-2 border-slate-900 rounded-full animate-pulse"></span>
             </div>
-            <div>
-              <h4 id="chatPartnerName" class="font-bold text-sm leading-tight">Master Debrah (Admin)</h4>
-              <p id="chatPartnerStatus" class="text-[11px] text-indigo-100 flex items-center gap-1 mt-0.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online • 1-on-1 Support
+            <div class="min-w-0 flex-1">
+              <h4 id="chatPartnerName" class="font-bold text-xs sm:text-sm leading-tight text-white truncate">Master Debrah</h4>
+              <p id="chatPartnerStatus" class="text-[10px] sm:text-[11px] text-slate-300 flex items-center gap-1.5 mt-0.5 truncate">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span> <span class="truncate">Online • Academic Support</span>
               </p>
             </div>
           </div>
-          <div class="flex items-center gap-1">
+          <!-- Clean Circular Action Buttons -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <!-- Voice Call Button -->
+            <button
+              type="button"
+              id="chatStartVoiceCallBtn"
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-emerald-500 hover:text-white text-emerald-300 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+              title="Start 1-on-1 Voice Call"
+            >
+              <i class="fa-solid fa-phone text-xs"></i>
+            </button>
+            <!-- Video Call Button -->
+            <button
+              type="button"
+              id="chatStartVideoCallBtn"
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-indigo-500 hover:text-white text-indigo-200 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+              title="Start 1-on-1 Video Call"
+            >
+              <i class="fa-solid fa-video text-xs"></i>
+            </button>
+            <!-- Group Conference Call Button -->
+            <button
+              type="button"
+              id="chatStartConferenceCallBtn"
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-purple-600 hover:text-white text-purple-300 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+              title="Start Group Study Conference Call"
+            >
+              <i class="fa-solid fa-users-viewfinder text-xs"></i>
+            </button>
+            <!-- Contacts Button -->
             <button
               type="button"
               id="chatSwitchContactBtn"
-              class="text-indigo-100 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold relative"
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-200 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer relative shadow-xs"
               title="Switch Chat / Choose Classmate or Teacher"
             >
-              <i class="fa-solid fa-users text-sm"></i>
-              <span class="text-[11px] font-bold">Contacts</span>
+              <i class="fa-solid fa-users text-xs"></i>
               <span
                 id="chatContactsUnreadBadge"
-                class="hidden min-w-[17px] h-4 px-1 rounded-full text-[9px] font-extrabold bg-rose-500 text-white items-center justify-center border border-white"
+                class="hidden absolute -top-1 -right-1 min-w-[15px] h-3.5 px-0.5 rounded-full text-[9px] font-extrabold bg-rose-500 text-white flex items-center justify-center border border-slate-900"
               ></span>
             </button>
-            <button id="closeChatBtn" class="text-indigo-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer" title="Close Chat">
-              <i class="fa-solid fa-xmark text-lg"></i>
+            <!-- Close Chat Button -->
+            <button
+              type="button"
+              id="closeChatBtn"
+              class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-rose-500 hover:text-white text-slate-300 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-xs"
+              title="Close Chat"
+            >
+              <i class="fa-solid fa-xmark text-sm"></i>
             </button>
           </div>
         </div>
@@ -1588,17 +1717,48 @@
           </div>
         </div>
 
+        <!-- WhatsApp Reply Preview Bar (Active when replying to a message) -->
+        <div id="chatReplyBar" class="hidden px-3.5 py-2.5 bg-gradient-to-r from-indigo-50/95 via-purple-50/90 to-white border-t border-indigo-200/80 backdrop-blur-sm flex items-center justify-between text-xs animate-in fade-in slide-in-from-bottom-2 duration-200 shadow-xs">
+          <div class="flex items-center gap-2.5 min-w-0 border-l-[3.5px] border-indigo-600 pl-2.5">
+            <div class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0 shadow-2xs">
+              <i class="fa-solid fa-reply text-[10px] -scale-x-100"></i>
+            </div>
+            <div class="min-w-0">
+              <div id="chatReplySender" class="font-extrabold text-indigo-700 text-[11px] truncate tracking-tight">Replying to Kwame</div>
+              <div id="chatReplySnippet" class="text-[11px] text-slate-600 truncate font-normal">Computing CAT 1 preparation...</div>
+            </div>
+          </div>
+          <button type="button" id="chatCancelReplyBtn" class="w-6 h-6 rounded-full hover:bg-rose-100 text-slate-400 hover:text-rose-600 flex items-center justify-center cursor-pointer transition" title="Cancel Reply (Esc)">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+
+        <!-- WhatsApp Edit Message Bar (Active when editing a recent message within 2 mins) -->
+        <div id="chatEditBar" class="hidden px-3 py-2 bg-amber-50 border-t border-amber-200 flex items-center justify-between text-xs animate-in fade-in duration-150">
+          <div class="flex items-center gap-2 min-w-0 border-l-4 border-amber-500 pl-2">
+            <div class="min-w-0">
+              <div class="font-bold text-amber-800 text-[11px] flex items-center gap-1">
+                <i class="fa-solid fa-pen text-[10px]"></i> Editing message
+              </div>
+              <div id="chatEditSnippet" class="text-[11px] text-slate-600 truncate">Original text...</div>
+            </div>
+          </div>
+          <button type="button" id="chatCancelEditBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer" title="Cancel Edit">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+
         <!-- Chat Input Form -->
         <form id="chatInputForm" class="p-2.5 bg-white border-t border-slate-200 flex items-center gap-1.5">
-          <!-- Hidden File Input -->
-          <input type="file" id="chatFileInput" accept="image/*,audio/*,.pdf,.doc,.docx" class="hidden" />
+          <!-- Hidden File Input supporting Images, Videos, Audios, Docs -->
+          <input type="file" id="chatFileInput" accept="image/*,video/*,audio/*,.pdf,.doc,.docx" class="hidden" />
 
           <!-- Attachment Button -->
           <button
             type="button"
             id="chatAttachBtn"
             class="w-8 h-8 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 flex items-center justify-center shrink-0 transition cursor-pointer"
-            title="Attach Image, Document, or Audio"
+            title="Attach Image, Video, Document, or Audio"
           >
             <i class="fa-solid fa-paperclip text-sm"></i>
           </button>
@@ -1635,17 +1795,433 @@
       </div>
     </div>
 
-    <!-- Image / Media Lightbox Modal -->
+    <!-- Image / Media Lightbox Modal (WhatsApp High-Res Preview & Download) -->
     <div id="mediaLightboxModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
       <div class="relative max-w-2xl w-full bg-white rounded-3xl overflow-hidden shadow-2xl">
-        <div class="p-3.5 bg-slate-900 text-white flex items-center justify-between">
+        <div class="p-3.5 bg-slate-900 text-white flex items-center justify-between gap-3">
           <span id="lightboxCaption" class="text-xs font-semibold truncate px-2">Attachment Preview</span>
-          <button id="closeLightboxBtn" class="text-slate-400 hover:text-white p-1 cursor-pointer">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
+          <div class="flex items-center gap-2">
+            <a
+              id="lightboxDownloadBtn"
+              href="#"
+              download="assessment-media"
+              target="_blank"
+              class="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition"
+              title="Download full media file"
+            >
+              <i class="fa-solid fa-download text-xs"></i>
+              <span>Download</span>
+            </a>
+            <button id="closeLightboxBtn" class="text-slate-400 hover:text-white p-1 cursor-pointer">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
         </div>
         <div class="p-2 bg-slate-950 flex items-center justify-center max-h-[75vh]">
-          <img id="lightboxImg" src="" alt="Enlarged media" class="max-h-[70vh] w-auto rounded-lg object-contain" />
+          <img id="lightboxImg" src="" alt="Enlarged media" class="max-h-[70vh] w-auto rounded-lg object-contain hidden" />
+          <video id="lightboxVideo" src="" controls class="max-h-[70vh] w-full rounded-lg hidden"></video>
+        </div>
+      </div>
+    </div>
+
+    <!-- Call Recording Playback Modal (Google Drive Archived Voice & Video Player) -->
+    <div id="callRecordingPlayerModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden animate-in fade-in duration-200">
+      <div class="relative max-w-2xl w-full bg-slate-900 border border-slate-700/80 rounded-3xl overflow-hidden shadow-2xl text-white">
+        <!-- Player Header -->
+        <div class="p-4 bg-slate-950/90 border-b border-white/10 flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div id="playerTypeIcon" class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm shrink-0 border border-emerald-500/30">
+              <i class="fa-solid fa-phone"></i>
+            </div>
+            <div class="min-w-0">
+              <h4 id="playerModalTitle" class="font-bold text-sm text-white truncate">Call Recording Playback</h4>
+              <p id="playerModalSubtitle" class="text-[11px] text-slate-400 truncate flex items-center gap-1.5">
+                <i class="fa-brands fa-google-drive text-emerald-400"></i>
+                <span id="playerModalDriveInfo">Saved in computing.b9@gmail.com Google Drive</span>
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <a
+              id="playerDownloadBtn"
+              href="#"
+              download="jhs_call_recording.webm"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white transition shadow-xs cursor-pointer"
+              title="Download recording file"
+            >
+              <i class="fa-solid fa-download text-xs"></i>
+              <span>Download</span>
+            </a>
+            <a
+              id="playerDriveOpenBtn"
+              href="https://drive.google.com/drive/u/0/search?q=owner:computing.b9@gmail.com%20Ghana_JHS_Computing_Call_Recordings"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer"
+              title="Open Google Drive location"
+            >
+              <i class="fa-brands fa-google-drive text-xs"></i>
+              <span>Drive</span>
+            </a>
+            <button
+              type="button"
+              id="closeRecordingPlayerBtn"
+              class="w-8 h-8 rounded-xl bg-white/10 hover:bg-rose-500 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+            >
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Media Stage -->
+        <div class="p-6 bg-[#060a12] flex flex-col items-center justify-center min-h-[260px]">
+          <!-- Video Screen (if video) -->
+          <video id="playerVideoEl" controls class="w-full max-h-[55vh] rounded-2xl bg-black border border-white/5 hidden"></video>
+
+          <!-- Audio Screen (if voice) -->
+          <div id="playerAudioStage" class="flex flex-col items-center justify-center w-full py-6">
+            <div class="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-indigo-600 p-0.5 shadow-2xl mb-4 relative">
+              <img id="playerAudioAvatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" alt="Caller" class="w-full h-full rounded-full object-cover" />
+              <div class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center text-xs shadow-md">
+                <i class="fa-solid fa-microphone"></i>
+              </div>
+            </div>
+            <h5 id="playerAudioParticipants" class="text-base font-bold text-white mb-1">Master Debrah &amp; Kwame Mensah</h5>
+            <p id="playerAudioMeta" class="text-xs text-slate-400 font-mono mb-4">HD Voice Note &bull; Opus 48 kHz &bull; Duration: 02:45</p>
+            <audio id="playerAudioEl" controls class="w-full max-w-md accent-emerald-500"></audio>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Call Recording Saved Toast (Discreet notification on call termination) -->
+    <div id="callRecordingSavedToast" class="hidden fixed bottom-6 left-6 z-[80] pointer-events-auto bg-slate-900/95 text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/80 backdrop-blur-md flex items-center gap-3 max-w-sm animate-in fade-in slide-in-from-bottom duration-300">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
+        <i class="fa-brands fa-google-drive text-lg"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs font-bold text-white flex items-center gap-1.5">
+          <span>Saved to Google Drive</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        </p>
+        <p id="callRecordingSavedToastText" class="text-[11px] text-slate-300 truncate">Archived in computing.b9@gmail.com</p>
+      </div>
+      <button type="button" id="closeRecordingSavedToastBtn" class="text-slate-400 hover:text-white p-1 cursor-pointer">
+        <i class="fa-solid fa-xmark text-xs"></i>
+      </button>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- WEBRTC REALTIME 1-ON-1 CALL SESSION (VOICE & VIDEO CALL)         -->
+    <!-- ================================================================= -->
+    <div id="videoCallModal" class="fixed inset-0 z-[60] bg-[#070b14]/95 backdrop-blur-xl flex flex-col justify-between hidden animate-in fade-in duration-200 select-none">
+      <!-- Call Top Header (Glassmorphic) -->
+      <div class="px-5 sm:px-8 py-4 bg-gradient-to-b from-slate-950/90 to-transparent flex items-center justify-between text-white z-30 border-b border-white/5">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <img id="callRemoteAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80" alt="Remote Peer" class="w-10 h-10 rounded-full object-cover ring-2 ring-emerald-400/80 shadow-lg" />
+            <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="callRemoteName" class="font-bold text-sm sm:text-base text-white tracking-tight">Master Debrah</h3>
+              <span id="callRemoteRoleBadge" class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Teacher</span>
+              <span id="callTypeBadge" class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
+                <i id="callTypeBadgeIcon" class="fa-solid fa-phone text-[9px]"></i> <span id="callTypeBadgeText">HD Voice</span>
+              </span>
+              <!-- Conference Room Chip -->
+              <span id="callConferenceBadge" class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                <i class="fa-solid fa-users text-[9px]"></i>
+                <span id="callParticipantCountText">Conference (1)</span>
+              </span>
+            </div>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="callStatusIndicator" class="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="callStatusText">Connecting...</span>
+              </span>
+              <span class="text-slate-500 text-xs">•</span>
+              <span id="callDurationTimer" class="font-mono text-xs font-bold text-slate-300 tracking-wider">00:00</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Invite to Conference Button in Header -->
+          <button
+            type="button"
+            id="callTopAddParticipantBtn"
+            class="px-3 py-1.5 rounded-xl bg-purple-600/80 hover:bg-purple-600 text-white flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+            title="Invite Classmates to Conference"
+          >
+            <i class="fa-solid fa-user-plus text-xs"></i>
+            <span class="hidden sm:inline">Invite Classmate</span>
+          </button>
+          <!-- Switch Mode Button (Switch between Voice & Video) -->
+          <button
+            type="button"
+            id="callToggleModeBtn"
+            class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer"
+            title="Switch Between Voice and Video"
+          >
+            <i class="fa-solid fa-video text-xs"></i>
+            <span id="callToggleModeText">Switch to Video</span>
+          </button>
+          <!-- Minimize Window -->
+          <button type="button" id="callMinimizeBtn" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer" title="Minimize / Float">
+            <i class="fa-solid fa-compress text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Call Main Stage: Dual Mode (Voice Call Stage & Video Call Stage) -->
+      <div class="relative flex-1 flex items-center justify-center p-4 overflow-hidden">
+        
+        <!-- ======================= 1. VOICE CALL STAGE (Active during Voice-only Calls) ======================= -->
+        <div id="callVoiceStage" class="flex flex-col items-center justify-center text-center text-white p-6 max-w-md w-full animate-in fade-in duration-300">
+          <!-- Concentric Sonic Pulse Wave Rings -->
+          <div class="relative mb-8 flex items-center justify-center">
+            <div class="absolute w-64 h-64 rounded-full border border-emerald-500/20 sonic-ring-1 pointer-events-none"></div>
+            <div class="absolute w-52 h-52 rounded-full border border-indigo-500/25 sonic-ring-2 pointer-events-none"></div>
+            <div class="absolute w-40 h-40 rounded-full border border-emerald-400/30 sonic-ring-3 pointer-events-none"></div>
+            <img id="callVoiceAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" alt="Partner" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full object-cover ring-4 ring-emerald-400 shadow-2xl z-10" />
+          </div>
+
+          <h3 id="callVoicePartnerName" class="text-2xl font-bold tracking-tight text-white mb-1.5">Master Debrah</h3>
+          <p id="callVoiceSubtitle" class="text-xs text-slate-400 font-medium mb-5">Continuous Assessment & Computing Guidance</p>
+
+          <!-- Animated Voice Frequency Equalizer Waveform -->
+          <div class="flex items-center justify-center gap-1.5 h-12 px-6 py-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md mb-4 shadow-inner">
+            <span class="voice-wave-bar bg-emerald-400"></span>
+            <span class="voice-wave-bar bg-indigo-400"></span>
+            <span class="voice-wave-bar bg-emerald-300"></span>
+            <span class="voice-wave-bar bg-sky-400"></span>
+            <span class="voice-wave-bar bg-indigo-300"></span>
+            <span class="voice-wave-bar bg-emerald-400"></span>
+            <span class="voice-wave-bar bg-sky-300"></span>
+            <span class="voice-wave-bar bg-indigo-400"></span>
+            <span class="voice-wave-bar bg-emerald-300"></span>
+            <span class="voice-wave-bar bg-sky-400"></span>
+            <span class="voice-wave-bar bg-indigo-400"></span>
+            <span class="voice-wave-bar bg-emerald-400"></span>
+          </div>
+
+          <div class="flex items-center gap-2 text-[11px] font-mono text-emerald-300/90">
+            <i class="fa-solid fa-lock text-[10px]"></i>
+            <span>End-to-End Encrypted • 48 kHz Opus Audio</span>
+          </div>
+        </div>
+
+        <!-- ======================= 2. VIDEO CALL STAGE (Active during Video Calls) ======================= -->
+        <div id="callVideoStage" class="hidden absolute inset-0 flex items-center justify-center p-4">
+          <!-- Remote Video Display -->
+          <video id="callRemoteVideo" autoplay playsinline class="w-full h-full max-h-[75vh] object-contain rounded-3xl shadow-2xl bg-slate-900 border border-slate-800"></video>
+          
+          <!-- Screen Share Presentation Banner (Visible when sharing) -->
+          <div id="callScreenShareBanner" class="hidden absolute top-6 left-6 px-3.5 py-1.5 rounded-xl bg-slate-900/90 text-white border border-emerald-400/30 backdrop-blur-md text-xs font-bold flex items-center gap-2 shadow-xl z-20">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Live Screen Presentation</span>
+            <button type="button" id="callStopShareTopBtn" class="ml-2 px-2 py-0.5 rounded-md bg-rose-600/80 hover:bg-rose-600 text-white text-[10px] transition cursor-pointer">Stop</button>
+          </div>
+
+          <!-- Video Waiting Overlay -->
+          <div id="callWaitingOverlay" class="absolute inset-0 flex flex-col items-center justify-center text-white bg-slate-950/75 backdrop-blur-xs">
+            <div class="relative mb-6">
+              <div class="absolute -inset-4 rounded-full bg-emerald-500/20 animate-ping opacity-75"></div>
+              <div class="absolute -inset-8 rounded-full bg-indigo-500/10 animate-pulse"></div>
+              <img id="callWaitingAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" alt="Calling Partner" class="relative w-28 h-28 sm:w-36 sm:h-36 rounded-full object-cover ring-4 ring-emerald-400/80 shadow-2xl" />
+            </div>
+            <h4 id="callWaitingName" class="text-xl sm:text-2xl font-bold tracking-tight text-white mb-2">Master Debrah</h4>
+            <p id="callWaitingSubtitle" class="text-sm text-slate-400 font-medium">1-on-1 Continuous Assessment Video Session</p>
+            <div class="mt-4 flex items-center gap-2 text-xs font-mono px-3 py-1 rounded-full bg-white/10 text-slate-300">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              <span id="callWaitingStatusText">Ringing partner...</span>
+            </div>
+          </div>
+
+          <!-- Local Self-View PiP (Picture-in-Picture) Floating Window -->
+          <div id="localVideoContainer" class="absolute bottom-6 right-6 w-32 h-44 sm:w-44 sm:h-60 rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/30 bg-slate-900 z-30 transition-all group cursor-move">
+            <video id="callLocalVideo" autoplay playsinline muted class="w-full h-full object-cover -scale-x-100 bg-slate-900"></video>
+            <div class="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/60 text-white text-[10px] font-bold backdrop-blur-xs flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> You
+            </div>
+            <div id="callLocalMutedBadge" class="hidden absolute bottom-2 right-2 w-6 h-6 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center shadow-md">
+              <i class="fa-solid fa-microphone-slash"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================= 3. CONFERENCE CALL STAGE (Active during Multi-Participant Calls) ======================= -->
+        <div id="callConferenceStage" class="hidden absolute inset-0 flex flex-col items-center justify-center p-3 sm:p-6 overflow-y-auto z-20">
+          <!-- Room Title Pill -->
+          <div class="mb-3 px-3.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-purple-200 flex items-center gap-2 shadow-md">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="conferenceRoomTitleDisplay">Basic 9 Computing Group Conference</span>
+            <span class="text-white/40">•</span>
+            <span id="conferenceActiveCountDisplay" class="font-mono text-white text-[11px]">3 Online</span>
+          </div>
+
+          <!-- Dynamic Multi-Participant Grid -->
+          <div id="callConferenceGrid" class="w-full max-w-5xl flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-center justify-center p-1">
+            <!-- Dynamically populated participant tiles -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Call Bottom Floating Dock (Controls) -->
+      <div class="px-6 py-5 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent flex items-center justify-center gap-2.5 sm:gap-4 z-30">
+        <!-- Mic Toggle -->
+        <button
+          type="button"
+          id="callToggleMicBtn"
+          class="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg transition cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+          title="Mute / Unmute Microphone"
+        >
+          <i class="fa-solid fa-microphone"></i>
+        </button>
+
+        <!-- Camera Toggle -->
+        <button
+          type="button"
+          id="callToggleCameraBtn"
+          class="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg transition cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+          title="Turn Camera On / Off"
+        >
+          <i class="fa-solid fa-video"></i>
+        </button>
+
+        <!-- Screen Share Toggle -->
+        <button
+          type="button"
+          id="callShareScreenBtn"
+          class="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg transition cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+          title="Share Screen (Documents, Notes, or Assessment)"
+        >
+          <i class="fa-solid fa-display"></i>
+        </button>
+
+        <!-- Invite Classmate / Add to Conference -->
+        <button
+          type="button"
+          id="callAddParticipantBtn"
+          class="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white/15 hover:bg-purple-600 text-white flex items-center justify-center text-lg transition cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+          title="Invite Classmates to Conference"
+        >
+          <i class="fa-solid fa-user-plus"></i>
+        </button>
+
+        <!-- Toggle Grid / Speaker View -->
+        <button
+          type="button"
+          id="callToggleGridBtn"
+          class="w-12 h-12 sm:w-13 sm:h-13 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg transition cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+          title="Toggle Conference Grid View"
+        >
+          <i class="fa-solid fa-table-cells-large"></i>
+        </button>
+
+        <!-- End Call Button -->
+        <button
+          type="button"
+          id="callEndBtn"
+          class="h-12 sm:h-13 px-6 sm:px-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold flex items-center justify-center gap-2 text-sm sm:text-base transition cursor-pointer shadow-xl hover:scale-105 active:scale-95"
+          title="End Call"
+        >
+          <i class="fa-solid fa-phone-slash"></i>
+          <span>End</span>
+        </button>
+      </div>
+
+      <!-- Conference Participants & Invite Drawer (Slide-over) -->
+      <div id="callConferenceDrawer" class="hidden absolute top-0 right-0 bottom-0 w-full sm:w-80 md:w-96 bg-slate-950/95 backdrop-blur-2xl border-l border-white/10 z-50 flex flex-col text-white shadow-2xl animate-in slide-in-from-right duration-200">
+        <!-- Drawer Header -->
+        <div class="p-4 border-b border-white/10 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-xl bg-purple-600/30 text-purple-300 flex items-center justify-center text-sm font-bold">
+              <i class="fa-solid fa-users"></i>
+            </div>
+            <div>
+              <h4 class="font-bold text-sm text-white">Conference Call</h4>
+              <p class="text-[11px] text-slate-400">Classmate & Teacher Participants</p>
+            </div>
+          </div>
+          <button type="button" id="callCloseConferenceDrawerBtn" class="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Copy Quick Invite Link / Code -->
+        <div class="p-3 bg-purple-950/30 border-b border-white/5 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <span class="text-[10px] text-purple-300 font-bold block uppercase tracking-wider">Conference Link</span>
+            <span id="callConferenceRoomCode" class="text-xs font-mono text-slate-300 truncate block">jhs-conf-basic9-comp</span>
+          </div>
+          <button type="button" id="callCopyLinkBtn" class="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0">
+            <i class="fa-regular fa-copy text-[11px]"></i>
+            <span id="callCopyLinkBtnText">Copy Link</span>
+          </button>
+        </div>
+
+        <!-- Search contacts input -->
+        <div class="p-3 border-b border-white/10">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+            <input
+              type="text"
+              id="callConferenceSearchInput"
+              placeholder="Search classmates or teacher..."
+              class="w-full bg-white/5 border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-hidden focus:border-purple-400"
+            />
+          </div>
+        </div>
+
+        <!-- Participants & Contacts List -->
+        <div id="callConferenceContactsList" class="flex-1 overflow-y-auto p-3 space-y-3">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- INCOMING CALL DIALOG CARD (VOICE OR VIDEO CALL)                  -->
+    <!-- ================================================================= -->
+    <div id="incomingCallModal" class="fixed inset-0 z-[70] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden animate-in zoom-in-95 duration-200">
+      <div class="relative max-w-sm w-full bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 text-center text-white shadow-2xl overflow-hidden">
+        <!-- Ambient animated glow -->
+        <div class="absolute -top-12 -left-12 w-40 h-40 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+        <div class="absolute -bottom-12 -right-12 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none animate-pulse"></div>
+
+        <div class="relative mb-5 flex justify-center">
+          <div class="relative">
+            <span class="absolute -inset-3 rounded-full bg-emerald-400/30 animate-ping"></span>
+            <img id="incomingCallerAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80" alt="Incoming Caller" class="relative w-24 h-24 rounded-full object-cover ring-4 ring-emerald-400 shadow-xl" />
+          </div>
+        </div>
+
+        <h3 id="incomingCallerName" class="text-xl font-bold text-white mb-1">Master Debrah</h3>
+        <p id="incomingCallTypeLabel" class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center justify-center gap-1.5">
+          <i id="incomingCallTypeIcon" class="fa-solid fa-phone text-xs animate-bounce"></i>
+          <span id="incomingCallTypeText">Incoming Voice Call</span>
+        </p>
+        <p class="text-xs text-slate-400 mb-6">Continuous Assessment & Study Guidance</p>
+
+        <!-- Actions: Accept / Decline -->
+        <div class="flex items-center justify-center gap-4">
+          <button
+            type="button"
+            id="declineIncomingCallBtn"
+            class="flex-1 py-3 px-4 rounded-2xl bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg cursor-pointer hover:scale-102 active:scale-98"
+          >
+            <i class="fa-solid fa-phone-slash"></i>
+            <span>Decline</span>
+          </button>
+          <button
+            type="button"
+            id="acceptIncomingCallBtn"
+            class="flex-1 py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg cursor-pointer hover:scale-102 active:scale-98 animate-pulse"
+          >
+            <i id="acceptIncomingCallIcon" class="fa-solid fa-phone"></i>
+            <span id="acceptIncomingCallText">Accept Call</span>
+          </button>
         </div>
       </div>
     </div>

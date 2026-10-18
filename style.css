@@ -361,3 +361,178 @@ code, pre, .font-mono {
 #openChatBtn.chat-open i {
   transform: rotate(90deg) scale(1.1);
 }
+
+/* WhatsApp-Grade Floating Actions, Reactions & Reply Quotes */
+.chat-msg-row {
+  position: relative;
+}
+
+.chat-msg-row:hover .chat-msg-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.chat-msg-actions {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chat-reaction-pill {
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.chat-reaction-pill:hover {
+  transform: scale(1.08);
+}
+
+.chat-reaction-popover {
+  animation: emojiPopAnim 0.18s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes emojiPopAnim {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.chat-message-highlight {
+  animation: chatMsgFlash 1.8s ease;
+}
+
+@keyframes chatMsgFlash {
+  0%, 100% {
+    background-color: transparent;
+  }
+  20%, 50% {
+    background-color: rgba(99, 102, 241, 0.2);
+    border-radius: 1rem;
+  }
+}
+
+.chat-reply-quote {
+  transition: background-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+.chat-reply-quote:hover {
+  opacity: 0.95;
+  transform: translateX(2px);
+}
+
+/* WhatsApp Reply Active Target Highlight in Chat Thread */
+.chat-reply-active-target > div {
+  box-shadow: 0 0 0 2.5px #6366f1, 0 8px 20px -3px rgba(99, 102, 241, 0.35) !important;
+  animation: replyTargetPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-radius: 1rem;
+}
+
+@keyframes replyTargetPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2.5px #6366f1, 0 8px 18px -3px rgba(99, 102, 241, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4.5px rgba(99, 102, 241, 0.3), 0 10px 24px -2px rgba(99, 102, 241, 0.2);
+  }
+}
+
+/* Chat Input Reply Active Mode Theming */
+#chatInputForm.chat-reply-active-mode {
+  background: linear-gradient(180deg, rgba(238, 242, 255, 0.65) 0%, #ffffff 100%);
+  border-top-color: rgba(99, 102, 241, 0.35);
+}
+#chatInputForm.chat-reply-active-mode #chatMessageInput {
+  border-color: rgba(99, 102, 241, 0.55);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+/* Video Call PiP & Transitions */
+#localVideoContainer {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+#localVideoContainer:hover {
+  transform: scale(1.03);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+}
+
+#videoCallModal.call-minimized {
+  inset: auto 1.5rem 1.5rem auto !important;
+  width: 320px !important;
+  height: 240px !important;
+  border-radius: 1.5rem !important;
+  overflow: hidden !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+#videoCallModal.call-minimized #localVideoContainer {
+  display: none !important;
+}
+#videoCallModal.call-minimized .px-6.py-6 {
+  padding: 0.5rem 1rem !important;
+  gap: 0.5rem !important;
+}
+#videoCallModal.call-minimized button {
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  font-size: 0.85rem !important;
+}
+
+/* Voice Call Sonic Pulse & Soundwave Animations */
+@keyframes sonicRingPulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+}
+
+.sonic-ring-1 {
+  animation: sonicRingPulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.sonic-ring-2 {
+  animation: sonicRingPulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite 1s;
+}
+.sonic-ring-3 {
+  animation: sonicRingPulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite 2s;
+}
+
+@keyframes voiceBarBounce {
+  0%, 100% {
+    height: 8px;
+    opacity: 0.4;
+  }
+  50% {
+    height: 36px;
+    opacity: 1;
+  }
+}
+
+.voice-wave-bar {
+  display: inline-block;
+  width: 4px;
+  border-radius: 9999px;
+  animation: voiceBarBounce 1.2s ease-in-out infinite;
+}
+.voice-wave-bar:nth-child(2) { animation-delay: 0.1s; }
+.voice-wave-bar:nth-child(3) { animation-delay: 0.25s; }
+.voice-wave-bar:nth-child(4) { animation-delay: 0.4s; }
+.voice-wave-bar:nth-child(5) { animation-delay: 0.15s; }
+.voice-wave-bar:nth-child(6) { animation-delay: 0.35s; }
+.voice-wave-bar:nth-child(7) { animation-delay: 0.5s; }
+.voice-wave-bar:nth-child(8) { animation-delay: 0.2s; }
+.voice-wave-bar:nth-child(9) { animation-delay: 0.45s; }
+.voice-wave-bar:nth-child(10) { animation-delay: 0.3s; }
+.voice-wave-bar:nth-child(11) { animation-delay: 0.12s; }
+.voice-wave-bar:nth-child(12) { animation-delay: 0.28s; }

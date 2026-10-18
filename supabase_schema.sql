@@ -145,6 +145,34 @@ ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS media_name TEXT;
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS audio_duration TEXT;
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS read BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS reply_to JSONB;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS reactions JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT false;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT false;
+ALTER TABLE public.chat_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- 7b. Call Recordings Table (Automatic Background Recording & Google Drive Cloud Backup)
+CREATE TABLE IF NOT EXISTS public.call_recordings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    call_id TEXT NOT NULL,
+    call_type TEXT NOT NULL CHECK (call_type IN ('voice', 'video')),
+    caller_id UUID REFERENCES public.learners(id) ON DELETE SET NULL,
+    caller_name TEXT NOT NULL,
+    recipient_id UUID REFERENCES public.learners(id) ON DELETE SET NULL,
+    recipient_name TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    file_size TEXT,
+    duration_seconds INTEGER DEFAULT 0,
+    target_email TEXT NOT NULL DEFAULT 'computing.b9@gmail.com',
+    drive_folder TEXT NOT NULL DEFAULT 'Ghana_JHS_Computing_Call_Recordings',
+    user_folder TEXT, -- e.g. 'Kwame Mensah (Basic 9A)'
+    user_folder_url TEXT,
+    drive_sync_status TEXT NOT NULL DEFAULT 'synced' CHECK (drive_sync_status IN ('synced', 'pending', 'saved_locally', 'error')),
+    drive_web_link TEXT,
+    recording_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
 
 -- 8. Enable Row-Level Security
 ALTER TABLE public.learners ENABLE ROW LEVEL SECURITY;
@@ -153,6 +181,7 @@ ALTER TABLE public.submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notification_reads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.call_recordings ENABLE ROW LEVEL SECURITY;
 
 -- 9. Row-Level Security Policies (Idempotent: Drop and Recreate)
 DROP POLICY IF EXISTS "Learners can view all profiles for chat" ON public.learners;
@@ -218,6 +247,17 @@ CREATE POLICY "Users can mark chats as read"
     ON public.chat_messages FOR UPDATE
     USING (auth.uid() = recipient_id OR recipient_id IS NULL OR EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
 
+DROP POLICY IF EXISTS "Users can view call recordings" ON public.call_recordings;
+DROP POLICY IF EXISTS "Admins can view call recordings" ON public.call_recordings;
+CREATE POLICY "Admins can view call recordings"
+    ON public.call_recordings FOR SELECT
+    USING (EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
+
+DROP POLICY IF EXISTS "Users can insert call recordings" ON public.call_recordings;
+CREATE POLICY "Users can insert call recordings"
+    ON public.call_recordings FOR INSERT
+    WITH CHECK (true);
+
 -- 10. Enable Supabase Realtime Replication (Idempotent)
 DO $$
 BEGIN
@@ -235,6 +275,12 @@ BEGIN
     END IF;
     IF NOT EXISTS (
         SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' AND tablename = 'call_recordings'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.call_recordings;
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
         WHERE pubname = 'supabase_realtime' AND tablename = 'learners'
     ) THEN
         ALTER PUBLICATION supabase_realtime ADD TABLE public.learners;
@@ -245,11 +291,11 @@ END $$;
 -- Note: Mathematics assessments commented out to preserve Computing intelligence integrity
 INSERT INTO public.assessments (title, subject, class_level, assessment_type, description, max_score, status, deadline, assessment_url)
 VALUES
-    ('Computing CAT 1 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test covering Input/Output Hardware, System Software, and Network Topologies.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8'),
-    ('Computing CAT 1 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test covering Computing Fundamentals for Basic 9B learners.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), 'https://forms.gle/TaDY59WHMsWYKGH7A'),
-    -- ('Mathematics CAT 1: Real Numbers', 'Mathematics', 'Basic 9', 'CAT', 'Fractions, Decimals, Ratios, and Percentage word problem evaluation.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '5 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8'),
-    ('Computing Practical Project 1: Visual Algorithm & Scratch', 'Computing', 'Basic 9', 'PROJECT_WORK', 'Hands-on project work documenting algorithm flowcharts, iterative loops, and Scratch sprite interactions.', 30.00, 'AVAILABLE', timezone('utc'::text, now() + interval '10 days'), 'https://forms.gle/TaDY59WHMsWYKGH7A'),
-    ('Computing End of Term Examination', 'Computing', 'Basic 9', 'EXAM', 'Comprehensive terminal examination evaluating Ghanaian NaCCA B7-B9 Computing curriculum competencies.', 50.00, 'UPCOMING', timezone('utc'::text, now() + interval '14 days'), 'https://forms.gle/GtgD8YFWaJiHM9eG8')
+    ('Computing CAT 1 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test covering Input/Output Hardware, System Software, and Network Topologies.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), NULL),
+    ('Computing CAT 1 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test covering Computing Fundamentals for Basic 9B learners.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), NULL),
+    -- ('Mathematics CAT 1: Real Numbers', 'Mathematics', 'Basic 9', 'CAT', 'Fractions, Decimals, Ratios, and Percentage word problem evaluation.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '5 days'), NULL),
+    ('Computing Practical Project 1: Visual Algorithm & Scratch', 'Computing', 'Basic 9', 'PROJECT_WORK', 'Hands-on project work documenting algorithm flowcharts, iterative loops, and Scratch sprite interactions.', 30.00, 'AVAILABLE', timezone('utc'::text, now() + interval '10 days'), NULL),
+    ('Computing End of Term Examination', 'Computing', 'Basic 9', 'EXAM', 'Comprehensive terminal examination evaluating Ghanaian NaCCA B7-B9 Computing curriculum competencies.', 50.00, 'UPCOMING', timezone('utc'::text, now() + interval '14 days'), NULL)
 ON CONFLICT DO NOTHING;
 
 -- 12. Initial Broadcast Notifications Seed

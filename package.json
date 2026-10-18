@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "@tanstack/query-core": "^5.104.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
