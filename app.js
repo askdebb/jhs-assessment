@@ -37,6 +37,17 @@ import {
   isMockDataCleared,
   restoreMockData,
   onAuthChange,
+  enrollLearner,
+  updateLearnerRecord,
+  deleteLearnerRecord,
+  recordLearnerScore,
+  batchEnrollLearners,
+  isLearnerOnline,
+  setUserOnlineStatus,
+  subscribeToAdminRealtime,
+  ADMIN_CONTACT,
+  subscribeToChatRealtime,
+  subscribeToLearnersRealtime,
 } from "./supabaseClient.js";
 
 import {
@@ -134,6 +145,16 @@ const state = {
   readNotificationIds: new Set(JSON.parse(localStorage.getItem("jhs_read_notifications") || "[]")),
   chatMessages: [],
   activeChatPartner: null,
+  adminRealtimeUnsub: null,
+  adminLivePollerInterval: null,
+  learnerPresenceInterval: null,
+  lastStatsSnapshot: {
+    online: -1,
+    registered: -1,
+    assessments: -1,
+    notifications: -1,
+    subs: -1,
+  },
 };
 
 // ------------------------------------------------------------------------------
@@ -226,8 +247,13 @@ const subjectSelect = document.getElementById("subjectSelect");
 
 // Admin Dashboard Elements
 const kpiOnlineCount = document.getElementById("kpiOnlineCount");
+const kpiOnlineSubtext = document.getElementById("kpiOnlineSubtext");
 const kpiTotalStudents = document.getElementById("kpiTotalStudents");
+const kpiRegisteredSubtext = document.getElementById("kpiRegisteredSubtext");
+const kpiActiveAsmtCount = document.getElementById("kpiActiveAsmtCount");
+const kpiActiveAsmtSubtext = document.getElementById("kpiActiveAsmtSubtext");
 const kpiNotifsSent = document.getElementById("kpiNotifsSent");
+const kpiNotifsSubtext = document.getElementById("kpiNotifsSubtext");
 const broadcastNotifForm = document.getElementById("broadcastNotifForm");
 const notifTitleInput = document.getElementById("notifTitleInput");
 const notifTargetClass = document.getElementById("notifTargetClass");
@@ -242,6 +268,65 @@ const adminExportExcelBtn = document.getElementById("adminExportExcelBtn");
 const adminExportExcelBtnText = document.getElementById("adminExportExcelBtnText");
 const adminTopExportExcelBtn = document.getElementById("adminTopExportExcelBtn");
 const adminClearMockBtn = document.getElementById("adminClearMockBtn");
+const adminEnrollStudentBtn = document.getElementById("adminEnrollStudentBtn");
+const adminRecordMarksBtn = document.getElementById("adminRecordMarksBtn");
+
+// Enroll Student Modal Elements
+const enrollStudentModal = document.getElementById("enrollStudentModal");
+const closeEnrollModalBtn = document.getElementById("closeEnrollModalBtn");
+const cancelEnrollBtn = document.getElementById("cancelEnrollBtn");
+const enrollStudentForm = document.getElementById("enrollStudentForm");
+const enrollFullName = document.getElementById("enrollFullName");
+const enrollRole = document.getElementById("enrollRole");
+const enrollClassLevel = document.getElementById("enrollClassLevel");
+const enrollGender = document.getElementById("enrollGender");
+const enrollStudentId = document.getElementById("enrollStudentId");
+const enrollDob = document.getElementById("enrollDob");
+const enrollEmail = document.getElementById("enrollEmail");
+const quickSeedRosterBtn = document.getElementById("quickSeedRosterBtn");
+
+// Edit User Profile Modal Elements (Admin Full CRUD)
+const editLearnerModal = document.getElementById("editLearnerModal");
+const closeEditLearnerModalBtn = document.getElementById("closeEditLearnerModalBtn");
+const cancelEditLearnerBtn = document.getElementById("cancelEditLearnerBtn");
+const editLearnerForm = document.getElementById("editLearnerForm");
+const editLearnerId = document.getElementById("editLearnerId");
+const editLearnerFullName = document.getElementById("editLearnerFullName");
+const editLearnerRole = document.getElementById("editLearnerRole");
+const editLearnerClassLevel = document.getElementById("editLearnerClassLevel");
+const editLearnerGender = document.getElementById("editLearnerGender");
+const editLearnerStudentId = document.getElementById("editLearnerStudentId");
+const editLearnerDob = document.getElementById("editLearnerDob");
+const editLearnerIsOnline = document.getElementById("editLearnerIsOnline");
+const editLearnerEmail = document.getElementById("editLearnerEmail");
+const submitEditLearnerBtn = document.getElementById("submitEditLearnerBtn");
+const adminDeleteUserFromModalBtn = document.getElementById("adminDeleteUserFromModalBtn");
+
+// Active Learners Online Modal Elements
+const kpiCardOnline = document.getElementById("kpiCardOnline");
+const activeLearnersModal = document.getElementById("activeLearnersModal");
+const closeActiveLearnersModalBtn = document.getElementById("closeActiveLearnersModalBtn");
+const closeActiveLearnersModalBtn2 = document.getElementById("closeActiveLearnersModalBtn2");
+const activeLearnersListView = document.getElementById("activeLearnersListView");
+const activeLearnersListContainer = document.getElementById("activeLearnersListContainer");
+const activeLearnersSearchInput = document.getElementById("activeLearnersSearchInput");
+const activeLearnersClassFilter = document.getElementById("activeLearnersClassFilter");
+const activeLearnersModalCountText = document.getElementById("activeLearnersModalCountText");
+const activeLearnersModalCountBadge = document.getElementById("activeLearnersModalCountBadge");
+const activeLearnerDetailView = document.getElementById("activeLearnerDetailView");
+const activeLearnerDetailContent = document.getElementById("activeLearnerDetailContent");
+const backToActiveListBtn = document.getElementById("backToActiveListBtn");
+
+// Record Score Modal Elements
+const recordScoreModal = document.getElementById("recordScoreModal");
+const closeRecordScoreModalBtn = document.getElementById("closeRecordScoreModalBtn");
+const cancelRecordScoreBtn = document.getElementById("cancelRecordScoreBtn");
+const recordScoreForm = document.getElementById("recordScoreForm");
+const recordScoreLearnerSelect = document.getElementById("recordScoreLearnerSelect");
+const recordScoreAsmtSelect = document.getElementById("recordScoreAsmtSelect");
+const recordScoreVal = document.getElementById("recordScoreVal");
+const recordScoreMaxVal = document.getElementById("recordScoreMaxVal");
+const recordScoreRemarks = document.getElementById("recordScoreRemarks");
 
 // Quiz Runner Elements
 const quizRunnerModal = document.getElementById("quizRunnerModal");
@@ -405,6 +490,11 @@ const chatAttachBtn = document.getElementById("chatAttachBtn");
 const chatVoiceRecordBtn = document.getElementById("chatVoiceRecordBtn");
 const chatFileInput = document.getElementById("chatFileInput");
 const chatSendBtn = document.getElementById("chatSendBtn");
+const chatSwitchContactBtn = document.getElementById("chatSwitchContactBtn");
+const chatContactsDrawer = document.getElementById("chatContactsDrawer");
+const chatCloseContactsBtn = document.getElementById("chatCloseContactsBtn");
+const chatContactSearchInput = document.getElementById("chatContactSearchInput");
+const chatContactsListContainer = document.getElementById("chatContactsListContainer");
 
 // Lightbox Modal Elements
 const mediaLightboxModal = document.getElementById("mediaLightboxModal");
@@ -456,11 +546,24 @@ const bannerDeadline = document.getElementById("bannerDeadline");
 // Initialization & Application Lifecycle
 // ------------------------------------------------------------------------------
 async function startApplication() {
+  // Strictly purge any legacy cached assessments that contain Creative Arts or Math
+  try {
+    const cachedAsmts = localStorage.getItem("jhs_local_assessments");
+    if (cachedAsmts && (cachedAsmts.includes("Creative") || cachedAsmts.includes("Art") || cachedAsmts.includes("Math"))) {
+      localStorage.removeItem("jhs_local_assessments");
+    }
+  } catch (e) {}
+
   initAvatarPresets();
   initQuotes();
   initCountdownTimer();
   attachEventListeners();
   window.addEventListener("popstate", () => handleRoute());
+  window.addEventListener("beforeunload", () => {
+    if (state.user?.id && !state.isAdmin) {
+      setUserOnlineStatus(state.user.id, false);
+    }
+  });
 
   // Listen for Supabase realtime OAuth events (e.g. login redirect completion)
   onAuthChange(async (event, session) => {
@@ -478,6 +581,12 @@ async function startApplication() {
 
   await checkAuthSession();
 }
+
+// Early global exports for inline HTML event handlers
+window.openActiveLearnersModal = openActiveLearnersModal;
+window.closeActiveLearnersModal = closeActiveLearnersModal;
+window.showActiveLearnerDetail = showActiveLearnerDetail;
+window.renderActiveLearnersList = renderActiveLearnersList;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => startApplication());
@@ -521,40 +630,50 @@ async function checkAuthSession() {
       state.user = user;
       profile = await fetchLearnerProfile(user.id);
 
-      // Default profile if newly authenticated user has no profile yet
-      if (!profile) {
-        profile = {
-          id: user.id,
-          student_id: generateStudentId("Basic 9A", 1),
-          full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Student Learner",
-          email: user.email,
-          gender: "Male",
-          date_of_birth: "2011-10-14",
-          class_level: "Basic 9A",
-          role: "learner",
-          avatar_url: user.user_metadata?.avatar_url || AVATAR_PRESETS[0],
-          onboarding_completed: true,
-        };
-      }
-
       // Determine Admin Status via Email or Profile Role
       state.isAdmin = isUserAdmin(user, profile);
 
-      // If user is designated Admin, ensure profile role is set to admin
-      if (state.isAdmin && (!profile || profile.role !== "admin")) {
-        profile = {
-          id: user.id,
-          full_name: profile?.full_name || user.user_metadata?.full_name || "School Administrator",
-          email: user.email,
-          gender: profile?.gender || "Male",
-          class_level: profile?.class_level || "Basic 9A",
-          role: "admin",
-          avatar_url: profile?.avatar_url || TEACHER_AVATAR,
-          onboarding_completed: true,
-        };
-      }
+      if (state.isAdmin) {
+        // If user is designated Admin, ensure profile role is set to admin
+        if (!profile || profile.role !== "admin") {
+          profile = {
+            id: user.id,
+            full_name: profile?.full_name || user.user_metadata?.full_name || "School Administrator",
+            email: user.email,
+            gender: profile?.gender || "Male",
+            class_level: profile?.class_level || "Basic 9A",
+            role: "admin",
+            avatar_url: profile?.avatar_url || TEACHER_AVATAR,
+            onboarding_completed: true,
+          };
+        }
+        state.profile = profile;
+      } else {
+        // NON-ADMIN LEARNER:
+        // Strictly verify that learner has registered their official details
+        const isRegistered = Boolean(profile && profile.onboarding_completed && profile.date_of_birth && profile.class_level);
+        if (!isRegistered) {
+          profile = profile || {
+            id: user.id,
+            full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "",
+            email: user.email,
+            gender: "Male",
+            date_of_birth: "",
+            class_level: "Basic 9A",
+            role: "learner",
+            avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || AVATAR_PRESETS[0],
+            onboarding_completed: false,
+          };
+          state.profile = profile;
 
-      state.profile = profile;
+          // Immediately trigger registration form for learner
+          setTimeout(() => {
+            showOnboardingModal(user, profile);
+          }, 200);
+        } else {
+          state.profile = profile;
+        }
+      }
     } else {
       state.user = null;
       state.profile = null;
@@ -761,6 +880,17 @@ function startAdminDemoMode() {
 }
 
 async function handleSignOut() {
+  if (state.user?.id) {
+    try {
+      await setUserOnlineStatus(state.user.id, false);
+    } catch (e) {}
+  }
+  if (state.learnerPresenceInterval) {
+    clearInterval(state.learnerPresenceInterval);
+    state.learnerPresenceInterval = null;
+  }
+  stopAdminRealtimeEngine();
+
   await signOutUser();
   state.user = null;
   state.profile = null;
@@ -802,19 +932,23 @@ function updateHeaderNav() {
   `;
   document.getElementById("headerSignOutBtn")?.addEventListener("click", handleSignOut);
 
-  // Manage Admin Switcher Visibility & Exact Step 10 Text Alignment
+  // Manage Admin Switcher Visibility: Strictly Visible ONLY for Authorized Admin
   if (adminToggleContainer && viewModeToggleBtn) {
-    adminToggleContainer.classList.remove("hidden");
-    if (state.activeView === "admin") {
-      if (viewModeLabel) viewModeLabel.textContent = "Learner Portal";
-      viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
-      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600 text-xs"></i> <span>Learner Portal</span>`;
-      viewModeToggleBtn.title = "Switch to Learner Portal";
+    if (state.isAdmin) {
+      adminToggleContainer.classList.remove("hidden");
+      if (state.activeView === "admin") {
+        if (viewModeLabel) viewModeLabel.textContent = "Learner Portal";
+        viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
+        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600 text-xs"></i> <span>Learner Portal</span>`;
+        viewModeToggleBtn.title = "Switch to Learner Portal";
+      } else {
+        if (viewModeLabel) viewModeLabel.textContent = "Admin Console";
+        viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
+        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400 text-xs"></i> <span>Admin Console</span>`;
+        viewModeToggleBtn.title = "Switch to Admin Console";
+      }
     } else {
-      if (viewModeLabel) viewModeLabel.textContent = "Admin Console";
-      viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
-      viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400 text-xs"></i> <span>Admin Console</span>`;
-      viewModeToggleBtn.title = "Switch to Admin Console";
+      adminToggleContainer.classList.add("hidden");
     }
   }
 }
@@ -1381,6 +1515,11 @@ function renderAssessmentCards() {
 
   // Filter with strict lane / track separation between Basic 9A and Basic 9B
   let filtered = assessments.filter((asmt) => {
+    // Strictly Pure Computing only
+    if (asmt.subject && asmt.subject !== "Computing") return false;
+    const titleLower = (asmt.title || "").toLowerCase();
+    if (titleLower.includes("creative") || titleLower.includes("art") || titleLower.includes("math")) return false;
+
     // 9A and 9B are in their separate lane or track and shouldn't be mixed!
     if (asmt.class_level === "Basic 9A" && learnerClass !== "Basic 9A") return false;
     if (asmt.class_level === "Basic 9B" && learnerClass !== "Basic 9B") return false;
@@ -1457,7 +1596,7 @@ function renderAssessmentCards() {
       `;
     }
 
-    // Action Button (Compact)
+    // Action Button (with direct Google Forms CAT launch if applicable)
     let actionBtn = "";
     if (hasScore) {
       actionBtn = `
@@ -1472,15 +1611,28 @@ function renderAssessmentCards() {
         </button>
       `;
     } else if (isAvailable) {
-      actionBtn = `
-        <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
-          <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
-        </button>
-      `;
+      if (asmt.assessment_url) {
+        actionBtn = `
+          <div class="flex flex-col gap-1.5 w-full">
+            <a href="${asmt.assessment_url}" target="_blank" rel="noopener noreferrer" class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i> Take on Google Form
+            </a>
+            <button class="start-quiz-btn w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
+              <i class="fa-solid fa-laptop-code text-indigo-600 text-xs"></i> Take in Portal
+            </button>
+          </div>
+        `;
+      } else {
+        actionBtn = `
+          <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
+            <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
+          </button>
+        `;
+      }
     } else {
       actionBtn = `
         <button disabled class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed flex items-center justify-center gap-1.5">
-          <i class="fa-solid fa-lock text-slate-400 text-xs"></i> Locked by Administrator
+          <i class="fa-solid fa-lock text-slate-400 text-xs"></i> Closed by Administrator
         </button>
       `;
     }
@@ -2589,9 +2741,21 @@ async function handleRoute() {
     adminDashboardSection?.classList.remove("hidden");
     floatingChatContainer?.classList.remove("hidden");
 
-    if (!state.assessments || state.assessments.length === 0) {
-      state.assessments = await fetchAssessments();
-    }
+    // Fetch latest live data from database immediately upon entering admin route
+    const [asmts, learners, subs, notifs] = await Promise.all([
+      fetchAssessments(),
+      fetchAllLearners(),
+      fetchAllSubmissions(),
+      fetchNotifications(),
+    ]);
+    state.assessments = asmts || [];
+    state.allLearners = learners || [];
+    state.submissions = subs || [];
+    state.notifications = notifs || [];
+
+    // Start Realtime WebSockets & Adaptive Hot-Reload Polling Engine for Admin
+    startAdminRealtimeEngine();
+    startUserPresenceHeartbeat();
 
     // Resolve subviews
     if (path.includes("/admin/questions")) {
@@ -2609,6 +2773,7 @@ async function handleRoute() {
   }
 
   // Learner Surface (/learner or / or other)
+  stopAdminRealtimeEngine();
   state.activeView = "learner";
   localStorage.setItem("jhs_view_mode", "learner");
 
@@ -2632,6 +2797,10 @@ async function handleRoute() {
 
   await renderDashboard();
   updateHeaderNav();
+  await initChat();
+
+  // Start learner presence pulse so admin sees learner online in real time
+  startLearnerPresenceHeartbeat();
 }
 
 function showAdminSubview(subviewKey) {
@@ -2706,14 +2875,205 @@ async function renderAdminDashboard() {
   navigateTo("/admin");
 }
 
-async function renderAdminOverviewStats() {
-  if (!state.allLearners || state.allLearners.length === 0) {
-    state.allLearners = await fetchAllLearners();
+function triggerCardHotReload(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  card.classList.add("ring-2", "ring-emerald-500", "scale-[1.02]", "bg-emerald-50/20");
+  setTimeout(() => {
+    card.classList.remove("ring-2", "ring-emerald-500", "scale-[1.02]", "bg-emerald-50/20");
+  }, 1200);
+}
+
+function showHotReloadIndicator() {
+  const pulseEl = document.getElementById("adminHotReloadPulse");
+  const timeEl = document.getElementById("adminLastSyncTime");
+  if (pulseEl) {
+    pulseEl.classList.remove("hidden");
+    setTimeout(() => pulseEl.classList.add("hidden"), 2000);
   }
-  const onlineCount = state.allLearners.filter((l) => l.is_online).length;
-  if (kpiOnlineCount) kpiOnlineCount.textContent = onlineCount;
-  if (kpiTotalStudents) kpiTotalStudents.textContent = state.allLearners.length;
-  if (kpiNotifsSent) kpiNotifsSent.textContent = state.notifications.length;
+  if (timeEl) {
+    timeEl.textContent = `Synced: ${new Date().toLocaleTimeString()}`;
+  }
+}
+
+async function performAdminHotReloadCheck() {
+  try {
+    const [latestLearners, latestAsmts, latestNotes, latestSubs] = await Promise.all([
+      fetchAllLearners(),
+      fetchAssessments(),
+      fetchNotifications(),
+      fetchAllSubmissions(),
+    ]);
+
+    const prev = state.lastStatsSnapshot || { online: -1, registered: -1, assessments: -1, notifications: -1, subs: -1 };
+
+    const students = (latestLearners || []).filter(
+      (l) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+    );
+
+    const onlineCount = students.filter(isLearnerOnline).length;
+
+    const registeredCount = students.length;
+    const availableAsmtsCount = (latestAsmts || []).filter((a) => a.status === "AVAILABLE").length;
+    const notifsCount = (latestNotes || []).length;
+    const subsCount = (latestSubs || []).length;
+
+    const hasChanged =
+      onlineCount !== prev.online ||
+      registeredCount !== prev.registered ||
+      availableAsmtsCount !== prev.assessments ||
+      notifsCount !== prev.notifications ||
+      subsCount !== prev.subs;
+
+    if (hasChanged) {
+      if (prev.online !== -1) {
+        if (onlineCount !== prev.online) triggerCardHotReload("kpiCardOnline");
+        if (registeredCount !== prev.registered) triggerCardHotReload("kpiCardRegistered");
+        if (availableAsmtsCount !== prev.assessments) triggerCardHotReload("kpiCardAssessments");
+        if (notifsCount !== prev.notifications) triggerCardHotReload("kpiCardNotifications");
+      }
+
+      state.allLearners = latestLearners;
+      state.assessments = latestAsmts;
+      state.notifications = latestNotes;
+      state.submissions = latestSubs;
+      state.lastStatsSnapshot = {
+        online: onlineCount,
+        registered: registeredCount,
+        assessments: availableAsmtsCount,
+        notifications: notifsCount,
+        subs: subsCount,
+      };
+
+      await renderAdminOverviewStats(true);
+      renderAdminLearnersTable();
+      if (activeLearnersModal && !activeLearnersModal.classList.contains("hidden") && !activeLearnersListView?.classList.contains("hidden")) {
+        renderActiveLearnersList();
+      }
+      showHotReloadIndicator();
+    }
+  } catch (err) {
+    console.warn("Hot reload check error:", err);
+  }
+}
+
+function startAdminRealtimeEngine() {
+  if (state.adminRealtimeUnsub) {
+    try { state.adminRealtimeUnsub(); } catch (e) {}
+    state.adminRealtimeUnsub = null;
+  }
+
+  state.adminRealtimeUnsub = subscribeToAdminRealtime(async (event) => {
+    console.log("Supabase Realtime event on admin:", event);
+    await performAdminHotReloadCheck();
+  });
+
+  if (state.adminLivePollerInterval) {
+    clearInterval(state.adminLivePollerInterval);
+  }
+  state.adminLivePollerInterval = setInterval(async () => {
+    if (state.activeView === "admin") {
+      await performAdminHotReloadCheck();
+    }
+  }, 3500);
+}
+
+function stopAdminRealtimeEngine() {
+  if (state.adminRealtimeUnsub) {
+    try { state.adminRealtimeUnsub(); } catch (e) {}
+    state.adminRealtimeUnsub = null;
+  }
+  if (state.adminLivePollerInterval) {
+    clearInterval(state.adminLivePollerInterval);
+    state.adminLivePollerInterval = null;
+  }
+}
+
+function startUserPresenceHeartbeat() {
+  if (state.learnerPresenceInterval) {
+    clearInterval(state.learnerPresenceInterval);
+    state.learnerPresenceInterval = null;
+  }
+
+  const activeId = (state.isAdmin && state.activeView === "admin")
+    ? ADMIN_CONTACT.id
+    : (state.profile?.id || state.user?.id);
+
+  if (!activeId || String(activeId).startsWith("demo-")) return;
+
+  setUserOnlineStatus(activeId, true);
+
+  state.learnerPresenceInterval = setInterval(async () => {
+    const currentId = (state.isAdmin && state.activeView === "admin")
+      ? ADMIN_CONTACT.id
+      : (state.profile?.id || state.user?.id);
+
+    if (currentId && !String(currentId).startsWith("demo-")) {
+      await setUserOnlineStatus(currentId, true);
+    }
+  }, 20000);
+}
+
+const startLearnerPresenceHeartbeat = startUserPresenceHeartbeat;
+
+async function renderAdminOverviewStats(isHotReload = false) {
+  if (!isHotReload) {
+    state.allLearners = await fetchAllLearners();
+    state.assessments = await fetchAssessments();
+    state.notifications = await fetchNotifications();
+  }
+
+  // Filter students (exclude primary admin account)
+  const students = (state.allLearners || []).filter(
+    (l) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+  );
+
+  // 1. Online Learners KPI (active heartbeat in last 90 seconds)
+  const onlineCount = students.filter(isLearnerOnline).length;
+
+  if (kpiOnlineCount) kpiOnlineCount.textContent = String(onlineCount);
+  if (kpiOnlineSubtext) {
+    kpiOnlineSubtext.innerHTML = `<i class="fa-solid fa-circle-check text-[10px]"></i> ${onlineCount} learner(s) active now`;
+  }
+
+  // 2. Registered Learners KPI
+  if (kpiTotalStudents) kpiTotalStudents.textContent = String(students.length);
+  const count9A = students.filter((l) => (l.class_level || "").includes("9A") || (l.class_level || "").includes("3A")).length;
+  const count9B = students.filter((l) => (l.class_level || "").includes("9B") || (l.class_level || "").includes("3B")).length;
+  const otherCount = students.length - count9A - count9B;
+  if (kpiRegisteredSubtext) {
+    kpiRegisteredSubtext.textContent = `${count9A} in Basic 9A • ${count9B} in Basic 9B${otherCount > 0 ? ` • ${otherCount} other` : ""}`;
+  }
+
+  // 3. Active Computing Assessments KPI
+  const availableAsmts = (state.assessments || []).filter((a) => a.status === "AVAILABLE");
+  if (kpiActiveAsmtCount) kpiActiveAsmtCount.textContent = String(availableAsmts.length);
+  const cats = availableAsmts.filter((a) => a.assessment_type === "CAT").length;
+  const projects = availableAsmts.filter((a) => a.assessment_type === "PROJECT_WORK").length;
+  const exams = availableAsmts.filter((a) => a.assessment_type === "EXAM").length;
+  if (kpiActiveAsmtSubtext) {
+    kpiActiveAsmtSubtext.textContent = `${cats} CATs • ${projects} Projects • ${exams} Exam`;
+  }
+
+  // 4. Notifications KPI
+  const notifCount = (state.notifications || []).length;
+  if (kpiNotifsSent) kpiNotifsSent.textContent = String(notifCount);
+  if (kpiNotifsSubtext) {
+    kpiNotifsSubtext.textContent = `${notifCount} broadcast announcement(s)`;
+  }
+
+  state.lastStatsSnapshot = {
+    online: onlineCount,
+    registered: students.length,
+    assessments: availableAsmts.length,
+    notifications: notifCount,
+    subs: (state.submissions || []).length,
+  };
+
+  const timeEl = document.getElementById("adminLastSyncTime");
+  if (timeEl) {
+    timeEl.textContent = `Synced: ${new Date().toLocaleTimeString()}`;
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -3495,7 +3855,8 @@ function renderAdminLearnersTable() {
   const filterVal = adminClassFilter?.value || "ALL";
 
   let filtered = state.allLearners.filter((l) => {
-    if (filterVal === "ONLINE") return l.is_online;
+    if (filterVal === "ONLINE") return isLearnerOnline(l);
+    if (filterVal === "STAFF") return (l.role === "teacher" || l.role === "admin" || (l.email && l.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()));
     if (filterVal !== "ALL") return l.class_level === filterVal;
     return true;
   });
@@ -3513,7 +3874,7 @@ function renderAdminLearnersTable() {
   }
 
   adminLearnersTableBody.innerHTML = filtered.map((learner) => {
-    const isOnline = learner.is_online;
+    const isOnline = isLearnerOnline(learner);
     const presenceBadge = isOnline
       ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online Now
@@ -3528,6 +3889,12 @@ function renderAdminLearnersTable() {
       ? `<span class="font-bold text-slate-800">${subCount} Task(s) Submitted</span> <span class="text-xs text-slate-400 block">Latest: ${lastScore}/20 marks</span>`
       : `<span class="text-slate-400 italic">No submissions yet</span>`;
 
+    const roleBadge = learner.role === "admin"
+      ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
+      : (learner.role === "teacher"
+          ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wider">Teacher</span>`
+          : "");
+
     return `
       <tr class="hover:bg-slate-50/80 transition-colors">
         <td class="py-3.5 px-4">
@@ -3539,6 +3906,7 @@ function renderAdminLearnersTable() {
             <div>
               <div class="font-bold text-slate-900 flex items-center gap-2">
                 <span>${escapeHtml(learner.full_name)}</span>
+                ${roleBadge}
                 ${isBirthdayToday(learner.date_of_birth) ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 border border-pink-200 animate-pulse"><i class="fa-solid fa-cake-candles text-pink-500"></i> Birthday Today!</span>` : ""}
               </div>
               <div class="flex items-center gap-2 mt-0.5">
@@ -3557,17 +3925,60 @@ function renderAdminLearnersTable() {
         <td class="py-3.5 px-4">${presenceBadge}</td>
         <td class="py-3.5 px-4">${academicPill}</td>
         <td class="py-3.5 px-4 text-right">
-          <button
-            class="admin-chat-student-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
-            data-student-id="${learner.id}"
-          >
-            <i class="fa-solid fa-comments"></i>
-            <span>Chat</span>
-          </button>
+          <div class="flex items-center justify-end gap-1.5">
+            <button
+              class="admin-record-student-mark-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
+              data-student-id="${learner.id}"
+              title="Record Assessment Mark for this student"
+            >
+              <i class="fa-solid fa-pen-to-square"></i>
+              <span>Mark</span>
+            </button>
+            <button
+              class="admin-edit-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+              data-student-id="${learner.id}"
+              title="Edit this user's details, role, class level, or DOB"
+            >
+              <i class="fa-solid fa-user-pen"></i>
+              <span>Edit</span>
+            </button>
+            <button
+              class="admin-chat-student-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+              data-student-id="${learner.id}"
+              title="Start 1-on-1 chat"
+            >
+              <i class="fa-solid fa-comments"></i>
+              <span>Chat</span>
+            </button>
+            <button
+              class="admin-delete-student-btn inline-flex items-center justify-center w-7 h-7 rounded-xl text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+              data-student-id="${learner.id}"
+              data-student-name="${escapeHtml(learner.full_name)}"
+              title="Remove user record from database"
+            >
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join("");
+
+  // Attach Mark button handlers
+  document.querySelectorAll(".admin-record-student-mark-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const studentId = btn.getAttribute("data-student-id");
+      openRecordScoreModal(studentId);
+    });
+  });
+
+  // Attach Edit button handlers
+  document.querySelectorAll(".admin-edit-student-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const studentId = btn.getAttribute("data-student-id");
+      if (studentId) openEditLearnerModal(studentId);
+    });
+  });
 
   // Attach 1-on-1 Chat button handlers
   document.querySelectorAll(".admin-chat-student-btn").forEach((btn) => {
@@ -3579,6 +3990,754 @@ function renderAdminLearnersTable() {
       }
     });
   });
+
+  // Attach Delete button handlers
+  document.querySelectorAll(".admin-delete-student-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const studentId = btn.getAttribute("data-student-id");
+      const name = btn.getAttribute("data-student-name") || "this user";
+      handleDeleteLearner(studentId, name);
+    });
+  });
+}
+
+// ------------------------------------------------------------------------------
+// Enroll Real Student & User Handlers
+// ------------------------------------------------------------------------------
+async function openEnrollStudentModal() {
+  if (!enrollStudentModal) return;
+  enrollStudentForm?.reset();
+
+  const currentClass = enrollClassLevel?.value || "Basic 9A";
+  const nextSeq = await getNextStudentSequence(currentClass);
+  if (enrollStudentId) {
+    enrollStudentId.value = generateStudentId(currentClass, nextSeq);
+  }
+
+  enrollStudentModal.classList.remove("hidden");
+  enrollFullName?.focus();
+}
+
+async function handleEnrollStudentSubmit(e) {
+  e.preventDefault();
+  const name = enrollFullName?.value?.trim();
+  const roleVal = enrollRole?.value || "learner";
+  const classLvl = enrollClassLevel?.value || "Basic 9A";
+  const gender = enrollGender?.value || "Male";
+  const studentIdVal = enrollStudentId?.value?.trim() || generateStudentId(classLvl, await getNextStudentSequence(classLvl));
+  const dob = enrollDob?.value || null;
+  const emailVal = enrollEmail?.value?.trim() || null;
+
+  if (!name) {
+    alert("Please enter the user's full name.");
+    return;
+  }
+
+  try {
+    const submitBtn = document.getElementById("submitEnrollBtn");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Creating User...`;
+    }
+
+    await enrollLearner({
+      full_name: name,
+      role: roleVal,
+      student_id: studentIdVal,
+      class_level: classLvl,
+      gender: gender,
+      date_of_birth: dob,
+      email: emailVal,
+    });
+
+    enrollStudentModal?.classList.add("hidden");
+    state.allLearners = await fetchAllLearners();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+    alert(`User "${name}" (${roleVal}) successfully created!`);
+  } catch (err) {
+    console.error("Enrollment error:", err);
+    alert("Failed to create user: " + (err.message || "Unknown error"));
+  } finally {
+    const submitBtn = document.getElementById("submitEnrollBtn");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-user-plus"></i> Create User`;
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Edit User Profile (Admin Full CRUD)
+// ------------------------------------------------------------------------------
+function openEditLearnerModal(learnerId) {
+  if (!editLearnerModal) return;
+  const target = (state.allLearners || []).find((l) => l.id === learnerId);
+  if (!target) {
+    alert("User record could not be found.");
+    return;
+  }
+
+  editLearnerForm?.reset();
+  if (editLearnerId) editLearnerId.value = target.id;
+  if (editLearnerFullName) editLearnerFullName.value = target.full_name || "";
+  if (editLearnerRole) editLearnerRole.value = target.role || "learner";
+  if (editLearnerClassLevel) editLearnerClassLevel.value = target.class_level || "Basic 9A";
+  if (editLearnerGender) editLearnerGender.value = target.gender || "Male";
+  if (editLearnerStudentId) editLearnerStudentId.value = target.student_id || "";
+  if (editLearnerDob) editLearnerDob.value = target.date_of_birth ? target.date_of_birth.substring(0, 10) : "";
+  if (editLearnerIsOnline) editLearnerIsOnline.value = target.is_online ? "true" : "false";
+  if (editLearnerEmail) editLearnerEmail.value = target.email || "";
+
+  editLearnerModal.classList.remove("hidden");
+  editLearnerFullName?.focus();
+}
+
+async function handleEditLearnerSubmit(e) {
+  e.preventDefault();
+  const userId = editLearnerId?.value?.trim();
+  if (!userId) return;
+
+  const fullName = editLearnerFullName?.value?.trim();
+  const role = editLearnerRole?.value || "learner";
+  const classLevel = editLearnerClassLevel?.value || "Basic 9A";
+  const gender = editLearnerGender?.value || "Male";
+  const studentIdVal = editLearnerStudentId?.value?.trim() || null;
+  const dob = editLearnerDob?.value || null;
+  const isOnline = editLearnerIsOnline?.value === "true";
+  const emailVal = editLearnerEmail?.value?.trim() || null;
+
+  if (!fullName) {
+    alert("Please enter the user's full name.");
+    return;
+  }
+
+  const btn = submitEditLearnerBtn;
+  const origBtnText = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Saving...`;
+  }
+
+  try {
+    const updates = {
+      full_name: fullName,
+      role: role,
+      class_level: classLevel,
+      gender: gender,
+      student_id: studentIdVal,
+      is_online: isOnline,
+      email: emailVal,
+    };
+    if (dob) {
+      updates.date_of_birth = dob;
+    }
+
+    await updateLearnerRecord(userId, updates);
+
+    editLearnerModal?.classList.add("hidden");
+    state.allLearners = await fetchAllLearners();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+    alert(`User "${fullName}" successfully updated!`);
+  } catch (err) {
+    console.error("User update error:", err);
+    alert("Failed to update user: " + (err.message || "Unknown error"));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origBtnText;
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Delete User (Admin Full CRUD)
+// ------------------------------------------------------------------------------
+async function handleDeleteLearner(learnerId, learnerName) {
+  if (!learnerId) return;
+
+  // Protect designated primary admin from deletion
+  const target = (state.allLearners || []).find((l) => l.id === learnerId);
+  if (target && target.email && target.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()) {
+    alert("The primary administrator account cannot be deleted.");
+    return;
+  }
+
+  const confirmed = confirm(
+    `PERMANENTLY DELETE USER:\n\nAre you sure you want to permanently delete "${learnerName}"?\n\nThis will remove their profile, assessment submissions, and broadsheet records from the live Supabase database.\n\nThis action cannot be undone. Proceed?`
+  );
+  if (!confirmed) return;
+
+  try {
+    await deleteLearnerRecord(learnerId);
+
+    // Hide edit modal if open
+    editLearnerModal?.classList.add("hidden");
+
+    // Refresh directory
+    state.allLearners = await fetchAllLearners();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+    alert(`User "${learnerName}" was permanently deleted from the database.`);
+  } catch (err) {
+    console.error("Delete user error:", err);
+    alert("Failed to delete user: " + (err.message || "Unknown error"));
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Active Learners Online: Roster List & Detail Drilldown Modal
+// ------------------------------------------------------------------------------
+async function openActiveLearnersModal() {
+  const modalEl = activeLearnersModal || document.getElementById("activeLearnersModal");
+  if (!modalEl) return;
+
+  // Make modal visible immediately
+  modalEl.style.display = "flex";
+  modalEl.classList.remove("hidden");
+
+  // Reset to list view
+  const detailView = activeLearnerDetailView || document.getElementById("activeLearnerDetailView");
+  const listView = activeLearnersListView || document.getElementById("activeLearnersListView");
+  const searchInput = activeLearnersSearchInput || document.getElementById("activeLearnersSearchInput");
+  const classFilter = activeLearnersClassFilter || document.getElementById("activeLearnersClassFilter");
+
+  if (detailView) {
+    detailView.style.display = "none";
+    detailView.classList.add("hidden");
+  }
+  if (listView) {
+    listView.style.display = "block";
+    listView.classList.remove("hidden");
+  }
+  if (searchInput) searchInput.value = "";
+  if (classFilter) classFilter.value = "ALL";
+
+  try {
+    if (!state.allLearners || state.allLearners.length === 0) {
+      state.allLearners = await fetchAllLearners();
+    }
+  } catch (e) {
+    console.warn("Could not fetch learners on modal open:", e);
+  }
+
+  try {
+    renderActiveLearnersList();
+  } catch (e) {
+    console.error("renderActiveLearnersList error:", e);
+  }
+}
+
+function closeActiveLearnersModal() {
+  const modalEl = activeLearnersModal || document.getElementById("activeLearnersModal");
+  if (modalEl) {
+    modalEl.style.display = "none";
+    modalEl.classList.add("hidden");
+  }
+}
+
+function renderActiveLearnersList() {
+  const listContainer = activeLearnersListContainer || document.getElementById("activeLearnersListContainer");
+  if (!listContainer) return;
+  const searchInput = activeLearnersSearchInput || document.getElementById("activeLearnersSearchInput");
+  const classFilter = activeLearnersClassFilter || document.getElementById("activeLearnersClassFilter");
+  const countText = activeLearnersModalCountText || document.getElementById("activeLearnersModalCountText");
+  const countBadge = activeLearnersModalCountBadge || document.getElementById("activeLearnersModalCountBadge");
+
+  const searchVal = (searchInput?.value || "").toLowerCase().trim();
+  const classFilterVal = classFilter?.value || "ALL";
+
+  // Filter for active online learners (must have heartbeat within last 90s)
+  let onlineLearners = (state.allLearners || []).filter((l) => {
+    const isStudent = (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase();
+    if (!isStudent) return false;
+    return isLearnerOnline(l);
+  });
+
+  const totalOnlineCount = onlineLearners.length;
+  if (countText) {
+    countText.textContent = `${totalOnlineCount} Active Now`;
+  }
+  if (countBadge) {
+    countBadge.innerHTML = `
+      <span class="w-1.5 h-1.5 rounded-full ${totalOnlineCount > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
+      <span>${totalOnlineCount} Active Now</span>
+    `;
+  }
+
+  // Apply filters
+  if (classFilterVal !== "ALL") {
+    onlineLearners = onlineLearners.filter((l) => l.class_level === classFilterVal);
+  }
+  if (searchVal) {
+    onlineLearners = onlineLearners.filter((l) =>
+      (l.full_name || "").toLowerCase().includes(searchVal) ||
+      (l.student_id || "").toLowerCase().includes(searchVal) ||
+      (l.class_level || "").toLowerCase().includes(searchVal) ||
+      (l.email || "").toLowerCase().includes(searchVal)
+    );
+  }
+
+  if (onlineLearners.length === 0) {
+    listContainer.innerHTML = `
+      <div class="py-12 text-center text-slate-400">
+        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3 text-xl">
+          <i class="fa-solid fa-users-slash"></i>
+        </div>
+        <p class="font-bold text-slate-700 text-sm">No Active Learners Online</p>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+          No learners matching the criteria are connected right now. When students log into the portal, their active session and presence indicators update here in real-time.
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  listContainer.innerHTML = onlineLearners.map((learner) => {
+    const subs = learner.submissions || [];
+    const subCount = subs.length;
+    const age = calculateAge(learner.date_of_birth);
+
+    return `
+      <div
+        class="active-learner-item-row bg-white hover:bg-emerald-50/50 border border-slate-200/90 hover:border-emerald-300 rounded-2xl p-3.5 sm:p-4 transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 cursor-pointer shadow-2xs hover:shadow-sm group"
+        data-learner-id="${learner.id}"
+        title="Click to view full profile & academic details for ${escapeHtml(learner.full_name)}"
+      >
+        <div class="flex items-center gap-3.5">
+          <div class="relative shrink-0">
+            <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-11 h-11 rounded-full object-cover ring-2 ring-emerald-500/40 group-hover:ring-emerald-500 transition-all shadow-xs" />
+            <span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white flex items-center justify-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+            </span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-slate-900 group-hover:text-emerald-800 transition-colors text-sm sm:text-base">${escapeHtml(learner.full_name)}</span>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
+              </span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-0.5">
+              <span class="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">${escapeHtml(learner.student_id || generateStudentId(learner.class_level, 1))}</span>
+              <span class="font-semibold text-slate-700">${learner.class_level || "Basic 9A"}</span>
+              ${age != null ? `<span>&bull;</span><span>${age} yrs</span>` : ""}
+              <span>&bull;</span>
+              <span class="text-slate-400 truncate max-w-[150px] sm:max-w-xs">${escapeHtml(learner.email || "No email")}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 shrink-0">
+          <div class="text-left sm:text-right text-xs">
+            <span class="font-bold text-slate-800 block">${subCount} submission(s)</span>
+            <span class="text-[11px] text-emerald-600 font-medium">Active now (${formatTimeAgo(learner.last_seen)})</span>
+          </div>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white group-hover:bg-emerald-700 shadow-xs transition cursor-pointer"
+          >
+            <span>View Details</span>
+            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // Attach selection click listeners
+  document.querySelectorAll(".active-learner-item-row").forEach((row) => {
+    row.addEventListener("click", () => {
+      const learnerId = row.getAttribute("data-learner-id");
+      const targetLearner = (state.allLearners || []).find((l) => l.id === learnerId);
+      if (targetLearner) {
+        showActiveLearnerDetail(targetLearner);
+      }
+    });
+  });
+}
+
+function showActiveLearnerDetail(learner) {
+  const detailContent = activeLearnerDetailContent || document.getElementById("activeLearnerDetailContent");
+  const detailView = activeLearnerDetailView || document.getElementById("activeLearnerDetailView");
+  const listView = activeLearnersListView || document.getElementById("activeLearnersListView");
+  if (!detailContent || !detailView || !listView) return;
+
+  detailContent.innerHTML = renderActiveLearnerDetailHtml(learner);
+  listView.style.display = "none";
+  listView.classList.add("hidden");
+  detailView.style.display = "block";
+  detailView.classList.remove("hidden");
+
+  // Wire action buttons inside detail view
+  document.querySelectorAll(".active-modal-chat-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      closeActiveLearnersModal();
+      openChatWithUser(learner);
+    });
+  });
+
+  document.querySelectorAll(".active-modal-mark-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      closeActiveLearnersModal();
+      openRecordScoreModal(learner.id);
+    });
+  });
+
+  document.querySelectorAll(".active-modal-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      closeActiveLearnersModal();
+      openEditLearnerModal(learner.id);
+    });
+  });
+}
+
+function renderActiveLearnerDetailHtml(learner) {
+  const subs = learner.submissions || [];
+  const subCount = subs.length;
+  const avgScore = subCount > 0
+    ? (subs.reduce((sum, s) => sum + (parseFloat(s.score) || 0), 0) / subCount).toFixed(1)
+    : "0.0";
+  const lastScore = subCount > 0 ? `${subs[0].score}/${subs[0].max_score || 20}` : "None";
+  const age = calculateAge(learner.date_of_birth);
+
+  return `
+    <!-- Top Identity Card -->
+    <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <div class="relative">
+            <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-400 shadow-md" />
+            <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-slate-900 flex items-center justify-center">
+              <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+            </span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h4 class="text-base sm:text-lg font-bold">${escapeHtml(learner.full_name)}</h4>
+              <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">Online Now</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-slate-300 mt-1">
+              <span class="font-mono bg-white/10 px-2 py-0.5 rounded font-bold text-emerald-300">${escapeHtml(learner.student_id || generateStudentId(learner.class_level, 1))}</span>
+              <span>&bull;</span>
+              <span class="font-semibold text-white">${learner.class_level || "Basic 9A"}</span>
+              <span>&bull;</span>
+              <span>${learner.gender || "Gender: N/A"}</span>
+              ${age != null ? `<span>&bull;</span><span>${age} yrs</span>` : ""}
+            </div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+              <i class="fa-regular fa-envelope text-[11px]"></i> ${escapeHtml(learner.email || "No email provided")}
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Action Buttons inside Card -->
+        <div class="flex flex-wrap sm:flex-col gap-2 shrink-0">
+          <button
+            class="active-modal-chat-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition cursor-pointer shadow-sm"
+            data-learner-id="${learner.id}"
+          >
+            <i class="fa-solid fa-comments"></i> Start Live Chat
+          </button>
+          <button
+            class="active-modal-mark-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition cursor-pointer"
+            data-learner-id="${learner.id}"
+          >
+            <i class="fa-solid fa-pen-to-square"></i> Record Marks
+          </button>
+          <button
+            class="active-modal-edit-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition cursor-pointer"
+            data-learner-id="${learner.id}"
+          >
+            <i class="fa-solid fa-user-pen"></i> Edit Profile
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 KPI Metrics for this Learner -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Submissions</span>
+        <span class="text-lg font-extrabold text-slate-900">${subCount}</span>
+        <span class="text-[10px] text-slate-500 block">Assessment(s)</span>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Average Score</span>
+        <span class="text-lg font-extrabold text-indigo-600">${avgScore}</span>
+        <span class="text-[10px] text-slate-500 block">Out of 20 marks</span>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Latest Score</span>
+        <span class="text-lg font-extrabold text-emerald-600">${lastScore}</span>
+        <span class="text-[10px] text-slate-500 block">Recent submission</span>
+      </div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Presence</span>
+        <span class="text-sm font-bold text-emerald-600 flex items-center justify-center gap-1 mt-1">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Active
+        </span>
+        <span class="text-[10px] text-slate-400 block mt-0.5">${formatTimeAgo(learner.last_seen)}</span>
+      </div>
+    </div>
+
+    <!-- Personal & Register Details -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-2.5">
+      <h5 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+        <i class="fa-solid fa-id-card text-indigo-600"></i> Official Academic &amp; Demographic Details
+      </h5>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs pt-1">
+        <div>
+          <span class="text-slate-400 text-[11px] block">Date of Birth:</span>
+          <span class="font-semibold text-slate-800">${learner.date_of_birth ? formatDateOnly(learner.date_of_birth) : "Not recorded"}</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[11px] block">Account Role:</span>
+          <span class="font-semibold text-slate-800 capitalize">${learner.role || "learner"}</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[11px] block">Onboarding Status:</span>
+          <span class="font-semibold ${learner.onboarding_completed ? 'text-emerald-600' : 'text-amber-600'}">
+            ${learner.onboarding_completed ? 'Completed' : 'Pending'}
+          </span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[11px] block">Enrolled Date:</span>
+          <span class="font-semibold text-slate-800">${learner.created_at ? formatDateOnly(learner.created_at) : "N/A"}</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[11px] block">Last Activity:</span>
+          <span class="font-semibold text-slate-800">${learner.last_seen ? new Date(learner.last_seen).toLocaleTimeString() : "Just now"}</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[11px] block">Subject Curriculum:</span>
+          <span class="font-semibold text-indigo-700">NaCCA Computing</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Submissions History Section -->
+    <div class="bg-white border border-slate-200 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2.5">
+        <h5 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-emerald-600"></i> Assessment Submissions &amp; Grades (${subCount})
+        </h5>
+      </div>
+      ${subCount === 0 ? `
+        <div class="py-6 text-center text-slate-400 text-xs">
+          <i class="fa-solid fa-file-circle-question text-2xl text-slate-300 block mb-1"></i>
+          This learner has not submitted any online assessment tasks yet this term.
+        </div>
+      ` : `
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-400 font-bold text-[10px] uppercase">
+                <th class="py-2 px-2">Task</th>
+                <th class="py-2 px-2">Score</th>
+                <th class="py-2 px-2">Status</th>
+                <th class="py-2 px-2">Submitted</th>
+                <th class="py-2 px-2">Remarks</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              ${subs.map((s) => `
+                <tr class="hover:bg-slate-50">
+                  <td class="py-2.5 px-2 font-semibold text-slate-800">${escapeHtml(s.assessments?.title || s.assessment_id)}</td>
+                  <td class="py-2.5 px-2 font-bold text-indigo-700 font-mono">${s.score}/${s.max_score || 20}</td>
+                  <td class="py-2.5 px-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">${s.status || "GRADED"}</span></td>
+                  <td class="py-2.5 px-2 text-slate-500 text-[11px]">${formatDateOnly(s.submitted_at)}</td>
+                  <td class="py-2.5 px-2 text-slate-500 italic text-[11px]">${escapeHtml(s.teacher_remarks || "Marked.")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// Expose Active Learners Modal handlers globally on window
+window.openActiveLearnersModal = openActiveLearnersModal;
+window.closeActiveLearnersModal = closeActiveLearnersModal;
+window.showActiveLearnerDetail = showActiveLearnerDetail;
+window.renderActiveLearnersList = renderActiveLearnersList;
+window.startAdminDemoMode = startAdminDemoMode;
+
+// Authentic Ghanaian Basic 9 Student Roster Seed
+async function handleQuickSeedRoster() {
+  const confirmed = confirm(
+    "POPULATE OFFICIAL GHANAIAN CLASS ROSTER:\n\nThis will insert official Basic 9A (25 learners) and Basic 9B (25 learners) records with authentic Ghanaian names and generated Student IDs into your live Supabase database.\n\nProceed?"
+  );
+  if (!confirmed) return;
+
+  const btn = quickSeedRosterBtn;
+  const originalText = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Inserting Roster...`;
+  }
+
+  const standardRoster = [
+    // Basic 9A (25 Learners)
+    { full_name: "Kwame Mensah Frimpong", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-10-14" },
+    { full_name: "Akosua Adobea Ansah", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-08-22" },
+    { full_name: "Kofi Boateng", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-03-15" },
+    { full_name: "Abena Osei", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-12-05" },
+    { full_name: "Yaw Antwi", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-05-19" },
+    { full_name: "Efua Danso", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-07-09" },
+    { full_name: "Kweku Asamoah", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-02-18" },
+    { full_name: "Yaa Serwaa", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-11-28" },
+    { full_name: "Kwesi Appiah", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-04-03" },
+    { full_name: "Akua Boadiwaa", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-09-17" },
+    { full_name: "Kobina Dadzie", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-01-25" },
+    { full_name: "Adjoa Kwartemaa", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-06-12" },
+    { full_name: "Ekow Quansah", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-08-30" },
+    { full_name: "Ama Agyemang", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-03-21" },
+    { full_name: "Fiifi Essien", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-10-05" },
+    { full_name: "Nana Ama Konadu", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-05-14" },
+    { full_name: "Kwabena Badu", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-07-27" },
+    { full_name: "Maame Serwah", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-12-19" },
+    { full_name: "Paa Kwesi Ofori", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-02-08" },
+    { full_name: "Afia Pokuaa", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-09-02" },
+    { full_name: "Kodwo Nyamekye", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-04-16" },
+    { full_name: "Esi Mansah", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-11-11" },
+    { full_name: "Jojo Turkson", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-01-07" },
+    { full_name: "Araba Baidoo", class_level: "Basic 9A", gender: "Female", date_of_birth: "2011-06-25" },
+    { full_name: "Kwaku Darko", class_level: "Basic 9A", gender: "Male", date_of_birth: "2011-08-18" },
+
+    // Basic 9B (25 Learners)
+    { full_name: "Selorm Agbenu", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-02-14" },
+    { full_name: "Eyram Dzifa Doe", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-07-19" },
+    { full_name: "Mawuli Gbeho", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-09-23" },
+    { full_name: "Enam Akpalu", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-04-12" },
+    { full_name: "Elikplim Ametefe", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-11-05" },
+    { full_name: "Kafui Sedziafa", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-01-30" },
+    { full_name: "Senyo Kpodo", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-06-17" },
+    { full_name: "Delali Nyavor", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-08-08" },
+    { full_name: "Fafa Tsikata", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-12-02" },
+    { full_name: "Makafui Dotse", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-03-29" },
+    { full_name: "Nii Laryea Vanderpuye", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-05-22" },
+    { full_name: "Naa Ayeley Tagoe", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-10-18" },
+    { full_name: "Kpakpo Addo", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-04-26" },
+    { full_name: "Naa Dedei Ashitey", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-09-14" },
+    { full_name: "Nii Ayitey Hammond", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-01-11" },
+    { full_name: "Naa Shormeh Aryee", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-07-03" },
+    { full_name: "Nii Okaija Adjei", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-11-20" },
+    { full_name: "Naa Lamiley Mills", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-03-08" },
+    { full_name: "Tetteh Nortey", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-08-15" },
+    { full_name: "Korkor Lamptey", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-06-01" },
+    { full_name: "Abdul-Rashid Yakubu", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-02-28" },
+    { full_name: "Amina Alhassan", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-10-31" },
+    { full_name: "Mohammed Fuseini", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-05-09" },
+    { full_name: "Zainab Iddrisu", class_level: "Basic 9B", gender: "Female", date_of_birth: "2011-12-25" },
+    { full_name: "Ibrahim Sulemana", class_level: "Basic 9B", gender: "Male", date_of_birth: "2011-04-01" },
+  ];
+
+  try {
+    const inserted = await batchEnrollLearners(standardRoster);
+    enrollStudentModal?.classList.add("hidden");
+    state.allLearners = await fetchAllLearners();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+    alert(`Successfully enrolled ${inserted?.length || 50} official students into Supabase!\n\nAll metrics, presence, and broadsheets now reflect live student data.`);
+  } catch (err) {
+    console.error("Batch roster error:", err);
+    alert("Could not populate roster: " + (err.message || "Unknown error"));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Record Real Assessment Marks Handlers
+// ------------------------------------------------------------------------------
+function openRecordScoreModal(preselectedLearnerId = null) {
+  if (!recordScoreModal) return;
+  recordScoreForm?.reset();
+
+  // Populate learners dropdown
+  if (recordScoreLearnerSelect) {
+    const students = (state.allLearners || []).filter(
+      (l) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+    );
+    recordScoreLearnerSelect.innerHTML = students.map((l) => `
+      <option value="${l.id}" ${preselectedLearnerId === l.id ? "selected" : ""}>
+        ${escapeHtml(l.full_name)} (${l.class_level || "Basic 9A"} • ${escapeHtml(l.student_id || "")})
+      </option>
+    `).join("");
+  }
+
+  // Populate assessments dropdown
+  if (recordScoreAsmtSelect) {
+    recordScoreAsmtSelect.innerHTML = (state.assessments || []).map((a) => `
+      <option value="${a.id}" data-max="${a.max_score || 20}">
+        ${escapeHtml(a.title)} (${a.class_level} • Max: ${a.max_score || 20} pts)
+      </option>
+    `).join("");
+
+    recordScoreAsmtSelect.onchange = () => {
+      const selected = recordScoreAsmtSelect.options[recordScoreAsmtSelect.selectedIndex];
+      const max = selected?.getAttribute("data-max") || 20;
+      if (recordScoreMaxVal) recordScoreMaxVal.value = max;
+      if (recordScoreVal) recordScoreVal.max = max;
+    };
+    recordScoreAsmtSelect.onchange(null);
+  }
+
+  recordScoreModal.classList.remove("hidden");
+  recordScoreVal?.focus();
+}
+
+async function handleRecordScoreSubmit(e) {
+  e.preventDefault();
+  const learnerId = recordScoreLearnerSelect?.value;
+  const asmtId = recordScoreAsmtSelect?.value;
+  const score = parseFloat(recordScoreVal?.value);
+  const maxScore = parseFloat(recordScoreMaxVal?.value) || 20;
+  const remarks = recordScoreRemarks?.value?.trim() || "Marked and recorded.";
+
+  if (!learnerId || !asmtId || isNaN(score)) {
+    alert("Please select a student, assessment, and valid mark.");
+    return;
+  }
+
+  try {
+    const submitBtn = document.getElementById("submitRecordScoreBtn");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Saving...`;
+    }
+
+    await recordLearnerScore({
+      learner_id: learnerId,
+      assessment_id: asmtId,
+      score: score,
+      max_score: maxScore,
+      teacher_remarks: remarks,
+    });
+
+    recordScoreModal?.classList.add("hidden");
+    state.allLearners = await fetchAllLearners();
+    state.submissions = await fetchAllSubmissions();
+    renderAdminLearnersTable();
+    renderAdminOverviewStats();
+    alert("Assessment mark recorded successfully into live database!");
+  } catch (err) {
+    console.error("Record score error:", err);
+    alert("Failed to save mark: " + (err.message || "Unknown error"));
+  } finally {
+    const submitBtn = document.getElementById("submitRecordScoreBtn");
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save Mark`;
+    }
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -3809,50 +4968,733 @@ async function handleBroadcastSubmit(e) {
 }
 
 // ------------------------------------------------------------------------------
-// Realtime Floating Chat Widget Controller
 // ------------------------------------------------------------------------------
+// Realtime Floating Chat Widget Controller (User-to-User & User-with-Admin)
+// ------------------------------------------------------------------------------
+function getMyUserId() {
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  if (isCurrentUserAdmin) return ADMIN_CONTACT.id;
+  if (state.profile?.id && state.profile.id !== "admin-master-debrah") return state.profile.id;
+  if (state.user?.id && !state.user.id.startsWith("admin-")) return state.user.id;
+  return "30d8e3f6-a5c4-47d2-af35-97cd81bbc0bf";
+}
+
+function isMessageAddressedToMe(msg, myId) {
+  if (!msg) return false;
+  if (msg.sender_id === myId) return false;
+
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  if (isCurrentUserAdmin) {
+    return (
+      msg.recipient_id === ADMIN_CONTACT.id ||
+      msg.recipient_id === myId ||
+      msg.recipient_role === "admin" ||
+      !msg.recipient_id
+    );
+  } else {
+    return (
+      msg.recipient_id === myId ||
+      (msg.sender_role === "admin" && (!msg.recipient_id || msg.recipient_id === myId))
+    );
+  }
+}
+
+function updateChatUnreadDot() {
+  const myId = getMyUserId();
+  const unreadMessages = (state.chatMessages || []).filter((m) => {
+    return !m.read && isMessageAddressedToMe(m, myId);
+  });
+
+  const totalUnread = unreadMessages.length;
+  const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
+
+  if (chatUnreadDot) {
+    if (totalUnread > 0 && !isChatOpen) {
+      chatUnreadDot.textContent = totalUnread > 9 ? "9+" : String(totalUnread);
+      chatUnreadDot.classList.remove("hidden");
+      chatUnreadDot.classList.add("flex");
+    } else {
+      chatUnreadDot.classList.add("hidden");
+      chatUnreadDot.classList.remove("flex");
+      chatUnreadDot.textContent = "";
+    }
+  }
+
+  // Update Contacts drawer button badge
+  const contactsBadge = document.getElementById("chatContactsUnreadBadge");
+  if (contactsBadge) {
+    const otherUnread = unreadMessages.filter(
+      (m) => !state.activeChatPartner || (m.sender_id !== state.activeChatPartner.id && !(state.activeChatPartner.role === "admin" && m.sender_role === "admin"))
+    ).length;
+
+    if (otherUnread > 0) {
+      contactsBadge.textContent = otherUnread > 9 ? "9+" : String(otherUnread);
+      contactsBadge.classList.remove("hidden");
+      contactsBadge.classList.add("inline-flex");
+    } else {
+      contactsBadge.classList.add("hidden");
+      contactsBadge.classList.remove("inline-flex");
+      contactsBadge.textContent = "";
+    }
+  }
+}
+
+let globalUnlockedAudioCtx = null;
+function getUnlockedAudioContext() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!globalUnlockedAudioCtx) {
+      globalUnlockedAudioCtx = new AudioCtx();
+    }
+    if (globalUnlockedAudioCtx.state === "suspended") {
+      globalUnlockedAudioCtx.resume().catch(() => {});
+    }
+    return globalUnlockedAudioCtx;
+  } catch (e) {
+    return null;
+  }
+}
+
+// User-gesture audio unlocker for mobile and modern desktop browsers
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    const ctx = getUnlockedAudioContext();
+    if (ctx && ctx.state === "running") {
+      window.removeEventListener("click", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+      window.removeEventListener("touchstart", unlockAudio);
+    }
+  };
+  window.addEventListener("click", unlockAudio, { passive: true });
+  window.addEventListener("keydown", unlockAudio, { passive: true });
+  window.addEventListener("touchstart", unlockAudio, { passive: true });
+}
+
+function generateChimeWavDataUrl() {
+  const sampleRate = 22050;
+  const durationSec = 0.45;
+  const numSamples = Math.floor(sampleRate * durationSec);
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + numSamples * 2, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, numSamples * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    let sample = 0;
+    if (t < 0.22) {
+      const env1 = Math.max(0, 1 - (t / 0.22));
+      sample += Math.sin(2 * Math.PI * 659.25 * t) * 0.4 * env1;
+    }
+    if (t >= 0.08) {
+      const t2 = t - 0.08;
+      const env2 = Math.max(0, 1 - (t2 / 0.35));
+      sample += Math.sin(2 * Math.PI * 880 * t) * 0.5 * env2;
+    }
+    sample = Math.max(-1, Math.min(1, sample));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+    offset += 2;
+  }
+
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = typeof btoa !== "undefined" ? btoa(binary) : (typeof Buffer !== "undefined" ? Buffer.from(binary, "binary").toString("base64") : "");
+  return "data:audio/wav;base64," + base64;
+}
+
+function generateVoiceNoteWavDataUrl(durationSec = 2.5) {
+  const sampleRate = 22050;
+  const numSamples = Math.floor(sampleRate * durationSec);
+  const buffer = new ArrayBuffer(44 + numSamples * 2);
+  const view = new DataView(buffer);
+
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, 36 + numSamples * 2, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, numSamples * 2, true);
+
+  const baseFreqs = [261.63, 329.63, 392.00, 523.25];
+  let offset = 44;
+  for (let i = 0; i < numSamples; i++) {
+    const t = i / sampleRate;
+    const noteIdx = Math.min(Math.floor((t / durationSec) * baseFreqs.length), baseFreqs.length - 1);
+    const freq = baseFreqs[noteIdx];
+    const vibrato = Math.sin(2 * Math.PI * 5 * t) * 2;
+    const fund = Math.sin(2 * Math.PI * (freq + vibrato) * t);
+    const h2 = 0.5 * Math.sin(2 * Math.PI * 2 * (freq + vibrato) * t);
+    const h3 = 0.25 * Math.sin(2 * Math.PI * 3 * (freq + vibrato) * t);
+    const env = Math.min(1, t / 0.05) * Math.max(0, 1 - (t / durationSec));
+    const sample = Math.max(-1, Math.min(1, (fund + h2 + h3) * 0.45 * env));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+    offset += 2;
+  }
+
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = typeof btoa !== "undefined" ? btoa(binary) : (typeof Buffer !== "undefined" ? Buffer.from(binary, "binary").toString("base64") : "");
+  return "data:audio/wav;base64," + base64;
+}
+
+let cachedChimeDataUrl = null;
+
+function playNotificationChime() {
+  try {
+    const ctx = getUnlockedAudioContext();
+    if (ctx && ctx.state === "running") {
+      const now = ctx.currentTime;
+      // Note 1 (E5: 659.25 Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.18);
+
+      // Note 2 (A5: 880 Hz)
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(880, now + 0.09);
+      gain2.gain.setValueAtTime(0.35, now + 0.09);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.09);
+      osc2.stop(now + 0.38);
+      return;
+    }
+  } catch (e) {
+    // Web Audio blocked or not running, proceed to HTML5 Audio fallback
+  }
+
+  try {
+    if (!cachedChimeDataUrl) {
+      cachedChimeDataUrl = generateChimeWavDataUrl();
+    }
+    const audio = new Audio(cachedChimeDataUrl);
+    audio.volume = 0.5;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn("Notification audio autoplay blocked by browser policy:", err);
+      });
+    }
+  } catch (e) {
+    // Autoplay policy or unsupported
+  }
+}
+
+let chatToastTimeout = null;
+function showIncomingChatToast(msg) {
+  const toast = document.getElementById("chatIncomingToast");
+  const avatar = document.getElementById("chatToastAvatar");
+  const sender = document.getElementById("chatToastSender");
+  const preview = document.getElementById("chatToastPreview");
+  const openBtn = document.getElementById("chatToastOpenBtn");
+  if (!toast) return;
+
+  if (avatar) {
+    avatar.src = msg.sender_role === "admin" ? TEACHER_AVATAR : (msg.sender_avatar || AVATAR_PRESETS[0]);
+  }
+  if (sender) sender.textContent = msg.sender_name || "New Direct Message";
+  if (preview) preview.textContent = msg.message || "Shared an attachment";
+
+  toast.classList.remove("hidden");
+
+  if (openBtn) {
+    openBtn.onclick = () => {
+      toast.classList.add("hidden");
+      const senderContact = (state.allLearners || []).find((l) => l.id === msg.sender_id) ||
+        (msg.sender_role === "admin" ? ADMIN_CONTACT : null);
+      if (senderContact) {
+        openChatWithUser(senderContact);
+      } else {
+        openChatBtn?.click();
+      }
+    };
+  }
+
+  if (chatToastTimeout) clearTimeout(chatToastTimeout);
+  chatToastTimeout = setTimeout(() => {
+    toast?.classList.add("hidden");
+  }, 6000);
+}
+
+async function toggleChatContactsDrawer(forceShow) {
+  if (!chatContactsDrawer) return;
+  const shouldShow = forceShow !== undefined ? forceShow : chatContactsDrawer.classList.contains("hidden");
+  if (shouldShow) {
+    chatContactsDrawer.classList.remove("hidden");
+    if (!state.allLearners || state.allLearners.length === 0) {
+      state.allLearners = await fetchAllLearners();
+    }
+    renderChatContactsList();
+    chatContactSearchInput?.focus();
+  } else {
+    chatContactsDrawer.classList.add("hidden");
+  }
+}
+
+window.toggleChatContactsDrawer = toggleChatContactsDrawer;
+
+function renderChatContactsList() {
+  if (!chatContactsListContainer) return;
+  const myId = getMyUserId();
+  const search = (chatContactSearchInput?.value || "").toLowerCase().trim();
+
+  let html = "";
+
+  // 1. Academic Staff (Master Debrah) - Shown if current viewer is in learner view or not admin
+  if (!state.isAdmin || state.activeView === "learner") {
+    const adminLearner = (state.allLearners || []).find(
+      (l) => l.id === ADMIN_CONTACT.id || (l.role || "").toLowerCase() === "admin" || (l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()
+    ) || ADMIN_CONTACT;
+    const isAdminOnline = isLearnerOnline(adminLearner);
+
+    const isCurrentPartner = state.activeChatPartner?.id === ADMIN_CONTACT.id;
+    const unreadAdminCount = (state.chatMessages || []).filter(
+      (m) => (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id) && !m.read && isMessageAddressedToMe(m, myId)
+    ).length;
+
+    const adminMatches =
+      !search ||
+      ADMIN_CONTACT.full_name.toLowerCase().includes(search) ||
+      "admin".includes(search) ||
+      "teacher".includes(search) ||
+      "computing".includes(search);
+
+    if (adminMatches) {
+      html += `
+        <div class="px-2 pt-1 pb-1">
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Academic Staff</span>
+          <div
+            class="chat-contact-item flex items-center justify-between p-2.5 rounded-xl border ${isCurrentPartner ? 'bg-indigo-50/90 border-indigo-200 ring-1 ring-indigo-300' : 'bg-white border-slate-200 hover:bg-slate-50'} transition cursor-pointer group shadow-2xs"
+            data-partner-type="admin"
+          >
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="relative shrink-0">
+                <img src="${TEACHER_AVATAR}" alt="Teacher" class="w-9 h-9 rounded-full object-cover ring-2 ${isAdminOnline ? 'ring-emerald-400' : 'ring-slate-300'} shadow-xs" />
+                <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ${isAdminOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} ring-2 ring-white"></span>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-xs text-slate-900 truncate">${ADMIN_CONTACT.full_name}</span>
+                  <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-700 uppercase">Staff</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+                  <span class="${isAdminOnline ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${isAdminOnline ? '● Online' : (adminLearner.last_seen ? 'Offline (' + formatTimeAgo(adminLearner.last_seen) + ')' : 'Offline')}</span>
+                  <span>&bull;</span>
+                  <span class="truncate">Head of Computing</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${unreadAdminCount > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white shadow-xs animate-pulse">${unreadAdminCount} new</span>` : ''}
+              ${isCurrentPartner ? `<span class="text-xs font-bold text-indigo-600"><i class="fa-solid fa-check"></i></span>` : `<i class="fa-solid fa-chevron-right text-[10px] text-slate-400 group-hover:text-slate-600"></i>`}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // 2. Registered Learners / Classmates
+  const students = (state.allLearners || []).filter((l) => {
+    const isStudent = (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase();
+    if (!isStudent) return false;
+    if (l.id === myId) return false;
+    if (search) {
+      return (
+        (l.full_name || "").toLowerCase().includes(search) ||
+        (l.student_id || "").toLowerCase().includes(search) ||
+        (l.class_level || "").toLowerCase().includes(search) ||
+        (l.email || "").toLowerCase().includes(search)
+      );
+    }
+    return true;
+  });
+
+  html += `
+    <div class="px-2 pt-2">
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+        ${state.isAdmin && state.activeView === "admin" ? "Ghana Basic 9 Students" : "Classmates & Peer Learners"} (${students.length})
+      </span>
+  `;
+
+  if (students.length === 0) {
+    html += `
+      <div class="py-6 text-center text-slate-400 text-xs">
+        <i class="fa-solid fa-user-slash mb-1 block text-base text-slate-300"></i>
+        No learners matching "${escapeHtml(search)}".
+      </div>
+    `;
+  } else {
+    students.forEach((student) => {
+      const isCurrent = state.activeChatPartner?.id === student.id;
+      const isOnline = isLearnerOnline(student);
+      const unreadCount = (state.chatMessages || []).filter(
+        (m) => m.sender_id === student.id && !m.read && isMessageAddressedToMe(m, myId)
+      ).length;
+
+      html += `
+        <div
+          class="chat-contact-item flex items-center justify-between p-2 rounded-xl border mb-1.5 ${isCurrent ? 'bg-indigo-50/90 border-indigo-200 ring-1 ring-indigo-300' : 'bg-white border-slate-200 hover:bg-slate-50'} transition cursor-pointer group shadow-2xs"
+          data-learner-id="${student.id}"
+        >
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="relative shrink-0">
+              <img src="${student.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-8 h-8 rounded-full object-cover ring-2 ${isOnline ? 'ring-emerald-400' : 'ring-slate-200'} shadow-2xs" />
+              <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'} ring-1.5 ring-white"></span>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold text-xs text-slate-900 truncate">${escapeHtml(student.full_name)}</span>
+                <span class="font-mono text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700">${escapeHtml(student.student_id || generateStudentId(student.class_level, 1))}</span>
+              </div>
+              <div class="flex items-center gap-1.5 text-[10px] text-slate-500">
+                <span class="font-medium">${student.class_level || "Basic 9"}</span>
+                <span>&bull;</span>
+                <span class="${isOnline ? 'text-emerald-600 font-bold' : 'text-slate-400'}">${isOnline ? '● Online' : (student.last_seen ? 'Offline (' + formatTimeAgo(student.last_seen) + ')' : 'Offline')}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${unreadCount > 0 ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-600 text-white shadow-xs animate-pulse">${unreadCount} new</span>` : ''}
+            ${isCurrent ? `<span class="text-xs font-bold text-indigo-600"><i class="fa-solid fa-check"></i></span>` : `<i class="fa-solid fa-chevron-right text-[10px] text-slate-400 group-hover:text-slate-600"></i>`}
+          </div>
+        </div>
+      `;
+    });
+  }
+
+  html += `</div>`;
+  chatContactsListContainer.innerHTML = html;
+
+  // Wire selection
+  chatContactsListContainer.querySelectorAll(".chat-contact-item").forEach((el) => {
+    el.addEventListener("click", () => {
+      const partnerType = el.getAttribute("data-partner-type");
+      if (partnerType === "admin") {
+        openChatWithUser(ADMIN_CONTACT);
+      } else {
+        const learnerId = el.getAttribute("data-learner-id");
+        const target = (state.allLearners || []).find((l) => l.id === learnerId);
+        if (target) openChatWithUser(target);
+      }
+      toggleChatContactsDrawer(false);
+    });
+  });
+}
+
+let chatPresenceRefreshInterval = null;
+
 async function initChat() {
+  // Ensure chat widget launcher is always visible
+  const chatContainer = document.getElementById("floatingChatContainer");
+  if (chatContainer) chatContainer.classList.remove("hidden");
+
+  if (!state.allLearners || state.allLearners.length === 0) {
+    state.allLearners = await fetchAllLearners();
+  }
+
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  if (!state.activeChatPartner) {
+    if (isCurrentUserAdmin) {
+      const firstStudent = (state.allLearners || []).find(
+        (l) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+      );
+      state.activeChatPartner = firstStudent || null;
+    } else {
+      state.activeChatPartner = ADMIN_CONTACT;
+    }
+  }
+
   state.chatMessages = await fetchChatMessages();
+  updateChatUnreadDot();
   renderChatPartnerHeader();
   renderChatMessages();
+
+  // Realtime Live Presence Subscription for All Learners & Admin
+  subscribeToLearnersRealtime((updatedLearner) => {
+    const idx = (state.allLearners || []).findIndex((l) => l.id === updatedLearner.id);
+    if (idx !== -1) {
+      state.allLearners[idx] = { ...state.allLearners[idx], ...updatedLearner };
+    } else {
+      state.allLearners.push(updatedLearner);
+    }
+    renderChatPartnerHeader();
+    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+      renderChatContactsList();
+    }
+  });
+
+  // Refresh presence timers every 20 seconds
+  if (chatPresenceRefreshInterval) clearInterval(chatPresenceRefreshInterval);
+  chatPresenceRefreshInterval = setInterval(() => {
+    renderChatPartnerHeader();
+    if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+      renderChatContactsList();
+    }
+  }, 20000);
+
+function isSameChatMessage(a, b) {
+  if (!a || !b) return false;
+  if (a.id && b.id && a.id === b.id) return true;
+  if (a.temp_id && (a.temp_id === b.id || a.temp_id === b.temp_id)) return true;
+  if (b.temp_id && (b.temp_id === a.id || b.temp_id === a.temp_id)) return true;
+
+  // Semantic matching between optimistic/broadcast message and Postgres CDC row
+  const sameSender = a.sender_id === b.sender_id || (a.sender_role === "admin" && b.sender_role === "admin");
+  const sameType = (a.media_type || "text") === (b.media_type || "text");
+  const sameMessage = (a.message || "").trim() === (b.message || "").trim();
+
+  // Media match (voice note audio or shared file/image)
+  const bothAudio = a.media_type === "audio" && b.media_type === "audio";
+  const sameMedia = bothAudio || (a.media_url && b.media_url && (a.media_url === b.media_url || a.media_url.slice(0, 100) === b.media_url.slice(0, 100)));
+
+  // Created within 6 seconds of each other
+  const timeA = new Date(a.created_at || Date.now()).getTime();
+  const timeB = new Date(b.created_at || Date.now()).getTime();
+  const timeClose = Math.abs(timeA - timeB) < 6000;
+
+  if (sameSender && sameType && timeClose && (sameMedia || sameMessage)) {
+    return true;
+  }
+  return false;
+}
+
+function upsertChatMessage(newMsg) {
+  if (!state.chatMessages) state.chatMessages = [];
+  const existingIdx = state.chatMessages.findIndex((m) => isSameChatMessage(m, newMsg));
+  if (existingIdx !== -1) {
+    state.chatMessages[existingIdx] = {
+      ...state.chatMessages[existingIdx],
+      ...newMsg,
+      id: (newMsg.id && !newMsg.id.startsWith("msg-")) ? newMsg.id : state.chatMessages[existingIdx].id,
+    };
+    return false; // updated existing
+  } else {
+    state.chatMessages.push(newMsg);
+    return true; // newly inserted
+  }
+}
+
+  // Subscribe to live Realtime Chat channel (Instant WebSocket Broadcast + DB CDC)
+  subscribeToChatRealtime(
+    (newMsg) => {
+      const myId = getMyUserId();
+
+      // Deduplicate/merge message seamlessly
+      const isNew = upsertChatMessage(newMsg);
+
+      const isForMe = isMessageAddressedToMe(newMsg, myId);
+      const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
+      const partner = state.activeChatPartner;
+      const isCurrentPartner = partner && (
+        newMsg.sender_id === partner.id ||
+        (partner.role === "admin" && newMsg.sender_role === "admin") ||
+        (newMsg.sender_id === myId && newMsg.recipient_id === partner.id)
+      );
+
+      if (isChatOpen && isCurrentPartner) {
+        renderChatMessages();
+        if (isForMe) {
+          markCurrentChatAsSeen();
+        }
+      } else {
+        if (isForMe && isNew) {
+          // Instant sound alert only on newly arrived messages (not on duplicate updates)
+          playNotificationChime();
+          // Instant toast notification preview
+          showIncomingChatToast(newMsg);
+          // Instant unread badge on floating chatbot icon
+          updateChatUnreadDot();
+          if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+            renderChatContactsList();
+          }
+        }
+      }
+    },
+    (updateData) => {
+      if (updateData?.viewerId) {
+        // Broadcast read receipt
+        const { viewerId, partnerId, read_at } = updateData;
+        let modified = false;
+        state.chatMessages.forEach((m) => {
+          if (
+            (m.recipient_id === viewerId || (viewerId === ADMIN_CONTACT.id && m.recipient_role === "admin")) &&
+            (!partnerId || m.sender_id === partnerId)
+          ) {
+            m.read = true;
+            m.read_at = read_at || new Date().toISOString();
+            modified = true;
+          }
+        });
+        if (modified) {
+          renderChatMessages();
+          updateChatUnreadDot();
+        }
+      } else if (updateData?.id) {
+        // Single message updated
+        const idx = state.chatMessages.findIndex((m) => m.id === updateData.id);
+        if (idx !== -1) {
+          state.chatMessages[idx] = { ...state.chatMessages[idx], ...updateData };
+          renderChatMessages();
+          updateChatUnreadDot();
+        }
+      }
+    }
+  );
 }
 
 function renderChatPartnerHeader() {
-  const myAvatar = state.isAdmin ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+  const myAvatar = state.isAdmin && state.activeView === "admin" ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
   if (chatUserAvatar) chatUserAvatar.src = myAvatar;
 
-  if (state.isAdmin) {
-    if (state.activeChatPartner) {
-      chatPartnerName.textContent = `${state.activeChatPartner.full_name} (${state.activeChatPartner.class_level})`;
-      chatPartnerAvatar.src = state.activeChatPartner.avatar_url || AVATAR_PRESETS[0];
-      chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${state.activeChatPartner.is_online ? 'bg-emerald-400' : 'bg-slate-300'}"></span> ${state.activeChatPartner.is_online ? 'Active Now • Online' : 'Offline'}`;
-    } else {
-      chatPartnerName.textContent = "General Student Help Desk";
-      chatPartnerAvatar.src = AVATAR_PRESETS[0];
-      chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Click Chat on any student in directory`;
+  const partner = state.activeChatPartner;
+  if (!partner) {
+    if (chatPartnerName) chatPartnerName.textContent = "Select a Chat Partner";
+    if (chatPartnerAvatar) chatPartnerAvatar.src = AVATAR_PRESETS[0];
+    if (chatPartnerStatus) {
+      chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-indigo-300"></span> Click Contacts to choose classmate or teacher`;
     }
-  } else {
-    chatPartnerName.textContent = "Master Debrah (Admin)";
-    chatPartnerAvatar.src = TEACHER_AVATAR;
-    chatPartnerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Online • Continuous Assessment Support`;
+    return;
   }
+
+  const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
+  if (chatPartnerName) {
+    chatPartnerName.textContent = isPartnerAdmin
+      ? "Master Debrah (Admin & Teacher)"
+      : `${partner.full_name} (${partner.class_level || 'Basic 9'})`;
+  }
+  if (chatPartnerAvatar) {
+    chatPartnerAvatar.src = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
+  }
+  if (chatPartnerStatus) {
+    const livePartner = isPartnerAdmin
+      ? ((state.allLearners || []).find((l) => l.id === ADMIN_CONTACT.id || (l.role || "").toLowerCase() === "admin" || (l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()) || ADMIN_CONTACT)
+      : ((state.allLearners || []).find((l) => l.id === partner.id) || partner);
+
+    const isOnline = isLearnerOnline(livePartner);
+    if (isOnline) {
+      chatPartnerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> <span class="text-emerald-200 font-bold">Online</span> • ${isPartnerAdmin ? "Head of Computing" : (livePartner.class_level || "Basic 9")}`;
+    } else {
+      const timeAgo = livePartner.last_seen ? formatTimeAgo(livePartner.last_seen) : "offline";
+      chatPartnerStatus.innerHTML = `<span class="w-2 h-2 rounded-full bg-slate-300 opacity-60"></span> <span class="text-indigo-200">Offline (${timeAgo})</span> • ${isPartnerAdmin ? "Head of Computing" : (livePartner.class_level || "Basic 9")}`;
+    }
+  }
+}
+
+function updateChatLauncherButton() {
+  const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
+  const icon = openChatBtn?.querySelector("i");
+  if (!icon || !openChatBtn) return;
+
+  if (isChatOpen) {
+    openChatBtn.classList.add("chat-open");
+    openChatBtn.setAttribute("title", "Close Chat (Esc)");
+    openChatBtn.setAttribute("aria-label", "Close Chat");
+    icon.className = "fa-solid fa-xmark text-xl";
+    openChatBtn.classList.remove("ring-indigo-100", "bg-indigo-600", "hover:bg-indigo-700");
+    openChatBtn.classList.add("ring-slate-300", "bg-slate-800", "hover:bg-slate-900");
+  } else {
+    openChatBtn.classList.remove("chat-open");
+    openChatBtn.setAttribute("title", "Chat with Teacher / Admin");
+    openChatBtn.setAttribute("aria-label", "Chat with Teacher / Admin");
+    icon.className = "fa-solid fa-comments text-lg sm:text-xl";
+    openChatBtn.classList.remove("ring-slate-300", "bg-slate-800", "hover:bg-slate-900");
+    openChatBtn.classList.add("ring-indigo-100", "bg-indigo-600", "hover:bg-indigo-700");
+  }
+  updateChatUnreadDot();
+}
+
+function toggleChatWindow(forceShow) {
+  if (!chatWindow) return;
+  const shouldOpen = forceShow !== undefined ? forceShow : chatWindow.classList.contains("hidden");
+  if (shouldOpen) {
+    chatWindow.classList.remove("hidden");
+    markCurrentChatAsSeen();
+    chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    chatMessageInput?.focus();
+  } else {
+    chatWindow.classList.add("hidden");
+    if (chatContactsDrawer) chatContactsDrawer.classList.add("hidden");
+  }
+  updateChatLauncherButton();
 }
 
 function openChatWithUser(student) {
   state.activeChatPartner = student;
   renderChatPartnerHeader();
-  chatWindow.classList.remove("hidden");
-  chatMessageInput.focus();
+  if (chatContactsDrawer) chatContactsDrawer.classList.add("hidden");
+  toggleChatWindow(true);
+  chatMessageInput?.focus();
   markCurrentChatAsSeen();
   renderChatMessages();
 }
 
+window.openChatWithUser = openChatWithUser;
+window.toggleChatWindow = toggleChatWindow;
+window.updateChatLauncherButton = updateChatLauncherButton;
+window.playNotificationChime = playNotificationChime;
+window.showIncomingChatToast = showIncomingChatToast;
+window.updateChatUnreadDot = updateChatUnreadDot;
+window.generateVoiceNoteWavDataUrl = generateVoiceNoteWavDataUrl;
+window.generateChimeWavDataUrl = generateChimeWavDataUrl;
+window.getUnlockedAudioContext = getUnlockedAudioContext;
+window.state = state;
+
 async function markCurrentChatAsSeen() {
-  const viewerRole = state.isAdmin ? "admin" : "learner";
-  await markChatMessagesAsRead(viewerRole);
+  const myId = getMyUserId();
+  const partner = state.activeChatPartner;
+  const partnerId = partner?.id || null;
+  const viewerRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
+
+  await markChatMessagesAsRead(myId, partnerId, viewerRole);
+
   let changed = false;
   state.chatMessages.forEach((m) => {
-    if (m.sender_role !== viewerRole && !m.read) {
+    const matchesPartner = partnerId
+      ? m.sender_id === partnerId || (m.sender_role === "admin" && partnerId === ADMIN_CONTACT.id)
+      : true;
+    if (matchesPartner && !m.read) {
       m.read = true;
       m.read_at = new Date().toISOString();
       changed = true;
@@ -3860,21 +5702,158 @@ async function markCurrentChatAsSeen() {
   });
   if (changed) {
     renderChatMessages();
+    updateChatUnreadDot();
   }
+}
+
+function bindChatMediaTriggers() {
+  if (!chatMessagesContainer) return;
+
+  chatMessagesContainer.querySelectorAll(".audio-play-toggle-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const container = btn.closest(".chat-voice-card") || btn.closest("div");
+      const audio = container?.querySelector(".chat-audio-element");
+      if (!audio) return;
+
+      const icon = btn.querySelector("i");
+
+      // Auto-recover if audio src is a broken or expired blob: URL from another session
+      if (!audio.src || audio.src.startsWith("blob:") || audio.src.includes("freesound.org")) {
+        audio.src = generateVoiceNoteWavDataUrl(3);
+      }
+
+      if (audio.paused) {
+        if (activePlayingAudio && activePlayingAudio !== audio) {
+          activePlayingAudio.pause();
+          activePlayingAudio.currentTime = 0;
+          document.querySelectorAll(".audio-play-toggle-btn i").forEach((ic) => {
+            ic.className = "fa-solid fa-play text-xs ml-0.5";
+          });
+          document.querySelectorAll(".chat-voice-card").forEach((card) => {
+            card.classList.remove("audio-playing");
+          });
+        }
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              activePlayingAudio = audio;
+              if (icon) icon.className = "fa-solid fa-pause text-xs";
+              container?.classList.add("audio-playing");
+            })
+            .catch((err) => {
+              console.warn("Audio playback err, falling back to clean wave audio:", err);
+              audio.src = generateVoiceNoteWavDataUrl(3);
+              audio.play().then(() => {
+                activePlayingAudio = audio;
+                if (icon) icon.className = "fa-solid fa-pause text-xs";
+                container?.classList.add("audio-playing");
+              }).catch((e2) => console.warn("Fallback play error:", e2));
+            });
+        }
+      } else {
+        audio.pause();
+        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
+        container?.classList.remove("audio-playing");
+      }
+
+      audio.onended = () => {
+        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
+        container?.classList.remove("audio-playing");
+      };
+      audio.onpause = () => {
+        if (icon) icon.className = "fa-solid fa-play text-xs ml-0.5";
+        container?.classList.remove("audio-playing");
+      };
+    });
+  });
+
+  chatMessagesContainer.querySelectorAll(".chat-lightbox-trigger").forEach((imgEl) => {
+    imgEl.addEventListener("click", () => {
+      const url = imgEl.getAttribute("data-img-url");
+      const caption = imgEl.getAttribute("data-img-caption");
+      openMediaLightbox(url, caption);
+    });
+  });
 }
 
 function renderChatMessages() {
   if (!chatMessagesContainer) return;
 
-  const currentName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Kwame Mensah");
-  const myAvatar = state.isAdmin ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
-  const defaultPartnerAvatar = state.isAdmin
-    ? (state.activeChatPartner?.avatar_url || AVATAR_PRESETS[0])
-    : TEACHER_AVATAR;
+  const myId = getMyUserId();
+  const partner = state.activeChatPartner;
+  const currentName = state.profile?.full_name || (state.isAdmin && state.activeView === "admin" ? "Master Debrah" : "Kwame Mensah");
+  const myAvatar = state.isAdmin && state.activeView === "admin" ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
 
-  const messageCardsHtml = state.chatMessages.map((msg) => {
-    const isMe = msg.sender_role === (state.isAdmin ? "admin" : "learner") || msg.sender_name.includes(currentName);
-    const senderAvatar = isMe ? myAvatar : (msg.sender_role === "admin" ? TEACHER_AVATAR : (state.activeChatPartner?.avatar_url || defaultPartnerAvatar));
+  if (!partner) {
+    chatMessagesContainer.innerHTML = `
+      <div class="py-14 text-center text-slate-400">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2 text-xl shadow-xs">
+          <i class="fa-solid fa-address-book"></i>
+        </div>
+        <p class="font-bold text-slate-800 text-sm">No Conversation Selected</p>
+        <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto mb-3">
+          Click the Contacts button above to pick a classmate or academic staff to start chatting.
+        </p>
+        <button
+          type="button"
+          onclick="window.toggleChatContactsDrawer && window.toggleChatContactsDrawer(true)"
+          class="px-4 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition cursor-pointer"
+        >
+          <i class="fa-solid fa-users mr-1"></i> Browse Contacts
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
+  const defaultPartnerAvatar = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
+
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  // Scoped message filter for this 1-on-1 thread
+  const threadMessages = state.chatMessages.filter((msg) => {
+    if (isCurrentUserAdmin) {
+      if (isPartnerAdmin) return false;
+      return (
+        (msg.sender_id === partner.id && (msg.recipient_id === myId || msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id)) ||
+        ((msg.sender_id === myId || msg.sender_role === "admin") && (msg.recipient_id === partner.id || !msg.recipient_id))
+      );
+    } else {
+      if (isPartnerAdmin) {
+        return (
+          (msg.sender_id === myId && (msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id)) ||
+          ((msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id) && (msg.recipient_id === myId || !msg.recipient_id))
+        );
+      } else {
+        return (
+          (msg.sender_id === myId && msg.recipient_id === partner.id) ||
+          (msg.sender_id === partner.id && msg.recipient_id === myId)
+        );
+      }
+    }
+  });
+
+  if (threadMessages.length === 0) {
+    chatMessagesContainer.innerHTML = `
+      <div class="py-12 text-center text-slate-400">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto mb-2 text-xl shadow-xs">
+          <i class="fa-solid fa-comments"></i>
+        </div>
+        <p class="font-bold text-slate-800 text-sm">Start conversation with ${escapeHtml(partner.full_name)}</p>
+        <p class="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+          ${isPartnerAdmin ? 'Ask questions about Computing CATs, algorithm tasks, or homework guidance.' : 'Chat with your classmate about assessment tasks, study notes, or questions.'}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  const messageCardsHtml = threadMessages.map((msg) => {
+    const isMe = msg.sender_id === myId || (state.isAdmin ? msg.sender_role === "admin" : (msg.sender_role === "learner" && msg.sender_name.includes(currentName)));
+    const senderAvatar = isMe ? myAvatar : (msg.sender_role === "admin" ? TEACHER_AVATAR : (partner.avatar_url || defaultPartnerAvatar));
 
     // Render Media Attachment if present
     let mediaContent = "";
@@ -3893,12 +5872,15 @@ function renderChatMessages() {
         </div>
       `;
     } else if (msg.media_type === "audio" && msg.media_url) {
+      const safeAudioSrc = (msg.media_url && !msg.media_url.startsWith('blob:') && !msg.media_url.includes('freesound.org'))
+        ? msg.media_url
+        : generateVoiceNoteWavDataUrl(3);
       mediaContent = `
-        <div class="mt-2 p-2 rounded-xl ${isMe ? 'bg-indigo-700/60 border border-indigo-400/30' : 'bg-slate-100 border border-slate-200'} flex items-center gap-2.5">
+        <div class="chat-voice-card mt-2 p-2 rounded-xl ${isMe ? 'bg-indigo-700/60 border border-indigo-400/30' : 'bg-slate-100 border border-slate-200'} flex items-center gap-2.5">
           <button type="button" class="audio-play-toggle-btn w-8 h-8 rounded-full ${isMe ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'} flex items-center justify-center shrink-0 shadow-xs hover:scale-105 transition cursor-pointer" title="Play / Pause Audio">
             <i class="fa-solid fa-play text-xs ml-0.5"></i>
           </button>
-          <audio src="${msg.media_url}" preload="metadata" class="chat-audio-element hidden"></audio>
+          <audio src="${safeAudioSrc}" preload="auto" class="chat-audio-element hidden"></audio>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-0.5 h-3.5 mb-1 text-current opacity-80">
               <span class="soundwave-bar h-2"></span>
@@ -3909,7 +5891,7 @@ function renderChatMessages() {
             </div>
             <div class="flex items-center justify-between text-[10px] ${isMe ? 'text-indigo-200' : 'text-slate-500'}">
               <span><i class="fa-solid fa-microphone text-[9px] mr-1"></i>Voice Note</span>
-              <span class="font-mono font-bold">${msg.audio_duration || '0:06'}</span>
+              <span class="font-mono font-bold">${msg.audio_duration || '0:03'}</span>
             </div>
           </div>
         </div>
@@ -3940,7 +5922,7 @@ function renderChatMessages() {
         <div class="flex justify-end items-end gap-2 group">
           <div class="max-w-[78%] bg-indigo-600 text-white rounded-2xl rounded-br-xs px-3.5 py-2 text-xs shadow-xs">
             <div class="flex items-center justify-between gap-3 mb-0.5">
-              <span class="font-bold text-[10px] text-indigo-200">You (${state.isAdmin ? 'Admin' : 'Student'})</span>
+              <span class="font-bold text-[10px] text-indigo-200">You (${state.isAdmin && state.activeView === "admin" ? 'Admin' : 'Student'})</span>
               <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[9px] text-indigo-200">${formatTime(msg.created_at)}</span>
                 ${readReceipt}
@@ -3970,10 +5952,10 @@ function renderChatMessages() {
   }).join("");
 
   // Thread-level read/seen receipt below last outgoing message
-  const lastMsg = state.chatMessages[state.chatMessages.length - 1];
-  const partnerName = state.isAdmin ? (state.activeChatPartner?.full_name || "Student") : "Master Debrah";
+  const lastMsg = threadMessages[threadMessages.length - 1];
+  const partnerName = partner.full_name || "Partner";
   let threadSeenFooter = "";
-  if (lastMsg && (lastMsg.sender_role === (state.isAdmin ? "admin" : "learner") || lastMsg.sender_name.includes(currentName))) {
+  if (lastMsg && (lastMsg.sender_id === myId || (state.isAdmin ? lastMsg.sender_role === "admin" : (lastMsg.sender_role === "learner" && lastMsg.sender_name.includes(currentName))))) {
     if (lastMsg.read) {
       threadSeenFooter = `
         <div class="flex justify-end pr-9 -mt-1 mb-2">
@@ -3994,51 +5976,15 @@ function renderChatMessages() {
   }
 
   chatMessagesContainer.innerHTML = messageCardsHtml + threadSeenFooter;
-
   chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
 
-  // Wire up audio playback triggers
-  chatMessagesContainer.querySelectorAll(".audio-play-toggle-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const container = btn.closest("div");
-      const audio = container.querySelector(".chat-audio-element");
-      if (!audio) return;
-
-      if (audio.paused) {
-        if (activePlayingAudio && activePlayingAudio !== audio) {
-          activePlayingAudio.pause();
-          activePlayingAudio.currentTime = 0;
-          document.querySelectorAll(".audio-play-toggle-btn i").forEach((icon) => {
-            icon.className = "fa-solid fa-play text-xs ml-0.5";
-          });
-        }
-        audio.play().catch((e) => console.warn("Audio playback err:", e));
-        activePlayingAudio = audio;
-        btn.querySelector("i").className = "fa-solid fa-pause text-xs";
-      } else {
-        audio.pause();
-        btn.querySelector("i").className = "fa-solid fa-play text-xs ml-0.5";
-      }
-
-      audio.onended = () => {
-        btn.querySelector("i").className = "fa-solid fa-play text-xs ml-0.5";
-      };
-    });
-  });
-
-  // Wire up image lightbox preview triggers
-  chatMessagesContainer.querySelectorAll(".chat-lightbox-trigger").forEach((imgEl) => {
-    imgEl.addEventListener("click", () => {
-      const url = imgEl.getAttribute("data-img-url");
-      const caption = imgEl.getAttribute("data-img-caption");
-      openMediaLightbox(url, caption);
-    });
-  });
+  // Re-bind media click triggers
+  bindChatMediaTriggers();
 }
 
 function openMediaLightbox(url, caption) {
   if (!mediaLightboxModal) return;
-  if (lightboxImg) lightboxImg.src = url;
+  if (lightboxImg && url) lightboxImg.src = url;
   if (lightboxCaption) lightboxCaption.textContent = caption || "Assessment Shared Media";
   mediaLightboxModal.classList.remove("hidden");
 }
@@ -4054,67 +6000,6 @@ function showTypingIndicator(senderName, isTyping) {
   } else {
     chatTypingIndicator.classList.add("hidden");
   }
-}
-
-function simulatePartnerReply(triggerType = "text") {
-  const partnerName = state.isAdmin ? (state.activeChatPartner?.full_name || "Kwame Mensah Frimpong") : "Master Debrah (Admin)";
-
-  setTimeout(() => {
-    showTypingIndicator(partnerName, true);
-    setTimeout(async () => {
-      showTypingIndicator(partnerName, false);
-
-      let replyText = "Thank you for reaching out! Your question has been recorded in the assessment registry.";
-      let mediaType = "text";
-      let mediaUrl = null;
-      let audioDuration = null;
-
-      if (state.isAdmin) {
-        if (triggerType === "audio") {
-          replyText = "Thank you sir! I have received and listened to your voice feedback on my algorithm.";
-        } else if (triggerType === "image") {
-          replyText = "Thank you sir! I am updating my CAT flowchart based on your notes.";
-        } else {
-          replyText = "Yes sir, I understand clearly. Thank you for the guidance!";
-        }
-      } else {
-        if (triggerType === "audio") {
-          replyText = "Voice note received Kwame! Here is my audio response on the flowchart loop exit logic.";
-          mediaType = "audio";
-          mediaUrl = "https://cdn.freesound.org/previews/263/263133_2064400-lq.mp3";
-          audioDuration = "0:06";
-        } else if (triggerType === "image") {
-          replyText = "Diagram received Kwame! The loop structure and decision box look properly defined. You may proceed to submit.";
-        } else {
-          replyText = "Thank you Kwame! I am reviewing your Continuous Assessment scores.";
-        }
-      }
-
-      // Mark all preceding messages sent by user as seen/read by partner
-      const viewerRole = state.isAdmin ? "admin" : "learner";
-      state.chatMessages.forEach((m) => {
-        if (m.sender_role === viewerRole && !m.read) {
-          m.read = true;
-          m.read_at = new Date().toISOString();
-        }
-      });
-
-      const replyPayload = {
-        sender_name: partnerName,
-        sender_role: state.isAdmin ? "learner" : "admin",
-        message: replyText,
-        media_type: mediaType,
-        media_url: mediaUrl,
-        audio_duration: audioDuration,
-        read: true,
-        read_at: new Date().toISOString(),
-      };
-
-      const res = await sendChatMessage(replyPayload);
-      state.chatMessages.push(res);
-      renderChatMessages();
-    }, 1800);
-  }, 600);
 }
 
 function handleFileSelect(e) {
@@ -4213,61 +6098,96 @@ function cancelAudioRecording() {
   }
 }
 
+let isSendingAudio = false;
+
 async function sendAudioRecording() {
-  if (recordingInterval) clearInterval(recordingInterval);
-  const durationSec = recordingSeconds > 0 ? recordingSeconds : 6;
-  const durationStr = formatRecordingTime(durationSec);
+  if (isSendingAudio || !isRecordingAudio) return;
+  isSendingAudio = true;
+  if (sendRecordBtn) {
+    sendRecordBtn.setAttribute("disabled", "true");
+    sendRecordBtn.classList.add("opacity-50", "pointer-events-none");
+  }
 
-  let finalAudioUrl = "https://cdn.freesound.org/previews/263/263133_2064400-lq.mp3";
+  try {
+    if (recordingInterval) clearInterval(recordingInterval);
+    const durationSec = recordingSeconds > 0 ? recordingSeconds : 3;
+    const durationStr = formatRecordingTime(durationSec);
 
-  if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    try {
-      mediaRecorder.stop();
-      await new Promise((resolve) => {
-        mediaRecorder.onstop = () => {
-          if (audioChunks.length > 0) {
-            const blob = new Blob(audioChunks, { type: "audio/webm" });
-            finalAudioUrl = URL.createObjectURL(blob);
-          }
-          resolve();
-        };
-      });
-    } catch (e) {
-      console.warn("Media recorder stop error:", e);
+    // Default to synthesized clean voice note data URI (100% portable & self-contained)
+    let finalAudioUrl = generateVoiceNoteWavDataUrl(durationSec);
+
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      try {
+        mediaRecorder.stop();
+        await new Promise((resolve) => {
+          mediaRecorder.onstop = () => {
+            if (audioChunks.length > 0) {
+              const blob = new Blob(audioChunks, { type: "audio/webm" });
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (reader.result && typeof reader.result === "string" && reader.result.startsWith("data:")) {
+                  finalAudioUrl = reader.result;
+                }
+                resolve();
+              };
+              reader.onerror = () => {
+                resolve();
+              };
+              reader.readAsDataURL(blob);
+            } else {
+              resolve();
+            }
+          };
+        });
+      } catch (e) {
+        console.warn("Media recorder stop error:", e);
+      }
+    }
+
+    if (recordingAudioStream) {
+      recordingAudioStream.getTracks().forEach((t) => t.stop());
+      recordingAudioStream = null;
+    }
+    isRecordingAudio = false;
+
+    if (chatRecordingBar && chatInputForm) {
+      chatRecordingBar.classList.add("hidden");
+      chatInputForm.classList.remove("hidden");
+    }
+
+    const myId = getMyUserId();
+    const partner = state.activeChatPartner;
+    const partnerId = partner?.id || null;
+    const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
+
+    const senderRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
+    const senderName = state.isAdmin && state.activeView === "admin"
+      ? `${state.profile?.full_name || "Master Debrah"} (Admin)`
+      : `${state.profile?.full_name || "Student Learner"}`;
+
+    const payload = {
+      sender_id: myId,
+      recipient_id: partnerId,
+      sender_name: senderName,
+      sender_role: senderRole,
+      message: `Voice Note (${durationStr})`,
+      media_type: "audio",
+      media_url: finalAudioUrl,
+      media_name: `Voice_Note_${Date.now()}.mp3`,
+      audio_duration: durationStr,
+      read: false,
+    };
+
+    const newMsg = await sendChatMessage(payload);
+    upsertChatMessage(newMsg);
+    renderChatMessages();
+  } finally {
+    isSendingAudio = false;
+    if (sendRecordBtn) {
+      sendRecordBtn.removeAttribute("disabled");
+      sendRecordBtn.classList.remove("opacity-50", "pointer-events-none");
     }
   }
-
-  if (recordingAudioStream) {
-    recordingAudioStream.getTracks().forEach((t) => t.stop());
-    recordingAudioStream = null;
-  }
-  isRecordingAudio = false;
-
-  if (chatRecordingBar && chatInputForm) {
-    chatRecordingBar.classList.add("hidden");
-    chatInputForm.classList.remove("hidden");
-  }
-
-  const senderRole = state.isAdmin ? "admin" : "learner";
-  const senderName = state.isAdmin
-    ? `${state.profile?.full_name || "Master Debrah"} (Admin)`
-    : `${state.profile?.full_name || "Student Learner"}`;
-
-  const payload = {
-    sender_name: senderName,
-    sender_role: senderRole,
-    message: `Voice Note (${durationStr})`,
-    media_type: "audio",
-    media_url: finalAudioUrl,
-    media_name: `Voice_Note_${Date.now()}.mp3`,
-    audio_duration: durationStr,
-  };
-
-  const newMsg = await sendChatMessage(payload);
-  state.chatMessages.push(newMsg);
-  renderChatMessages();
-
-  simulatePartnerReply("audio");
 }
 
 async function handleChatInputSubmit(e) {
@@ -4277,14 +6197,21 @@ async function handleChatInputSubmit(e) {
 
   if (!text && !hasAttachment) return;
 
-  const senderRole = state.isAdmin ? "admin" : "learner";
-  const senderName = state.isAdmin
+  const myId = getMyUserId();
+  const partner = state.activeChatPartner;
+  const partnerId = partner?.id || null;
+  const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
+
+  const senderRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
+  const senderName = state.isAdmin && state.activeView === "admin"
     ? `${state.profile?.full_name || "Master Debrah"} (Admin)`
     : `${state.profile?.full_name || "Student Learner"}`;
 
   chatMessageInput.value = "";
 
   const payload = {
+    sender_id: myId,
+    recipient_id: partnerId,
     sender_name: senderName,
     sender_role: senderRole,
     message: text || (currentAttachment ? `Shared ${currentAttachment.name}` : ""),
@@ -4292,16 +6219,14 @@ async function handleChatInputSubmit(e) {
     media_url: currentAttachment ? currentAttachment.dataUrl : null,
     media_name: currentAttachment ? currentAttachment.name : null,
     media_size: currentAttachment ? currentAttachment.size : null,
+    read: false,
   };
 
-  const triggerType = currentAttachment ? currentAttachment.type : "text";
   clearAttachment();
 
   const newMsg = await sendChatMessage(payload);
-  state.chatMessages.push(newMsg);
+  upsertChatMessage(newMsg);
   renderChatMessages();
-
-  simulatePartnerReply(triggerType);
 }
 
 // ------------------------------------------------------------------------------
@@ -4614,15 +6539,16 @@ function attachEventListeners() {
   adminClearMockBtn?.addEventListener("click", handleClearMockData);
 
   // Floating Chat Widget Handlers
-  openChatBtn?.addEventListener("click", () => {
-    chatWindow?.classList.toggle("hidden");
-    if (!chatWindow?.classList.contains("hidden")) {
-      markCurrentChatAsSeen();
-      chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-      chatMessageInput?.focus();
+  openChatBtn?.addEventListener("click", () => toggleChatWindow());
+  closeChatBtn?.addEventListener("click", () => toggleChatWindow(false));
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && chatWindow && !chatWindow.classList.contains("hidden")) {
+      toggleChatWindow(false);
     }
   });
-  closeChatBtn?.addEventListener("click", () => chatWindow?.classList.add("hidden"));
+  chatSwitchContactBtn?.addEventListener("click", () => toggleChatContactsDrawer());
+  chatCloseContactsBtn?.addEventListener("click", () => toggleChatContactsDrawer(false));
+  chatContactSearchInput?.addEventListener("input", () => renderChatContactsList());
   chatInputForm?.addEventListener("submit", handleChatInputSubmit);
 
   // Attachment & Voice Recording Listeners
@@ -4703,4 +6629,53 @@ function attachEventListeners() {
 
   // Quotes
   newQuoteBtn?.addEventListener("click", rotateQuote);
+
+  // Admin Real Data: Enrollment & Marks Recording Modals
+  adminEnrollStudentBtn?.addEventListener("click", openEnrollStudentModal);
+  closeEnrollModalBtn?.addEventListener("click", () => enrollStudentModal?.classList.add("hidden"));
+  cancelEnrollBtn?.addEventListener("click", () => enrollStudentModal?.classList.add("hidden"));
+  enrollStudentForm?.addEventListener("submit", handleEnrollStudentSubmit);
+  quickSeedRosterBtn?.addEventListener("click", handleQuickSeedRoster);
+
+  // Admin Real Data: Edit User Modal & Handlers
+  closeEditLearnerModalBtn?.addEventListener("click", () => editLearnerModal?.classList.add("hidden"));
+  cancelEditLearnerBtn?.addEventListener("click", () => editLearnerModal?.classList.add("hidden"));
+  editLearnerForm?.addEventListener("submit", handleEditLearnerSubmit);
+  adminDeleteUserFromModalBtn?.addEventListener("click", () => {
+    const userId = editLearnerId?.value;
+    const name = editLearnerFullName?.value || "this user";
+    if (userId) handleDeleteLearner(userId, name);
+  });
+
+  // Admin Real Data: Active Learners Online Modal & KPI Card
+  document.getElementById("kpiCardOnline")?.addEventListener("click", openActiveLearnersModal);
+  document.getElementById("kpiOnlineActionBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openActiveLearnersModal();
+  });
+  document.getElementById("closeActiveLearnersModalBtn")?.addEventListener("click", closeActiveLearnersModal);
+  document.getElementById("closeActiveLearnersModalBtn2")?.addEventListener("click", closeActiveLearnersModal);
+  document.getElementById("activeLearnersModal")?.addEventListener("click", (e) => {
+    if (e.target === document.getElementById("activeLearnersModal")) closeActiveLearnersModal();
+  });
+  document.getElementById("backToActiveListBtn")?.addEventListener("click", () => {
+    const detailView = activeLearnerDetailView || document.getElementById("activeLearnerDetailView");
+    const listView = activeLearnersListView || document.getElementById("activeLearnersListView");
+    if (detailView) {
+      detailView.style.display = "none";
+      detailView.classList.add("hidden");
+    }
+    if (listView) {
+      listView.style.display = "block";
+      listView.classList.remove("hidden");
+    }
+    renderActiveLearnersList();
+  });
+  document.getElementById("activeLearnersSearchInput")?.addEventListener("input", renderActiveLearnersList);
+  document.getElementById("activeLearnersClassFilter")?.addEventListener("change", renderActiveLearnersList);
+
+  adminRecordMarksBtn?.addEventListener("click", () => openRecordScoreModal());
+  closeRecordScoreModalBtn?.addEventListener("click", () => recordScoreModal?.classList.add("hidden"));
+  cancelRecordScoreBtn?.addEventListener("click", () => recordScoreModal?.classList.add("hidden"));
+  recordScoreForm?.addEventListener("submit", handleRecordScoreSubmit);
 }

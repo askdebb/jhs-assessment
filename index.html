@@ -94,8 +94,8 @@
             </div>
           </div>
 
-          <!-- Role Switcher Button (Visible for Quick Switching & Admin Access) -->
-          <div id="adminToggleContainer" class="shrink-0">
+          <!-- Role Switcher Button (Strictly Visible Only for Verified Admin) -->
+          <div id="adminToggleContainer" class="hidden shrink-0">
             <button
               id="viewModeToggleBtn"
               class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
@@ -555,8 +555,10 @@
               </div>
 
             </div>
-          <!-- Assessment Cards Grid (Renders Skeleton Cards by Default) -->
-          <div id="assessmentGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4 pt-4">
+          </div>
+
+          <!-- Assessment Cards Grid (Full-Width Responsive 3-Column Layout) -->
+          <div id="assessmentGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-5">
             <!-- Skeleton Card 1 -->
             <div class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between animate-pulse">
               <div>
@@ -891,34 +893,71 @@
         <!-- SUBVIEW 1: OVERVIEW & LEARNERS DIRECTORY (/admin)               -->
         <!-- =============================================================== -->
         <div id="adminSubViewOverview" class="space-y-4 sm:space-y-5">
+          <!-- Realtime Sync & Hot-Reload Status Bar -->
+          <div class="flex items-center justify-between px-1">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span id="adminLiveSyncText">Realtime Live Sync Active</span>
+              </span>
+              <span id="adminHotReloadPulse" class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 animate-pulse">
+                <i class="fa-solid fa-bolt text-amber-500 text-xs"></i> Hot-reloaded!
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-400 font-mono" id="adminLastSyncTime">
+              Synced: Just now
+            </div>
+          </div>
+
           <!-- Admin 4 KPI Metrics Row (Compact, 2 cols mobile, 4 cols desktop) -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <!-- Card 1: Users Online -->
-            <div class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all">
+            <div
+              id="kpiCardOnline"
+              onclick="window.openActiveLearnersModal && window.openActiveLearnersModal()"
+              class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-md hover:border-emerald-300 hover:ring-2 hover:ring-emerald-400/20 active:scale-[0.99] transition-all duration-200 cursor-pointer group"
+              title="Click to view list of active online learners"
+            >
               <div>
                 <div class="flex items-center justify-between gap-1">
-                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0">
+                  <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold shrink-0 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
                     <i class="fa-solid fa-signal text-xs sm:text-sm"></i>
                   </div>
                   <span class="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live
                   </span>
                 </div>
-                <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Active Learners Online</p>
+                <div class="flex items-center justify-between mt-2">
+                  <p class="text-[11px] sm:text-xs font-medium text-slate-500">Active Learners Online</p>
+                  <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-emerald-600 transition-colors"></i>
+                </div>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiOnlineCount">3</span>
+                  <span id="kpiOnlineCount">0</span>
                   <span class="text-xs font-semibold text-slate-400">Students</span>
                 </div>
               </div>
-              <div class="mt-2.5 pt-2 border-t border-slate-100">
-                <span class="text-[10px] sm:text-[11px] text-emerald-600 font-semibold flex items-center gap-1 truncate">
+              <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                <span id="kpiOnlineSubtext" class="text-[10px] sm:text-[11px] text-emerald-600 font-semibold flex items-center gap-1 truncate">
                   <i class="fa-solid fa-circle-check text-[10px]"></i> Realtime presence active
                 </span>
+                <button
+                  type="button"
+                  id="kpiOnlineActionBtn"
+                  onclick="window.openActiveLearnersModal && window.openActiveLearnersModal(); event.stopPropagation();"
+                  class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                  title="Open active learners roster"
+                >
+                  <span>View Roster</span>
+                  <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                </button>
               </div>
             </div>
 
             <!-- Card 2: Registered Students -->
-            <div class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all">
+            <div id="kpiCardRegistered" class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all duration-300">
               <div>
                 <div class="flex items-center justify-between gap-1">
                   <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
@@ -930,17 +969,17 @@
                 </div>
                 <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Registered Learners</p>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiTotalStudents">93</span>
+                  <span id="kpiTotalStudents">0</span>
                   <span class="text-xs font-semibold text-slate-400">Learners</span>
                 </div>
               </div>
               <div class="mt-2.5 pt-2 border-t border-slate-100">
-                <span class="text-[10px] sm:text-[11px] text-slate-400 block truncate">45 in 9A • 48 in 9B</span>
+                <span id="kpiRegisteredSubtext" class="text-[10px] sm:text-[11px] text-slate-400 block truncate">0 in 9A • 0 in 9B</span>
               </div>
             </div>
 
             <!-- Card 3: Active Assessments -->
-            <div class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all">
+            <div id="kpiCardAssessments" class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all duration-300">
               <div>
                 <div class="flex items-center justify-between gap-1">
                   <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold shrink-0">
@@ -952,17 +991,17 @@
                 </div>
                 <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Active Assessments</p>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiActiveAsmtCount">5</span>
+                  <span id="kpiActiveAsmtCount">0</span>
                   <span class="text-xs font-semibold text-slate-400">Items Live</span>
                 </div>
               </div>
               <div class="mt-2.5 pt-2 border-t border-slate-100">
-                <span class="text-[10px] sm:text-[11px] text-slate-400 block truncate">CATs, Projects &amp; Exam</span>
+                <span id="kpiActiveAsmtSubtext" class="text-[10px] sm:text-[11px] text-slate-400 block truncate">CATs, Projects &amp; Exam</span>
               </div>
             </div>
 
             <!-- Card 4: Dispatched Notifications -->
-            <div class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all">
+            <div id="kpiCardNotifications" class="bg-white rounded-xl border border-slate-200/90 p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between hover:shadow-xs transition-all duration-300">
               <div>
                 <div class="flex items-center justify-between gap-1">
                   <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0">
@@ -974,12 +1013,12 @@
                 </div>
                 <p class="text-[11px] sm:text-xs font-medium text-slate-500 mt-2">Notifications</p>
                 <div class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 flex items-baseline gap-1">
-                  <span id="kpiNotifsSent">3</span>
+                  <span id="kpiNotifsSent">0</span>
                   <span class="text-xs font-semibold text-slate-400">Sent</span>
                 </div>
               </div>
               <div class="mt-2.5 pt-2 border-t border-slate-100">
-                <span class="text-[10px] sm:text-[11px] text-slate-400 block truncate">All &amp; Specific Tracks</span>
+                <span id="kpiNotifsSubtext" class="text-[10px] sm:text-[11px] text-slate-400 block truncate">Dispatched announcements</span>
               </div>
             </div>
           </div>
@@ -993,7 +1032,7 @@
                   Registered Learner Directory &amp; Realtime Communication
                 </h3>
                 <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                  View student grades, live presence, and start instant 1-on-1 chats.
+                  View real student grades, presence, record scores, and start 1-on-1 chats.
                 </p>
               </div>
 
@@ -1005,12 +1044,39 @@
                     id="adminClassFilter"
                     class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    <option value="ALL">All Classes</option>
+                    <option value="ALL">All Users &amp; Classes</option>
                     <option value="Basic 9A">Basic 9A</option>
                     <option value="Basic 9B">Basic 9B</option>
-                    <option value="ONLINE">Online Learners Only</option>
+                    <option value="Basic 8A">Basic 8A</option>
+                    <option value="Basic 8B">Basic 8B</option>
+                    <option value="Basic 7A">Basic 7A</option>
+                    <option value="Basic 7B">Basic 7B</option>
+                    <option value="STAFF">Staff &amp; Teachers Only</option>
+                    <option value="ONLINE">Online Users Only</option>
                   </select>
                 </div>
+
+                <!-- Create / Enroll User Button -->
+                <button
+                  id="adminEnrollStudentBtn"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
+                  title="Enroll or create a learner, teacher, or admin account"
+                >
+                  <i class="fa-solid fa-user-plus text-xs"></i>
+                  <span>Create / Enroll User</span>
+                </button>
+
+                <!-- Record Marks Button -->
+                <button
+                  id="adminRecordMarksBtn"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-all cursor-pointer"
+                  title="Record or update real assessment marks"
+                >
+                  <i class="fa-solid fa-pen-to-square text-xs text-indigo-600"></i>
+                  <span>Record Marks</span>
+                </button>
 
                 <!-- Export Excel Broadsheet Button -->
                 <button
@@ -1343,6 +1409,25 @@
     <!-- FLOATING REALTIME CHATBOX WIDGET (Learner & Admin)                -->
     <!-- ================================================================= -->
     <div id="floatingChatContainer" class="hidden fixed bottom-6 right-6 z-50 pointer-events-none">
+      <!-- Floating Incoming Direct Message Toast Notification -->
+      <div
+        id="chatIncomingToast"
+        class="hidden pointer-events-auto absolute bottom-16 right-0 w-72 bg-slate-900/95 text-white p-3 rounded-2xl shadow-2xl border border-slate-700/80 backdrop-blur-md flex items-center gap-2.5 transition-all z-50"
+      >
+        <img id="chatToastAvatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" class="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-400 shrink-0" alt="Sender" />
+        <div class="min-w-0 flex-1">
+          <p id="chatToastSender" class="text-xs font-bold text-white truncate">New Message</p>
+          <p id="chatToastPreview" class="text-[11px] text-slate-300 truncate">...</p>
+        </div>
+        <button
+          id="chatToastOpenBtn"
+          type="button"
+          class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shrink-0 cursor-pointer shadow-xs transition"
+        >
+          Open
+        </button>
+      </div>
+
       <!-- Floating Chat Launch Button -->
       <button
         id="openChatBtn"
@@ -1351,7 +1436,10 @@
         title="Chat with Teacher / Admin"
       >
         <i class="fa-solid fa-comments"></i>
-        <span id="chatUnreadDot" class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+        <span
+          id="chatUnreadDot"
+          class="hidden absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-rose-600 text-white text-[10px] font-extrabold rounded-full border-2 border-white flex items-center justify-center shadow-md animate-bounce"
+        ></span>
       </button>
 
       <!-- Chatbox Window Panel -->
@@ -1387,9 +1475,61 @@
               </p>
             </div>
           </div>
-          <button id="closeChatBtn" class="text-indigo-200 hover:text-white p-1 cursor-pointer" title="Close Chat">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              id="chatSwitchContactBtn"
+              class="text-indigo-100 hover:text-white px-2 py-1 rounded-lg hover:bg-white/10 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold relative"
+              title="Switch Chat / Choose Classmate or Teacher"
+            >
+              <i class="fa-solid fa-users text-sm"></i>
+              <span class="text-[11px] font-bold">Contacts</span>
+              <span
+                id="chatContactsUnreadBadge"
+                class="hidden min-w-[17px] h-4 px-1 rounded-full text-[9px] font-extrabold bg-rose-500 text-white items-center justify-center border border-white"
+              ></span>
+            </button>
+            <button id="closeChatBtn" class="text-indigo-200 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition cursor-pointer" title="Close Chat">
+              <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Contacts & Conversation Directory Drawer (Hidden by default, toggled via Contacts button) -->
+        <div
+          id="chatContactsDrawer"
+          class="hidden absolute inset-x-0 top-[69px] bottom-0 z-40 bg-white flex flex-col animate-in fade-in duration-150"
+        >
+          <!-- Drawer Top Bar / Search -->
+          <div class="p-3 border-b border-slate-200 bg-slate-50 space-y-2 shrink-0">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-address-book text-indigo-600"></i> Select Chat Partner
+              </span>
+              <button
+                type="button"
+                id="chatCloseContactsBtn"
+                class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+              >
+                <span>Back to Chat</span>
+                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+              </button>
+            </div>
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+              <input
+                type="text"
+                id="chatContactSearchInput"
+                placeholder="Search teacher, staff, or classmate..."
+                class="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <!-- Contacts List (Scrollable) -->
+          <div id="chatContactsListContainer" class="flex-1 overflow-y-auto p-2 space-y-1">
+            <!-- Dynamically populated via JS -->
+          </div>
         </div>
 
         <!-- Chat Messages Feed -->
@@ -2509,6 +2649,505 @@
             <i class="fa-solid fa-calendar-check"></i> Apply Extension
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- =============================================================== -->
+    <!-- MODAL: Enroll Real Student / Create User                         -->
+    <!-- =============================================================== -->
+    <div
+      id="enrollStudentModal"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+    >
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              <i class="fa-solid fa-user-plus"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-sm">Create New User Account</h3>
+              <p class="text-xs text-slate-500">Enroll a learner, teacher, or admin into the live database</p>
+            </div>
+          </div>
+          <button id="closeEnrollModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+            <i class="fa-solid fa-xmark text-base"></i>
+          </button>
+        </div>
+
+        <form id="enrollStudentForm" class="p-5 space-y-3.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Full Name *</label>
+            <input
+              type="text"
+              id="enrollFullName"
+              required
+              placeholder="e.g. Kwame Mensah Frimpong"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Account Role *</label>
+              <select
+                id="enrollRole"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="learner" selected>Learner (Student)</option>
+                <option value="teacher">Teacher (Instructor)</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Class Level *</label>
+              <select
+                id="enrollClassLevel"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="Basic 9A">Basic 9A</option>
+                <option value="Basic 9B">Basic 9B</option>
+                <option value="Basic 8A">Basic 8A</option>
+                <option value="Basic 8B">Basic 8B</option>
+                <option value="Basic 7A">Basic 7A</option>
+                <option value="Basic 7B">Basic 7B</option>
+                <option value="General / Staff">General / Staff</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Gender *</label>
+              <select
+                id="enrollGender"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Student / Staff ID</label>
+              <input
+                type="text"
+                id="enrollStudentId"
+                placeholder="e.g. JHS26-B9A-003"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-mono font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Date of Birth</label>
+              <input
+                type="date"
+                id="enrollDob"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email (Google Auth / Login)</label>
+              <input
+                type="email"
+                id="enrollEmail"
+                placeholder="e.g. kwame.mensah@gmail.com"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <button
+              id="quickSeedRosterBtn"
+              type="button"
+              class="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+              title="Populate official Ghanaian Basic 9 student register into live Supabase"
+            >
+              <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Quick Populate Class Roster
+            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="cancelEnrollBtn"
+                class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                id="submitEnrollBtn"
+                class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer"
+              >
+                <i class="fa-solid fa-user-plus"></i> Create User
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =============================================================== -->
+    <!-- MODAL: Edit User / Learner Profile (Admin Full CRUD)            -->
+    <!-- =============================================================== -->
+    <div
+      id="editLearnerModal"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+    >
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              <i class="fa-solid fa-user-pen"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-sm">Edit User Profile</h3>
+              <p class="text-xs text-slate-500">Update user record, role, class level, presence and DOB</p>
+            </div>
+          </div>
+          <button id="closeEditLearnerModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+            <i class="fa-solid fa-xmark text-base"></i>
+          </button>
+        </div>
+
+        <form id="editLearnerForm" class="p-5 space-y-3.5">
+          <input type="hidden" id="editLearnerId" />
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Full Name *</label>
+            <input
+              type="text"
+              id="editLearnerFullName"
+              required
+              placeholder="e.g. Kwame Mensah Frimpong"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Account Role *</label>
+              <select
+                id="editLearnerRole"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="learner">Learner (Student)</option>
+                <option value="teacher">Teacher (Instructor)</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Class Level *</label>
+              <select
+                id="editLearnerClassLevel"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="Basic 9A">Basic 9A</option>
+                <option value="Basic 9B">Basic 9B</option>
+                <option value="Basic 8A">Basic 8A</option>
+                <option value="Basic 8B">Basic 8B</option>
+                <option value="Basic 7A">Basic 7A</option>
+                <option value="Basic 7B">Basic 7B</option>
+                <option value="General / Staff">General / Staff</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Gender *</label>
+              <select
+                id="editLearnerGender"
+                required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Student / Staff ID</label>
+              <input
+                type="text"
+                id="editLearnerStudentId"
+                placeholder="e.g. JHS26-B9A-003"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-mono font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Date of Birth
+                <span class="text-[10px] text-indigo-600 font-normal lowercase">(admin editable)</span>
+              </label>
+              <input
+                type="date"
+                id="editLearnerDob"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Presence Status</label>
+              <select
+                id="editLearnerIsOnline"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+              >
+                <option value="false">Offline</option>
+                <option value="true">Online Now</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email Address</label>
+            <input
+              type="email"
+              id="editLearnerEmail"
+              placeholder="e.g. learner@gmail.com"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+            <button
+              type="button"
+              id="adminDeleteUserFromModalBtn"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition cursor-pointer"
+            >
+              <i class="fa-solid fa-trash-can"></i> Delete User
+            </button>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="cancelEditLearnerBtn"
+                class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                id="submitEditLearnerBtn"
+                class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer"
+              >
+                <i class="fa-solid fa-floppy-disk"></i> Save Changes
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- =============================================================== -->
+    <!-- MODAL: Active Learners Online Roster & Detail Drilldown         -->
+    <!-- =============================================================== -->
+    <div
+      id="activeLearnersModal"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden animate-in fade-in duration-200"
+    >
+      <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+        <!-- Modal Top Bar -->
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              <i class="fa-solid fa-signal"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-slate-900 text-sm sm:text-base">Active Learners Online</h3>
+                <span id="activeLearnersModalCountBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span id="activeLearnersModalCountText">1 Active Now</span>
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">Real-time WebSocket presence feed &bull; Click any learner to inspect details</p>
+            </div>
+          </div>
+          <button id="closeActiveLearnersModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer p-1.5 rounded-lg hover:bg-slate-200/60" title="Close modal">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- View 1: Active Learners List Roster -->
+        <div id="activeLearnersListView" class="p-4 sm:p-5 overflow-y-auto space-y-4">
+          <!-- Filter / Search toolbar -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2">
+            <div class="relative flex-1">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+              <input
+                type="text"
+                id="activeLearnersSearchInput"
+                placeholder="Search active learners by name, student ID, class..."
+                class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 text-xs">
+              <span class="text-slate-400 text-[11px] font-bold uppercase tracking-wider">Class:</span>
+              <select
+                id="activeLearnersClassFilter"
+                class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+              >
+                <option value="ALL">All Classes</option>
+                <option value="Basic 9A">Basic 9A</option>
+                <option value="Basic 9B">Basic 9B</option>
+                <option value="Basic 8A">Basic 8A</option>
+                <option value="Basic 8B">Basic 8B</option>
+                <option value="Basic 7A">Basic 7A</option>
+                <option value="Basic 7B">Basic 7B</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Active Learners Cards / Rows Container -->
+          <div id="activeLearnersListContainer" class="space-y-2.5">
+            <!-- Dynamically populated via JS -->
+          </div>
+        </div>
+
+        <!-- View 2: Selected Learner Detail Pane (Drill-down) -->
+        <div id="activeLearnerDetailView" class="p-4 sm:p-5 overflow-y-auto space-y-4 hidden">
+          <!-- Back to List button -->
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <button
+              id="backToActiveListBtn"
+              type="button"
+              class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
+            >
+              <i class="fa-solid fa-arrow-left"></i>
+              <span>Back to Active List</span>
+            </button>
+            <span class="text-xs font-semibold text-slate-400">Learner Profile &amp; Academic Dossier</span>
+          </div>
+
+          <!-- Learner Details Card -->
+          <div id="activeLearnerDetailContent" class="space-y-4">
+            <!-- Dynamically populated via JS -->
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-3.5 sm:p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs shrink-0">
+          <div class="text-[11px] text-slate-500 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span>Real-time presence synced via Supabase WebSockets</span>
+          </div>
+          <button
+            id="closeActiveLearnersModalBtn2"
+            type="button"
+            class="px-4 py-1.5 rounded-xl font-semibold bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =============================================================== -->
+    <!-- MODAL: Record Real Assessment Marks -->
+    <!-- =============================================================== -->
+    <div
+      id="recordScoreModal"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+    >
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
+              <i class="fa-solid fa-pen-to-square"></i>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-sm">Record Assessment Mark</h3>
+              <p class="text-xs text-slate-500">Record genuine test marks to database and broadsheet</p>
+            </div>
+          </div>
+          <button id="closeRecordScoreModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+            <i class="fa-solid fa-xmark text-base"></i>
+          </button>
+        </div>
+
+        <form id="recordScoreForm" class="p-5 space-y-3.5">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Select Learner *</label>
+            <select
+              id="recordScoreLearnerSelect"
+              required
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Select Assessment Item *</label>
+            <select
+              id="recordScoreAsmtSelect"
+              required
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <!-- Populated via JS -->
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Score Obtained *</label>
+              <input
+                type="number"
+                id="recordScoreVal"
+                step="0.5"
+                min="0"
+                max="100"
+                required
+                placeholder="e.g. 18.5"
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Max Score</label>
+              <input
+                type="number"
+                id="recordScoreMaxVal"
+                readonly
+                value="20"
+                class="w-full bg-slate-100 border border-slate-200 rounded-xl py-2 px-3 text-xs font-semibold text-slate-500 cursor-not-allowed"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Teacher Remarks (Optional)</label>
+            <input
+              type="text"
+              id="recordScoreRemarks"
+              placeholder="e.g. Good mastery of algorithms and Scratch scripts."
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              id="cancelRecordScoreBtn"
+              class="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="submitRecordScoreBtn"
+              class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer"
+            >
+              <i class="fa-solid fa-floppy-disk"></i> Save Mark
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
