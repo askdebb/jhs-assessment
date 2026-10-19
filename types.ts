@@ -148,3 +148,41 @@ export interface AppState {
   chatMessages: ChatMessage[];
   chatPollInterval: any | null;
 }
+
+export interface AIPotentialProfile {
+  learnerId: string;
+  learnerName: string;
+  sourceAssessmentId: string;
+  sourceAssessmentTitle: string;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  potentials: string[];
+  actionLevers: string[];
+  targetScore: number;
+  targetPercentage: number;
+  targetTangibleDelta: string;
+  motivationalNotice: {
+    title: string;
+    message: string;
+    badge: string;
+  };
+  assuranceScripts: {
+    onAchieved: string;
+    onMissed: string;
+  };
+  status: "ACTIVE_TARGET" | "EVALUATED_ACHIEVED" | "EVALUATED_MISSED";
+  createdAt: string;
+}
+
+export interface NextTestEvaluationResult {
+  isTargetAchieved: boolean;
+  targetScore: number;
+  achievedScore: number;
+  difference: number;
+  assuranceTitle: string;
+  assuranceMessage: string;
+  badgeStyle: string;
+  nextRecalibratedTarget: number;
+}
+

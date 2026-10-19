@@ -32,6 +32,10 @@ ALTER TABLE public.learners ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 
 ALTER TABLE public.learners ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT false;
 ALTER TABLE public.learners ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ DEFAULT timezone('utc'::text, now());
 
+-- 2a. Strict Uniqueness: Ensure email address and registered name are unique across all users
+CREATE UNIQUE INDEX IF NOT EXISTS idx_learners_unique_email ON public.learners (LOWER(TRIM(email))) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_learners_unique_full_name ON public.learners (LOWER(TRIM(full_name)));
+
 -- 2b. Immutability: Prevent modification of date_of_birth by learners once account is created
 CREATE OR REPLACE FUNCTION public.protect_learner_date_of_birth()
 RETURNS TRIGGER AS $$
@@ -77,6 +81,7 @@ CREATE TABLE IF NOT EXISTS public.assessments (
 ALTER TABLE public.assessments ADD COLUMN IF NOT EXISTS unlock_time TIMESTAMPTZ;
 ALTER TABLE public.assessments ADD COLUMN IF NOT EXISTS weight NUMERIC(5,2) NOT NULL DEFAULT 20.00;
 ALTER TABLE public.assessments ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER DEFAULT 15;
+ALTER TABLE public.assessments ADD COLUMN IF NOT EXISTS deadline TIMESTAMPTZ;
 
 -- 4. Submissions / Scores Table
 CREATE TABLE IF NOT EXISTS public.submissions (
@@ -100,6 +105,10 @@ ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS submission_rank INTEGER;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS correct_count INTEGER;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS incorrect_count INTEGER;
 ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS answers JSONB;
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS retake_granted BOOLEAN DEFAULT false;
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS retake_reason TEXT;
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS retake_granted_at TIMESTAMPTZ;
+ALTER TABLE public.submissions ADD COLUMN IF NOT EXISTS previous_scores JSONB DEFAULT '[]'::jsonb;
 
 -- 5. In-App Notifications Table (Broadcast & Class Alerts)
 CREATE TABLE IF NOT EXISTS public.notifications (
@@ -224,13 +233,13 @@ CREATE POLICY "Learners insert own submissions"
 DROP POLICY IF EXISTS "Anyone can view notifications" ON public.notifications;
 CREATE POLICY "Anyone can view notifications"
     ON public.notifications FOR SELECT
-    TO authenticated
     USING (true);
 
 DROP POLICY IF EXISTS "Admins can send notifications" ON public.notifications;
-CREATE POLICY "Admins can send notifications"
+DROP POLICY IF EXISTS "Anyone can insert notifications" ON public.notifications;
+CREATE POLICY "Anyone can insert notifications"
     ON public.notifications FOR INSERT
-    WITH CHECK (EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Users view own chats" ON public.chat_messages;
 CREATE POLICY "Users view own chats"
@@ -257,6 +266,11 @@ DROP POLICY IF EXISTS "Users can insert call recordings" ON public.call_recordin
 CREATE POLICY "Users can insert call recordings"
     ON public.call_recordings FOR INSERT
     WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Admins can delete call recordings" ON public.call_recordings;
+CREATE POLICY "Admins can delete call recordings"
+    ON public.call_recordings FOR DELETE
+    USING (EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
 
 -- 10. Enable Supabase Realtime Replication (Idempotent)
 DO $$
@@ -289,14 +303,18 @@ END $$;
 
 -- 11. Initial Assessment Tasks Seed (Ghana Standard Curriculum - Computing Focus)
 -- Note: Mathematics assessments commented out to preserve Computing intelligence integrity
-INSERT INTO public.assessments (title, subject, class_level, assessment_type, description, max_score, status, deadline, assessment_url)
+INSERT INTO public.assessments (id, title, subject, class_level, assessment_type, description, max_score, weight, status, deadline, assessment_url)
 VALUES
-    ('Computing CAT 1 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test covering Input/Output Hardware, System Software, and Network Topologies.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), NULL),
-    ('Computing CAT 1 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test covering Computing Fundamentals for Basic 9B learners.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '4 days'), NULL),
-    -- ('Mathematics CAT 1: Real Numbers', 'Mathematics', 'Basic 9', 'CAT', 'Fractions, Decimals, Ratios, and Percentage word problem evaluation.', 20.00, 'AVAILABLE', timezone('utc'::text, now() + interval '5 days'), NULL),
-    ('Computing Practical Project 1: Visual Algorithm & Scratch', 'Computing', 'Basic 9', 'PROJECT_WORK', 'Hands-on project work documenting algorithm flowcharts, iterative loops, and Scratch sprite interactions.', 30.00, 'AVAILABLE', timezone('utc'::text, now() + interval '10 days'), NULL),
-    ('Computing End of Term Examination', 'Computing', 'Basic 9', 'EXAM', 'Comprehensive terminal examination evaluating Ghanaian NaCCA B7-B9 Computing curriculum competencies.', 50.00, 'UPCOMING', timezone('utc'::text, now() + interval '14 days'), NULL)
-ON CONFLICT DO NOTHING;
+    ('11111111-1111-1111-1111-111111111111', 'Computing CAT 1 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test 1 covering Trends in Computing, Perceptual & Quantum Computing.', 20.00, 50.00, 'AVAILABLE', timezone('utc'::text, now() + interval '7 days'), NULL),
+    ('22222222-2222-2222-2222-222222222222', 'Computing CAT 1 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test 1 covering Artificial Intelligence & Quantum Architecture.', 20.00, 50.00, 'AVAILABLE', timezone('utc'::text, now() + interval '7 days'), NULL),
+    ('33333333-3333-3333-3333-333333333333', 'Computing CAT 2 (Basic 9A)', 'Computing', 'Basic 9A', 'CAT', 'Continuous Assessment Test 2 covering Cloud Computing, Storage & Quantum Processors.', 20.00, 50.00, 'AVAILABLE', timezone('utc'::text, now() + interval '7 days'), NULL),
+    ('44444444-4444-4444-4444-444444444444', 'Computing CAT 2 (Basic 9B)', 'Computing', 'Basic 9B', 'CAT', 'Continuous Assessment Test 2 covering Network Storage, Virtual Cloud & Cyber Ergonomics.', 20.00, 50.00, 'AVAILABLE', timezone('utc'::text, now() + interval '7 days'), NULL)
+ON CONFLICT (id) DO UPDATE SET
+    title = EXCLUDED.title,
+    class_level = EXCLUDED.class_level,
+    description = EXCLUDED.description,
+    max_score = EXCLUDED.max_score,
+    weight = EXCLUDED.weight;
 
 -- 12. Initial Broadcast Notifications Seed
 INSERT INTO public.notifications (title, message, target_class, type, sender_name)

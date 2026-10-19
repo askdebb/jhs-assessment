@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const countdownElements = document.querySelectorAll('.countdown');
 
-  setInterval(() => {
+  const countdownInterval = setInterval(() => {
     const now = new Date().getTime();
     const timeDifference = targetDate - now;
 

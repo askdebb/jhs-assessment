@@ -59,6 +59,15 @@ import {
   syncCallRecordingToGoogleDrive,
   storeRecordingBlobInVault,
   getRecordingBlobFromVault,
+  testGoogleDriveWebhook,
+  syncAllPendingVaultRecordings,
+  getGoogleDriveWebhookUrl,
+  deleteRecordingBlobFromVault,
+  deleteCallRecording,
+  grantSubmissionRetake,
+  dispatchEmailNotification,
+  triggerWebPushNotification,
+  getDispatchedEmails,
 } from "./supabaseClient.js";
 
 import {
@@ -83,9 +92,19 @@ import {
   generateStudentPaper,
   shuffleArray,
   generateDynamicTestItems,
+  isIdentityOrRegistrationQuestion,
+  filterValidCurriculumQuestions,
 } from "./questionsData.js";
 
 import { QueryClient, MutationObserver, QueryObserver } from "@tanstack/query-core";
+
+import {
+  generateLearnerAIPotentials,
+  evaluateNextTestOutcome,
+  getActiveTarget,
+  renderAIPotentialCardHTML,
+  renderAssuranceCardHTML,
+} from "./aiPedagogicalEngine";
 
 // ------------------------------------------------------------------------------
 // Preset Student Avatars for Onboarding (Diverse Ghanaian / African youth avatars)
@@ -153,9 +172,17 @@ const state = {
   activeView: "learner", // 'learner' | 'admin'
   questionCatFilter: "ALL",
   questionTrackFilter: "ALL",
+  questionSittingFilter: "ALL",
+  questionSearchQuery: "",
+  questionsCollapsedAll: false,
+  collapsedQuestionKeys: new Set<string>(),
   allLearners: [],
+  adminLearnersCurrentPage: 1,
+  adminLearnersCustomPageSize: null as number | null,
   notifications: [],
   readNotificationIds: new Set(JSON.parse(localStorage.getItem("jhs_read_notifications") || "[]")),
+  notificationFilter: "all", // 'all' | 'unread'
+  expandedNotifIds: new Set<string>(),
   chatMessages: [],
   activeChatPartner: null,
   adminRealtimeUnsub: null,
@@ -175,6 +202,13 @@ const state = {
 // ------------------------------------------------------------------------------
 // Layout Sections
 const authSection = document.getElementById("authSection");
+const authLoaderSection = document.getElementById("authLoaderSection");
+const authLoaderSigningIn = document.getElementById("authLoaderSigningIn");
+const authLoaderSuccess = document.getElementById("authLoaderSuccess");
+const authLoaderTitle = document.getElementById("authLoaderTitle");
+const authLoaderSubtitle = document.getElementById("authLoaderSubtitle");
+const authLoaderSuccessTitle = document.getElementById("authLoaderSuccessTitle");
+const authLoaderSuccessSubtitle = document.getElementById("authLoaderSuccessSubtitle");
 const dashboardSection = document.getElementById("dashboardSection");
 const adminDashboardSection = document.getElementById("adminDashboardSection");
 const authNavContainer = document.getElementById("authNavContainer");
@@ -203,6 +237,10 @@ const notifBadge = document.getElementById("notifBadge");
 const notifUnreadPill = document.getElementById("notifUnreadPill");
 const markAllReadBtn = document.getElementById("markAllReadBtn");
 const notifListContainer = document.getElementById("notifListContainer");
+const notifTabAll = document.getElementById("notifTabAll");
+const notifTabUnread = document.getElementById("notifTabUnread");
+const notifCountAll = document.getElementById("notifCountAll");
+const notifCountUnread = document.getElementById("notifCountUnread");
 
 // Onboarding Modal Elements
 const onboardingModal = document.getElementById("onboardingModal");
@@ -357,6 +395,7 @@ const quizActiveFooter = document.getElementById("quizActiveFooter");
 const quizQuestionPill = document.getElementById("quizQuestionPill");
 const quizQuestionPrompt = document.getElementById("quizQuestionPrompt");
 const quizOptionsList = document.getElementById("quizOptionsList");
+const quizPrevBtn = document.getElementById("quizPrevBtn");
 const quizNextBtn = document.getElementById("quizNextBtn");
 const quizSubmitBtn = document.getElementById("quizSubmitBtn");
 const quizResultScreen = document.getElementById("quizResultScreen");
@@ -380,13 +419,15 @@ const adminWeightDescription = document.getElementById("adminWeightDescription")
 const adminAsmtCount = document.getElementById("adminAsmtCount");
 const adminAsmtTableBody = document.getElementById("adminAsmtTableBody");
 const addNewAssessmentForm = document.getElementById("addNewAssessmentForm");
-const newAsmtTitle = document.getElementById("newAsmtTitle");
-const newAsmtSubject = document.getElementById("newAsmtSubject");
-const newAsmtClass = document.getElementById("newAsmtClass");
-const newAsmtType = document.getElementById("newAsmtType");
-const newAsmtWeight = document.getElementById("newAsmtWeight");
-const newAsmtStatus = document.getElementById("newAsmtStatus");
-const newAsmtUnlockTime = document.getElementById("newAsmtUnlockTime");
+const newAsmtTitle = document.getElementById("newAsmtTitle") as HTMLInputElement | null;
+const newAsmtSubject = document.getElementById("newAsmtSubject") as HTMLSelectElement | null;
+const newAsmtClass = document.getElementById("newAsmtClass") as HTMLSelectElement | null;
+const newAsmtType = document.getElementById("newAsmtType") as HTMLSelectElement | null;
+const newAsmtWeight = document.getElementById("newAsmtWeight") as HTMLInputElement | null;
+const newAsmtDuration = document.getElementById("newAsmtDuration") as HTMLInputElement | null;
+const newAsmtStatus = document.getElementById("newAsmtStatus") as HTMLSelectElement | null;
+const newAsmtUnlockTime = document.getElementById("newAsmtUnlockTime") as HTMLInputElement | null;
+const newAsmtDeadline = document.getElementById("newAsmtDeadline") as HTMLInputElement | null;
 
 // Student Track Switcher Elements
 const studentTrackSwitcherContainer = document.getElementById("studentTrackSwitcherContainer");
@@ -428,8 +469,17 @@ const adminSubViewBroadcast = document.getElementById("adminSubViewBroadcast");
 
 // Questions Bank & Sitting Config Elements
 const addNewQuestionBtn = document.getElementById("addNewQuestionBtn");
-const questionTrackFilter = document.getElementById("questionTrackFilter");
+const questionTrackFilter = document.getElementById("questionTrackFilter") as HTMLSelectElement | null;
 const adminQuestionSittingsContainer = document.getElementById("adminQuestionSittingsContainer");
+const questionSittingSelect = document.getElementById("questionSittingSelect") as HTMLSelectElement | null;
+const questionSearchInput = document.getElementById("questionSearchInput") as HTMLInputElement | null;
+const toggleExpandAllQuestionsBtn = document.getElementById("toggleExpandAllQuestionsBtn");
+const toggleExpandAllQuestionsBtnText = document.getElementById("toggleExpandAllQuestionsBtnText");
+const catCountAll = document.getElementById("catCountAll");
+const catCountCAT = document.getElementById("catCountCAT");
+const catCountQuiz = document.getElementById("catCountQuiz");
+const catCountProject = document.getElementById("catCountProject");
+const catCountExam = document.getElementById("catCountExam");
 
 // Assessments & Weights Table 2 Elements
 const adminAutoBalanceBtn2 = document.getElementById("adminAutoBalanceBtn2");
@@ -463,13 +513,15 @@ const qEditorExplanation = document.getElementById("qEditorExplanation");
 
 // Extend Period Modal Elements
 const extendPeriodModal = document.getElementById("extendPeriodModal");
-const extendModalAsmtId = document.getElementById("extendModalAsmtId");
+const extendModalAsmtId = document.getElementById("extendModalAsmtId") as HTMLInputElement | null;
 const extendModalAsmtTitle = document.getElementById("extendModalAsmtTitle");
 const extendModalCurrentDeadline = document.getElementById("extendModalCurrentDeadline");
-const extendCustomDatetimeInput = document.getElementById("extendCustomDatetimeInput");
+const extendDurationInput = document.getElementById("extendDurationInput") as HTMLInputElement | null;
+const extendUnlockDatetimeInput = document.getElementById("extendUnlockDatetimeInput") as HTMLInputElement | null;
+const extendCustomDatetimeInput = document.getElementById("extendCustomDatetimeInput") as HTMLInputElement | null;
 const closeExtendPeriodBtn = document.getElementById("closeExtendPeriodBtn");
 const cancelExtendPeriodBtn = document.getElementById("cancelExtendPeriodBtn");
-const saveExtendPeriodBtn = document.getElementById("saveExtendPeriodBtn");
+const saveExtendPeriodBtn = document.getElementById("saveExtendPeriodBtn") as HTMLButtonElement | null;
 
 // Floating Chat Elements
 const floatingChatContainer = document.getElementById("floatingChatContainer");
@@ -554,6 +606,10 @@ const callVoiceSubtitle = document.getElementById("callVoiceSubtitle");
 // Video Call Stage Elements
 const callVideoStage = document.getElementById("callVideoStage");
 const callRemoteVideo = document.getElementById("callRemoteVideo") as HTMLVideoElement | null;
+const callRemoteCameraOffPlaceholder = document.getElementById("callRemoteCameraOffPlaceholder");
+const callRemoteCameraOffAvatar = document.getElementById("callRemoteCameraOffAvatar") as HTMLImageElement | null;
+const callRemoteCameraOffName = document.getElementById("callRemoteCameraOffName");
+
 const callScreenShareBanner = document.getElementById("callScreenShareBanner");
 const callStopShareTopBtn = document.getElementById("callStopShareTopBtn");
 const callWaitingOverlay = document.getElementById("callWaitingOverlay");
@@ -563,12 +619,34 @@ const callWaitingStatusText = document.getElementById("callWaitingStatusText");
 
 const localVideoContainer = document.getElementById("localVideoContainer");
 const callLocalVideo = document.getElementById("callLocalVideo") as HTMLVideoElement | null;
+const callLocalCameraOffOverlay = document.getElementById("callLocalCameraOffOverlay");
 const callLocalMutedBadge = document.getElementById("callLocalMutedBadge");
+const callToggleMirrorBtn = document.getElementById("callToggleMirrorBtn");
 
 const callToggleMicBtn = document.getElementById("callToggleMicBtn");
 const callToggleCameraBtn = document.getElementById("callToggleCameraBtn");
 const callShareScreenBtn = document.getElementById("callShareScreenBtn");
 const callEndBtn = document.getElementById("callEndBtn");
+
+// Video Upgrade Notice & Modal Elements
+const callVideoUpgradeNotice = document.getElementById("callVideoUpgradeNotice");
+const callVideoUpgradeNoticeText = document.getElementById("callVideoUpgradeNoticeText");
+const cancelVideoUpgradeRequestBtn = document.getElementById("cancelVideoUpgradeRequestBtn");
+
+const videoUpgradeRequestModal = document.getElementById("videoUpgradeRequestModal");
+const videoUpgradeRequesterAvatar = document.getElementById("videoUpgradeRequesterAvatar") as HTMLImageElement | null;
+const videoUpgradeRequesterName = document.getElementById("videoUpgradeRequesterName");
+const acceptVideoWithCameraBtn = document.getElementById("acceptVideoWithCameraBtn");
+const acceptVideoCameraOffBtn = document.getElementById("acceptVideoCameraOffBtn");
+const declineVideoUpgradeBtn = document.getElementById("declineVideoUpgradeBtn");
+
+// In-Call Live Reactions & Raised Hand Elements
+const callReactionsContainer = document.getElementById("callReactionsContainer");
+const callRaisedHandBanner = document.getElementById("callRaisedHandBanner");
+const callRaisedHandText = document.getElementById("callRaisedHandText");
+const callLowerHandBtn = document.getElementById("callLowerHandBtn");
+const callReactionBtn = document.getElementById("callReactionBtn");
+const callReactionPicker = document.getElementById("callReactionPicker");
 
 const incomingCallModal = document.getElementById("incomingCallModal");
 const incomingCallerAvatar = document.getElementById("incomingCallerAvatar") as HTMLImageElement | null;
@@ -602,8 +680,11 @@ interface ActiveCallState {
   status: "idle" | "calling" | "incoming" | "connected" | "ended";
   isMuted: boolean;
   isCameraOff: boolean;
+  isRemoteCameraOff: boolean;
   isScreenSharing: boolean;
+  pendingVideoUpgradeRequest: any | null;
   timerId: any | null;
+  inviteHeartbeatTimer: any | null;
   secondsElapsed: number;
   stopRingTone: (() => void) | null;
   pendingSignal: any | null;
@@ -638,8 +719,11 @@ const activeCall: ActiveCallState = {
   status: "idle",
   isMuted: false,
   isCameraOff: false,
+  isRemoteCameraOff: false,
   isScreenSharing: false,
+  pendingVideoUpgradeRequest: null,
   timerId: null,
+  inviteHeartbeatTimer: null,
   secondsElapsed: 0,
   stopRingTone: null,
   pendingSignal: null,
@@ -701,6 +785,18 @@ const adminOpenGoogleDriveBtn = document.getElementById("adminOpenGoogleDriveBtn
 const recordingsTypeFilter = document.getElementById("recordingsTypeFilter") as HTMLSelectElement | null;
 const recordingsSearchInput = document.getElementById("recordingsSearchInput") as HTMLInputElement | null;
 const statTotalRecordings = document.getElementById("statTotalRecordings");
+const adminOpenDriveConfigModalBtn = document.getElementById("adminOpenDriveConfigModalBtn");
+const driveWebhookConfigModal = document.getElementById("driveWebhookConfigModal");
+const closeDriveWebhookModalBtn = document.getElementById("closeDriveWebhookModalBtn");
+const driveWebhookUrlInput = document.getElementById("driveWebhookUrlInput") as HTMLInputElement | null;
+const saveDriveWebhookBtn = document.getElementById("saveDriveWebhookBtn");
+const syncVaultRecordingsToDriveBtn = document.getElementById("syncVaultRecordingsToDriveBtn");
+const driveWebhookStatusAlert = document.getElementById("driveWebhookStatusAlert");
+const driveWebhookStatusIcon = document.getElementById("driveWebhookStatusIcon");
+const driveWebhookStatusTitle = document.getElementById("driveWebhookStatusTitle");
+const driveWebhookStatusText = document.getElementById("driveWebhookStatusText");
+const driveBackupHealthStat = document.getElementById("driveBackupHealthStat");
+const backupHealthCard = document.getElementById("backupHealthCard");
 
 // Chat Media & Audio State
 let currentAttachment = null;
@@ -746,11 +842,15 @@ const bannerDeadline = document.getElementById("bannerDeadline");
 // Initialization & Application Lifecycle
 // ------------------------------------------------------------------------------
 async function startApplication() {
-  // Strictly purge any legacy cached assessments that contain Creative Arts or Math
+  // Strictly purge any legacy cached assessments that contain Creative Arts, Math, Quiz, Project, or Exams
   try {
     const cachedAsmts = localStorage.getItem("jhs_local_assessments");
-    if (cachedAsmts && (cachedAsmts.includes("Creative") || cachedAsmts.includes("Art") || cachedAsmts.includes("Math"))) {
+    if (cachedAsmts && (cachedAsmts.includes("Creative") || cachedAsmts.includes("Art") || cachedAsmts.includes("Math") || cachedAsmts.includes("Quiz") || cachedAsmts.includes("Project") || cachedAsmts.includes("Exam") || cachedAsmts.includes("Term"))) {
       localStorage.removeItem("jhs_local_assessments");
+    }
+    const configuredQ = localStorage.getItem("jhs_configured_questions");
+    if (configuredQ && (configuredQ.includes("asmt-007") || configuredQ.includes("asmt-008") || configuredQ.includes("asmt-009") || configuredQ.includes("asmt-003"))) {
+      localStorage.removeItem("jhs_configured_questions");
     }
   } catch (e) {}
 
@@ -787,11 +887,63 @@ async function startApplication() {
 (window as any).closeActiveLearnersModal = closeActiveLearnersModal;
 (window as any).showActiveLearnerDetail = showActiveLearnerDetail;
 (window as any).renderActiveLearnersList = renderActiveLearnersList;
+(window as any).showAuthLoaderSigningIn = showAuthLoaderSigningIn;
+(window as any).showAuthLoaderSuccess = showAuthLoaderSuccess;
+(window as any).hideAuthLoader = hideAuthLoader;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => startApplication());
 } else {
   startApplication();
+}
+
+// ------------------------------------------------------------------------------
+// Dynamic Google Auth Loader Controller
+// ------------------------------------------------------------------------------
+function showAuthLoaderSigningIn(title = "Signing in....", subtitle = "Connecting to your Google account and verifying your learner credentials...") {
+  const loaderSection = document.getElementById("authLoaderSection");
+  const signingInEl = document.getElementById("authLoaderSigningIn");
+  const successEl = document.getElementById("authLoaderSuccess");
+  const titleEl = document.getElementById("authLoaderTitle");
+  const subtitleEl = document.getElementById("authLoaderSubtitle");
+
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+
+  signingInEl?.classList.remove("hidden");
+  successEl?.classList.add("hidden");
+
+  // Keep landing and dashboard hidden so the landing image never shows
+  authSection?.classList.add("hidden");
+  dashboardSection?.classList.add("hidden");
+  adminDashboardSection?.classList.add("hidden");
+  adminGatekeeperSection?.classList.add("hidden");
+  adminGatekeeperSection?.classList.remove("flex");
+
+  loaderSection?.classList.remove("hidden");
+  document.documentElement.classList.add("google-signing-in");
+}
+
+function showAuthLoaderSuccess(title = "Successfully signed in", subtitle = "Authentication confirmed! Taking you to your dashboard...") {
+  const loaderSection = document.getElementById("authLoaderSection");
+  const signingInEl = document.getElementById("authLoaderSigningIn");
+  const successEl = document.getElementById("authLoaderSuccess");
+  const titleEl = document.getElementById("authLoaderSuccessTitle");
+  const subtitleEl = document.getElementById("authLoaderSuccessSubtitle");
+
+  if (titleEl) titleEl.textContent = title;
+  if (subtitleEl) subtitleEl.textContent = subtitle;
+
+  signingInEl?.classList.add("hidden");
+  successEl?.classList.remove("hidden");
+
+  loaderSection?.classList.remove("hidden");
+}
+
+function hideAuthLoader() {
+  const loaderSection = document.getElementById("authLoaderSection");
+  loaderSection?.classList.add("hidden");
+  document.documentElement.classList.remove("google-signing-in");
 }
 
 // ------------------------------------------------------------------------------
@@ -808,7 +960,31 @@ async function checkAuthSession() {
     const oauthErrorCode = urlParams.get("error_code") || hashParams.get("error_code");
     const oauthDesc = urlParams.get("error_description") || hashParams.get("error_description");
 
+    const previewLoader = urlParams.get("preview_loader");
+    if (previewLoader === "signing_in") {
+      showAuthLoaderSigningIn("Signing in....", "Connecting to your Google account and verifying your learner credentials...");
+      return;
+    }
+    if (previewLoader === "success") {
+      showAuthLoaderSuccess("Successfully signed in", "Authentication confirmed! Taking you to your dashboard...");
+      return;
+    }
+
+    const isGoogleOAuthReturning = Boolean(
+      (typeof window !== "undefined" && (
+        (window.location.hash && (window.location.hash.includes("access_token") || window.location.hash.includes("refresh_token"))) ||
+        (window.location.search && window.location.search.includes("code="))
+      )) ||
+      sessionStorage.getItem("jhs_google_auth_in_progress") === "true"
+    );
+
+    if (isGoogleOAuthReturning && !oauthError) {
+      showAuthLoaderSigningIn("Signing in....", "Verifying your Google credentials...");
+    }
+
     if (oauthError || oauthDesc) {
+      sessionStorage.removeItem("jhs_google_auth_in_progress");
+      hideAuthLoader();
       showOAuthErrorBanner(oauthError, oauthErrorCode, oauthDesc);
       const gatekeeperError = document.getElementById("adminGatekeeperError");
       const gatekeeperErrorMsg = document.getElementById("adminGatekeeperErrorMsg");
@@ -874,10 +1050,21 @@ async function checkAuthSession() {
           state.profile = profile;
         }
       }
+
+      // If completing Google sign-in / OAuth redirect: show "Successfully signed in" before sending to dashboard
+      if (isGoogleOAuthReturning) {
+        const displayName = profile?.full_name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Learner";
+        showAuthLoaderSuccess("Successfully signed in", `Welcome back, ${displayName}! Preparing your dashboard...`);
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+        sessionStorage.removeItem("jhs_google_auth_in_progress");
+        hideAuthLoader();
+      }
     } else {
       state.user = null;
       state.profile = null;
       state.isAdmin = false;
+      sessionStorage.removeItem("jhs_google_auth_in_progress");
+      hideAuthLoader();
     }
 
     const savedView = localStorage.getItem("jhs_view_mode");
@@ -894,6 +1081,11 @@ async function checkAuthSession() {
       } catch (err) {
         console.warn("Chat init error:", err);
       }
+      try {
+        checkForPendingActiveCallOnLogin();
+      } catch (err) {
+        console.warn("Call check error:", err);
+      }
     }
 
     await handleRoute();
@@ -902,6 +1094,8 @@ async function checkAuthSession() {
     state.user = null;
     state.profile = null;
     state.isAdmin = false;
+    sessionStorage.removeItem("jhs_google_auth_in_progress");
+    hideAuthLoader();
     await handleRoute();
   }
 }
@@ -917,6 +1111,7 @@ function showOAuthErrorBanner(error, code, description) {
 }
 
 function renderAuthLanding() {
+  hideAuthLoader();
   document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
   document.getElementById("mainHeader")?.classList.remove("hidden");
   document.getElementById("mainFooter")?.classList.remove("hidden");
@@ -952,6 +1147,9 @@ async function handleGoogleSignIn() {
   const originalGatekeeperBtnHtml = gatekeeperBtn ? gatekeeperBtn.innerHTML : "";
 
   try {
+    sessionStorage.setItem("jhs_google_auth_in_progress", "true");
+    showAuthLoaderSigningIn("Signing in....", "Connecting to your Google account...");
+
     // When clicked, change button text to spinner for both learner and admin app
     if (googleSignInBtn) {
       googleSignInBtn.disabled = true;
@@ -970,6 +1168,9 @@ async function handleGoogleSignIn() {
     }
     await signInWithGoogle();
   } catch (err) {
+    sessionStorage.removeItem("jhs_google_auth_in_progress");
+    hideAuthLoader();
+    renderAuthLanding();
     if (googleSignInBtn) {
       googleSignInBtn.disabled = false;
       googleSignInBtn.classList.remove("opacity-75", "cursor-wait");
@@ -1012,7 +1213,10 @@ async function handleGoogleSignIn() {
   }
 }
 
-function startDemoMode() {
+async function startDemoMode() {
+  showAuthLoaderSigningIn("Signing in....", "Authenticating Kwame Mensah Frimpong (Basic 9A)...");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
   const demoUser = {
     id: "demo-learner-001",
     email: "kwame.mensah@ghana-edu.gov.gh",
@@ -1044,12 +1248,63 @@ function startDemoMode() {
   state.isAdmin = false;
   state.activeView = "learner";
 
+  showAuthLoaderSuccess("Successfully signed in", "Welcome Kwame Mensah Frimpong! Loading your dashboard...");
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  hideAuthLoader();
+
   initNotifications();
   initChat();
   navigateTo("/learner");
 }
 
-function startAdminDemoMode() {
+async function startDemoMode9B() {
+  showAuthLoaderSigningIn("Signing in....", "Authenticating Ama Serwaa Asante (Basic 9B)...");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  const demoUser = {
+    id: "demo-learner-9b-001",
+    email: "ama.asante@ghana-edu.gov.gh",
+    user_metadata: {
+      full_name: "Ama Serwaa Asante",
+      avatar_url: AVATAR_PRESETS[1],
+    },
+  };
+
+  const demoProfile = {
+    id: "demo-learner-9b-001",
+    student_id: "JHS26-B9B-001",
+    full_name: "Ama Serwaa Asante",
+    email: "ama.asante@ghana-edu.gov.gh",
+    gender: "Female",
+    date_of_birth: "2011-05-20",
+    class_level: "Basic 9B",
+    role: "learner",
+    avatar_url: AVATAR_PRESETS[1],
+    onboarding_completed: true,
+  };
+
+  localStorage.setItem("jhs_demo_session", JSON.stringify(demoUser));
+  localStorage.setItem("jhs_active_learner", JSON.stringify(demoProfile));
+  localStorage.setItem("jhs_view_mode", "learner");
+
+  state.user = demoUser;
+  state.profile = demoProfile;
+  state.isAdmin = false;
+  state.activeView = "learner";
+
+  showAuthLoaderSuccess("Successfully signed in", "Welcome Ama Serwaa Asante! Loading your dashboard...");
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  hideAuthLoader();
+
+  initNotifications();
+  initChat();
+  navigateTo("/learner");
+}
+
+async function startAdminDemoMode() {
+  showAuthLoaderSigningIn("Signing in....", "Authenticating Master Debrah (Admin)...");
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
   const adminUser = {
     id: "admin-master-debrah",
     email: PRIMARY_ADMIN_EMAIL,
@@ -1078,6 +1333,10 @@ function startAdminDemoMode() {
   state.profile = adminProfile;
   state.isAdmin = true;
   state.activeView = "admin";
+
+  showAuthLoaderSuccess("Successfully signed in", "Welcome Master Debrah! Opening Admin Console...");
+  await new Promise((resolve) => setTimeout(resolve, 1400));
+  hideAuthLoader();
 
   initNotifications();
   initChat();
@@ -1711,6 +1970,45 @@ function updateKpiMetrics() {
   countAvailable.textContent = openCount;
   countClosed.textContent = state.assessments.filter((a) => a.status === "CLOSED" || (a.unlock_time && new Date(a.unlock_time) > new Date())).length;
   countGraded.textContent = graded.length;
+
+  // Render AI Personalized Milestone Target Banner
+  renderAiMilestoneQuestBanner();
+}
+
+function renderAiMilestoneQuestBanner() {
+  const banner = document.getElementById("aiTargetMilestoneBanner");
+  if (!banner) return;
+
+  const learnerName = state.profile?.full_name?.split(" ")[0] || "Learner";
+
+  if (state.submissions && state.submissions.length > 0) {
+    const lastSub = state.submissions[0];
+    const asmt = lastSub.assessments || {};
+
+    let targetProfile = getActiveTarget();
+    if (!targetProfile || targetProfile.status !== "ACTIVE_TARGET") {
+      targetProfile = generateLearnerAIPotentials(learnerName, lastSub, asmt.title || "Computing CAT");
+    }
+
+    const titleEl = document.getElementById("aiBannerTitle");
+    const msgEl = document.getElementById("aiBannerMessage");
+    const valEl = document.getElementById("aiBannerTargetVal");
+    const badgeEl = document.getElementById("aiBannerBadge");
+    const detailsBtn = document.getElementById("viewAiQuestDetailsBtn");
+
+    if (titleEl) titleEl.textContent = targetProfile.motivationalNotice.title;
+    if (msgEl) msgEl.textContent = targetProfile.motivationalNotice.message;
+    if (valEl) valEl.textContent = `${targetProfile.targetScore.toFixed(1)} / ${targetProfile.maxScore}`;
+    if (badgeEl) badgeEl.textContent = targetProfile.motivationalNotice.badge;
+
+    if (detailsBtn) {
+      detailsBtn.onclick = () => openScoreDetailsModal(lastSub);
+    }
+
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -1739,10 +2037,11 @@ function renderAssessmentCards() {
     }
     const sub = subMap.get(asmt.id);
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
-    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled;
+    const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
+    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired;
 
     if (filterStatus === "AVAILABLE") return isAvailable;
-    if (filterStatus === "CLOSED") return asmt.status === "CLOSED" || isScheduled;
+    if (filterStatus === "CLOSED") return asmt.status === "CLOSED" || isScheduled || isExpired;
     if (filterStatus === "GRADED") return sub && sub.status === "GRADED";
     return true;
   });
@@ -1760,8 +2059,10 @@ function renderAssessmentCards() {
   assessmentGrid.innerHTML = filtered.map((asmt) => {
     const sub = subMap.get(asmt.id);
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
-    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled;
+    const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
+    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired;
     const hasScore = sub && sub.status === "GRADED";
+    const duration = asmt.time_limit_minutes || 15;
 
     // Subject styles - Exclusively Computing
     const subjectClass = "bg-blue-50 text-blue-700 border-blue-200";
@@ -1769,10 +2070,22 @@ function renderAssessmentCards() {
 
     // Status Pill
     let statusBadge = "";
-    if (hasScore) {
+    if (sub && sub.retake_granted === true) {
+      statusBadge = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse shadow-2xs">
+          <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Authorized
+        </span>
+      `;
+    } else if (hasScore) {
       statusBadge = `
         <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
           <i class="fa-solid fa-lock text-indigo-500"></i> Graded &amp; Locked
+        </span>
+      `;
+    } else if (isExpired) {
+      statusBadge = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
+          <i class="fa-solid fa-hourglass-end text-rose-600"></i> Validity Expired
         </span>
       `;
     } else if (isScheduled) {
@@ -1808,10 +2121,25 @@ function renderAssessmentCards() {
 
     // Action Button (with direct Google Forms CAT launch if applicable)
     let actionBtn = "";
-    if (hasScore) {
+    if (sub && sub.retake_granted === true) {
+      actionBtn = `
+        <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}" data-is-retake="true">
+          <i class="fa-solid fa-rotate-right text-xs"></i> Start Assessment Retake
+        </button>
+        <button class="view-score-btn w-full mt-1.5 py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1" data-sub-id="${sub.id}">
+          <i class="fa-solid fa-clock-rotate-left text-[10px]"></i> View Previous Attempt (${sub.score}/${asmt.max_score})
+        </button>
+      `;
+    } else if (hasScore) {
       actionBtn = `
         <button class="view-score-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}">
           <i class="fa-solid fa-file-lines text-indigo-600 text-xs"></i> View Score &amp; Feedback
+        </button>
+      `;
+    } else if (isExpired) {
+      actionBtn = `
+        <button disabled class="w-full py-2 px-3 rounded-lg text-xs font-bold bg-rose-50 text-rose-500 border border-rose-200 cursor-not-allowed flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-ban text-rose-400 text-xs"></i> Validity Period Expired
         </button>
       `;
     } else if (isScheduled) {
@@ -1823,7 +2151,7 @@ function renderAssessmentCards() {
     } else if (isAvailable) {
       actionBtn = `
         <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}">
-          <i class="fa-solid fa-play text-xs"></i> Start Assessment (CAT)
+          <i class="fa-solid fa-play text-xs"></i> Start Assessment (${duration}m)
         </button>
       `;
     } else {
@@ -1859,6 +2187,10 @@ function renderAssessmentCards() {
           <!-- Details Grid -->
           <div class="space-y-1 py-2 border-y border-slate-100 text-xs text-slate-600 mb-3">
             <div class="flex justify-between">
+              <span class="text-slate-400">Duration:</span>
+              <span class="font-bold text-slate-800"><i class="fa-regular fa-clock text-indigo-500 mr-1"></i>${duration} mins</span>
+            </div>
+            <div class="flex justify-between">
               <span class="text-slate-400">Class Track:</span>
               <span class="font-semibold text-slate-700">${asmt.class_level || "Basic 9"}</span>
             </div>
@@ -1886,8 +2218,8 @@ function renderAssessmentCards() {
             `
                 : `
               <div class="flex justify-between">
-                <span class="text-slate-400">Deadline:</span>
-                <span class="font-semibold text-slate-700">${formatDeadline(asmt.deadline)}</span>
+                <span class="text-slate-400">Validity Deadline:</span>
+                <span class="font-semibold ${isExpired ? 'text-rose-600 font-bold' : 'text-slate-700'}">${formatDeadline(asmt.deadline)}</span>
               </div>
             `
             }
@@ -1992,7 +2324,7 @@ function startAssessmentQuiz(asmtId) {
   if (!asmt) return;
 
   const existingSub = state.submissions.find((s) => s.assessment_id === asmtId && s.status === "GRADED");
-  if (existingSub) {
+  if (existingSub && !existingSub.retake_granted) {
     alert("You have already completed and submitted this assessment. Re-takes are locked to maintain assessment integrity.");
     return;
   }
@@ -2003,11 +2335,17 @@ function startAssessmentQuiz(asmtId) {
     return;
   }
 
+  const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
+  if (isExpired && !existingSub?.retake_granted) {
+    alert("The validity period for this assessment has expired. Submissions are no longer accepted.");
+    return;
+  }
+
   const learnerClass = state.profile?.class_level || "Basic 9A";
   const questionPack = getAssessmentQuestionPack(asmtId, learnerClass, asmt.title);
   // Anti-cheat intelligence: randomize both question order AND option order for each student paper
   const studentPaper = generateStudentPaper(questionPack);
-  const sittingMinutes = questionPack?.time_limit_minutes || asmt.time_limit_minutes || 15;
+  const sittingMinutes = asmt.time_limit_minutes || questionPack?.time_limit_minutes || 15;
 
   state.activeQuiz = {
     asmtId: asmtId,
@@ -2020,13 +2358,20 @@ function startAssessmentQuiz(asmtId) {
     answers: {},
     isSubmitting: false,
     remainingSeconds: sittingMinutes * 60,
+    isRetake: !!(existingSub && existingSub.retake_granted),
   };
+
+  if (quizTimerText) {
+    quizTimerText.textContent = `${String(sittingMinutes).padStart(2, "0")}:00`;
+  }
 
   if (quizSubjectBadge) quizSubjectBadge.textContent = asmt.subject;
   if (quizClassTrackBadge) quizClassTrackBadge.textContent = `${learnerClass} Track`;
   if (quizTitle) quizTitle.textContent = asmt.title;
   if (quizLearnerName) quizLearnerName.textContent = state.profile?.full_name || "Student Learner";
   if (quizStudentIdText) quizStudentIdText.textContent = state.profile?.student_id || generateStudentId(learnerClass, 1);
+  const quizLearnerEmailEl = document.getElementById("quizLearnerEmail");
+  if (quizLearnerEmailEl) quizLearnerEmailEl.textContent = state.profile?.email || state.user?.email || "student@ghana-edu.gov.gh";
   if (quizTotalNum) quizTotalNum.textContent = studentPaper.length;
 
   if (quizActiveBody) quizActiveBody.classList.remove("hidden");
@@ -2059,79 +2404,136 @@ function renderQuizQuestion() {
   const optionLetters = ["A", "B", "C", "D", "E"];
 
   if (quizOptionsList) {
-    quizOptionsList.innerHTML = currentQ.options.map((optText, idx) => {
-      const isSelected = selectedAnswer === optText;
-      const letter = optionLetters[idx] || (idx + 1);
+    const isFillBlank = currentQ.type === "fill_blank" || !currentQ.options || currentQ.options.length === 0;
 
-      return `
-        <button
-          type="button"
-          class="quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
-            isSelected
-              ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
-          }"
-          data-option="${escapeHtml(optText)}"
-        >
-          <div class="flex items-center gap-2.5">
-            <span class="quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
-              isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-            }">
-              ${letter}
-            </span>
-            <span class="text-xs sm:text-sm leading-relaxed">${escapeHtml(optText)}</span>
+    if (isFillBlank) {
+      quizOptionsList.innerHTML = `
+        <div class="space-y-3">
+          <div class="p-4 sm:p-5 bg-slate-50/80 rounded-2xl border-2 border-slate-200 focus-within:border-indigo-600 focus-within:bg-indigo-50/20 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
+            <label for="quizFillBlankInput" class="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider flex items-center justify-between">
+              <span><i class="fa-solid fa-pen-nib text-indigo-600 mr-1.5"></i>Your Answer (Fill in the Blank)</span>
+              <span class="text-[11px] font-normal text-slate-400 lowercase">case-insensitive</span>
+            </label>
+            <input
+              type="text"
+              id="quizFillBlankInput"
+              class="w-full px-4 py-3 bg-white rounded-xl border border-slate-300 text-slate-900 font-semibold text-sm sm:text-base placeholder-slate-400 focus:outline-none focus:border-indigo-600 shadow-sm transition"
+              placeholder="Type your answer here..."
+              autocomplete="off"
+              spellcheck="false"
+              value="${escapeHtml(selectedAnswer || '')}"
+            />
+            <p class="text-[11px] text-slate-500 mt-2.5 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-info text-indigo-500 shrink-0"></i>
+              <span>Ensure accurate spelling. Type your answer and click <strong>Next Question</strong> or press <strong>Enter</strong>.</span>
+            </p>
           </div>
-          <div class="quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-            isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
-          }">
-            <span class="quiz-radio-inner">${isSelected ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : ''}</span>
-          </div>
-        </button>
+        </div>
       `;
-    }).join("");
 
-    quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const optionVal = btn.getAttribute("data-option");
-        quiz.answers[currentQ.id] = optionVal;
+      const inputEl = document.getElementById("quizFillBlankInput");
+      if (inputEl) {
+        setTimeout(() => inputEl.focus(), 60);
 
-        // Visual selection indicator without revealing right/wrong answers
-        quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((b) => {
-          const isThis = b.getAttribute("data-option") === optionVal;
-          b.className = `quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
-            isThis
-              ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
-              : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
-          }`;
-          const badge = b.querySelector(".quiz-letter-badge");
-          if (badge) {
-            badge.className = `quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
-              isThis ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
-            }`;
-          }
-          const radioOuter = b.querySelector(".quiz-radio-outer");
-          if (radioOuter) {
-            radioOuter.className = `quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-              isThis ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
-            }`;
-          }
-          const radioInner = b.querySelector(".quiz-radio-inner");
-          if (radioInner) {
-            radioInner.innerHTML = isThis ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : '';
-          }
+        inputEl.addEventListener("input", (e) => {
+          quiz.answers[currentQ.id] = e.target.value;
         });
 
-        // Anti-leak blind progression: smoothly auto-advance after 300ms without showing right/wrong
-        setTimeout(() => {
-          if (quiz.currentIndex < quiz.paper.length - 1) {
-            quiz.currentIndex++;
-            renderQuizQuestion();
-          } else {
-            handleQuizSubmit();
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const val = inputEl.value.trim();
+            if (!val) {
+              alert("Please type your answer before proceeding.");
+              return;
+            }
+            quiz.answers[currentQ.id] = val;
+            if (quiz.currentIndex < quiz.paper.length - 1) {
+              quiz.currentIndex++;
+              renderQuizQuestion();
+            } else {
+              handleQuizSubmit();
+            }
           }
-        }, 320);
+        });
+      }
+    } else {
+      // Multiple Choice Question Rendering
+      quizOptionsList.innerHTML = currentQ.options.map((optText, idx) => {
+        const isSelected = selectedAnswer === optText;
+        const letter = optionLetters[idx] || (idx + 1);
+
+        return `
+          <button
+            type="button"
+            class="quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
+              isSelected
+                ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
+            }"
+            data-option="${escapeHtml(optText)}"
+          >
+            <div class="flex items-center gap-2.5">
+              <span class="quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+              }">
+                ${letter}
+              </span>
+              <span class="text-xs sm:text-sm leading-relaxed">${escapeHtml(optText)}</span>
+            </div>
+            <div class="quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+              isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
+            }">
+              <span class="quiz-radio-inner">${isSelected ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : ''}</span>
+            </div>
+          </button>
+        `;
+      }).join("");
+
+      quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const optionVal = btn.getAttribute("data-option");
+          quiz.answers[currentQ.id] = optionVal;
+
+          // Visual selection indicator without revealing right/wrong answers
+          quizOptionsList.querySelectorAll(".quiz-option-btn").forEach((b) => {
+            const isThis = b.getAttribute("data-option") === optionVal;
+            b.className = `quiz-option-btn w-full p-2.5 sm:p-3 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
+              isThis
+                ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium'
+            }`;
+            const badge = b.querySelector(".quiz-letter-badge");
+            if (badge) {
+              badge.className = `quiz-letter-badge w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${
+                isThis ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'
+              }`;
+            }
+            const radioOuter = b.querySelector(".quiz-radio-outer");
+            if (radioOuter) {
+              radioOuter.className = `quiz-radio-outer w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                isThis ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
+              }`;
+            }
+            const radioInner = b.querySelector(".quiz-radio-inner");
+            if (radioInner) {
+              radioInner.innerHTML = isThis ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : '';
+            }
+          });
+        });
       });
-    });
+    }
+  }
+
+  // Update Previous button state
+  if (quizPrevBtn) {
+    if (quiz.currentIndex === 0) {
+      quizPrevBtn.setAttribute("disabled", "true");
+      quizPrevBtn.className = "inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-slate-200 bg-slate-50 text-slate-400 opacity-40 cursor-not-allowed transition";
+    } else {
+      quizPrevBtn.removeAttribute("disabled");
+      quizPrevBtn.className = "inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer";
+    }
   }
 
   const isLast = quiz.currentIndex === totalQuestions - 1;
@@ -2142,6 +2544,26 @@ function renderQuizQuestion() {
     quizNextBtn?.classList.remove("hidden");
     quizSubmitBtn?.classList.add("hidden");
   }
+
+  // Reset scroll position to top so new question is fully visible
+  if (quizActiveBody) {
+    quizActiveBody.scrollTop = 0;
+  }
+}
+
+function handleQuizPrev() {
+  const quiz = state.activeQuiz;
+  if (!quiz) return;
+
+  const inputEl = document.getElementById("quizFillBlankInput");
+  if (inputEl) {
+    quiz.answers[quiz.paper[quiz.currentIndex].id] = inputEl.value.trim();
+  }
+
+  if (quiz.currentIndex > 0) {
+    quiz.currentIndex--;
+    renderQuizQuestion();
+  }
 }
 
 function handleQuizNext() {
@@ -2149,8 +2571,14 @@ function handleQuizNext() {
   if (!quiz) return;
 
   const currentQ = quiz.paper[quiz.currentIndex];
-  if (!quiz.answers[currentQ.id]) {
-    alert("Please select an answer to proceed.");
+  const inputEl = document.getElementById("quizFillBlankInput");
+  if (inputEl) {
+    quiz.answers[currentQ.id] = inputEl.value.trim();
+  }
+
+  const userAns = quiz.answers[currentQ.id];
+  if (!userAns || (typeof userAns === "string" && userAns.trim() === "")) {
+    alert("Please enter or select an answer to proceed.");
     return;
   }
 
@@ -2160,14 +2588,30 @@ function handleQuizNext() {
   }
 }
 
+function normalizeQuizAnswer(str) {
+  if (!str || typeof str !== "string") return "";
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function handleQuizSubmit() {
   const quiz = state.activeQuiz;
   if (!quiz) return;
   if (quiz.isSubmitting) return;
 
   const currentQ = quiz.paper[quiz.currentIndex];
-  if (!quiz.answers[currentQ.id]) {
-    alert("Please select your answer to complete the assessment.");
+  const inputEl = document.getElementById("quizFillBlankInput");
+  if (inputEl) {
+    quiz.answers[currentQ.id] = inputEl.value.trim();
+  }
+
+  const userAns = quiz.answers[currentQ.id];
+  if (!userAns || (typeof userAns === "string" && userAns.trim() === "")) {
+    alert("Please provide an answer to complete the assessment.");
     return;
   }
 
@@ -2182,8 +2626,27 @@ async function handleQuizSubmit() {
   let correctCount = 0;
   quiz.paper.forEach((q) => {
     const studentChoice = quiz.answers[q.id];
-    if (studentChoice && q.correctAnswer && studentChoice.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase()) {
-      correctCount++;
+    if (studentChoice && typeof studentChoice === "string") {
+      const rawChoice = studentChoice.trim().toLowerCase();
+      const normChoice = normalizeQuizAnswer(studentChoice);
+
+      const checkMatches = (target) => {
+        if (!target) return false;
+        const rawTarget = target.trim().toLowerCase();
+        const normTarget = normalizeQuizAnswer(target);
+        return rawChoice === rawTarget || normChoice === normTarget;
+      };
+
+      let isCorrect = false;
+      if (q.correctAnswer && checkMatches(q.correctAnswer)) {
+        isCorrect = true;
+      } else if (Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.some((ans) => checkMatches(ans))) {
+        isCorrect = true;
+      }
+
+      if (isCorrect) {
+        correctCount++;
+      }
     }
   });
 
@@ -2237,6 +2700,54 @@ async function handleQuizSubmit() {
       quizResultGradeBadge.textContent = "Pass";
       quizResultGradeBadge.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800";
     }
+  }
+
+  // ----------------------------------------------------------------------------
+  // AI Pedagogical Assurance & Next Target Calibration Engine
+  // ----------------------------------------------------------------------------
+  const learnerName = state.profile?.full_name?.split(" ")[0] || "Learner";
+
+  // 1. Evaluate previous target outcome (Celebratory vs Reassuring Assurance)
+  const outcomeEvaluation = evaluateNextTestOutcome(score, maxScore, quiz.asmtTitle);
+  const assuranceContainer = document.getElementById("quizResultAssuranceContainer");
+  if (assuranceContainer) {
+    if (outcomeEvaluation) {
+      assuranceContainer.innerHTML = renderAssuranceCardHTML(outcomeEvaluation);
+      assuranceContainer.classList.remove("hidden");
+
+      // Broadcast intelligent in-app push notification
+      window.dispatchEvent(
+        new CustomEvent("jhs:push-notification", {
+          detail: {
+            title: outcomeEvaluation.assuranceTitle,
+            body: outcomeEvaluation.assuranceMessage,
+            timestamp: "Just now",
+          },
+        })
+      );
+    } else {
+      assuranceContainer.innerHTML = "";
+      assuranceContainer.classList.add("hidden");
+    }
+  }
+
+  // 2. Unveil potentials & calibrate realistic target for the next sitting
+  const newAiProfile = generateLearnerAIPotentials(
+    learnerName,
+    {
+      score,
+      max_score: maxScore,
+      assessment_id: quiz.asmtId,
+      learner_id: learnerId,
+      correct_count: correctCount,
+      incorrect_count: incorrectCount,
+    },
+    quiz.asmtTitle
+  );
+
+  const quizResultAiContainer = document.getElementById("quizResultAiContainer");
+  if (quizResultAiContainer) {
+    quizResultAiContainer.innerHTML = renderAIPotentialCardHTML(newAiProfile);
   }
 
   // Immediately lock this card so student cannot start it again
@@ -2671,7 +3182,7 @@ function renderAdminAssessmentConfigTable() {
   if (asmts.length === 0) {
     adminAsmtTableBody.innerHTML = `
       <tr>
-        <td colspan="6" class="py-8 text-center text-slate-400">
+        <td colspan="7" class="py-8 text-center text-slate-400">
           No assessment items configured.
         </td>
       </tr>
@@ -2682,6 +3193,9 @@ function renderAdminAssessmentConfigTable() {
   adminAsmtTableBody.innerHTML = asmts.map((asmt) => {
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
     const formattedUnlock = asmt.unlock_time ? new Date(asmt.unlock_time).toISOString().slice(0, 16) : "";
+    const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
+    const formattedDeadline = asmt.deadline ? new Date(asmt.deadline).toISOString().slice(0, 16) : "";
+    const duration = asmt.time_limit_minutes || 15;
 
     return `
       <tr class="hover:bg-slate-50/70 transition-colors" data-asmt-row="${asmt.id}">
@@ -2708,6 +3222,20 @@ function renderAdminAssessmentConfigTable() {
             <span class="text-slate-400 font-semibold">%</span>
           </div>
         </td>
+        <td class="py-3.5 px-2">
+          <div class="flex items-center gap-1">
+            <input
+              type="number"
+              min="5"
+              max="180"
+              step="5"
+              class="asmt-duration-input w-16 bg-white border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              value="${duration}"
+              data-asmt-id="${asmt.id}"
+            />
+            <span class="text-slate-400 font-semibold text-[11px]">m</span>
+          </div>
+        </td>
         <td class="py-3.5 px-2 font-mono font-bold text-slate-700">
           ${asmt.max_score}
         </td>
@@ -2722,7 +3250,7 @@ function renderAdminAssessmentConfigTable() {
               <option value="CLOSED" ${asmt.status === 'CLOSED' ? 'selected' : ''}>Closed (Locked)</option>
             </select>
             <div class="flex items-center gap-1">
-              <span class="text-[10px] text-slate-400">Unlock:</span>
+              <span class="text-[10px] text-slate-400 w-11 shrink-0">Opens:</span>
               <input
                 type="datetime-local"
                 class="asmt-unlock-input bg-white border border-slate-200 rounded-lg py-0.5 px-1.5 text-[10px] text-slate-700 focus:ring-2 focus:ring-indigo-500"
@@ -2730,7 +3258,16 @@ function renderAdminAssessmentConfigTable() {
                 data-asmt-id="${asmt.id}"
               />
             </div>
-            ${isScheduled ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200"><i class="fa-solid fa-clock"></i> Countdown Live</span>` : ''}
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] text-slate-400 w-11 shrink-0">Expires:</span>
+              <input
+                type="datetime-local"
+                class="asmt-deadline-input bg-white border border-slate-200 rounded-lg py-0.5 px-1.5 text-[10px] text-slate-700 focus:ring-2 focus:ring-indigo-500"
+                value="${formattedDeadline}"
+                data-asmt-id="${asmt.id}"
+              />
+            </div>
+            ${isExpired ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200"><i class="fa-solid fa-hourglass-end"></i> Validity Expired</span>` : isScheduled ? `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200"><i class="fa-solid fa-clock"></i> Countdown Live</span>` : ''}
           </div>
         </td>
         <td class="py-3.5 px-3 text-right">
@@ -2782,22 +3319,38 @@ function renderAdminAssessmentConfigTable() {
       const row = document.querySelector(`[data-asmt-row="${asmtId}"]`);
       if (!row) return;
 
-      const weightVal = parseFloat(row.querySelector(".asmt-weight-input")?.value) || 20;
-      const statusVal = row.querySelector(".asmt-status-select")?.value || "AVAILABLE";
-      const unlockVal = row.querySelector(".asmt-unlock-input")?.value;
+      const weightVal = parseFloat((row.querySelector(".asmt-weight-input") as HTMLInputElement)?.value) || 20;
+      const durationVal = parseInt((row.querySelector(".asmt-duration-input") as HTMLInputElement)?.value, 10) || 15;
+      const statusVal = (row.querySelector(".asmt-status-select") as HTMLSelectElement)?.value || "AVAILABLE";
+      const unlockVal = (row.querySelector(".asmt-unlock-input") as HTMLInputElement)?.value;
       const unlockTime = unlockVal ? new Date(unlockVal).toISOString() : null;
+      const deadlineVal = (row.querySelector(".asmt-deadline-input") as HTMLInputElement)?.value;
+      const deadlineTime = deadlineVal ? new Date(deadlineVal).toISOString() : null;
 
       btn.disabled = true;
       btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
 
+      const existingAsmt = (state.assessments || []).find((a) => a.id === asmtId);
+      const wasClosed = existingAsmt && existingAsmt.status !== "AVAILABLE";
+
+      updateAssessmentDuration(asmtId, durationVal);
+
       await updateAssessment(asmtId, {
         weight: weightVal,
+        time_limit_minutes: durationVal,
         status: statusVal,
         unlock_time: unlockTime,
+        deadline: deadlineTime,
+        due_date: deadlineTime,
       });
+
+      if (statusVal === "AVAILABLE" && wasClosed && asmtId) {
+        notifyAssessmentActivated(asmtId);
+      }
 
       state.assessments = await fetchAssessments();
       renderAdminAssessmentConfigTable();
+      renderAdminAssessmentConfigTable2();
       renderAssessmentCards();
       updateKpiMetrics();
     });
@@ -2816,6 +3369,7 @@ function renderAdminAssessmentConfigTable() {
       await deleteAssessment(asmtId);
       state.assessments = await fetchAssessments();
       renderAdminAssessmentConfigTable();
+      renderAdminAssessmentConfigTable2();
       renderAssessmentCards();
       updateKpiMetrics();
     });
@@ -2831,9 +3385,12 @@ async function handleAddNewAssessment(e) {
   const classLevel = newAsmtClass?.value || "Basic 9A";
   const type = newAsmtType?.value || "CAT";
   const weight = parseFloat(newAsmtWeight?.value) || 20;
+  const duration = parseInt(newAsmtDuration?.value, 10) || 15;
   const status = newAsmtStatus?.value || "AVAILABLE";
   const unlockVal = newAsmtUnlockTime?.value;
   const unlockTime = unlockVal ? new Date(unlockVal).toISOString() : null;
+  const deadlineVal = newAsmtDeadline?.value;
+  const deadlineTime = deadlineVal ? new Date(deadlineVal).toISOString() : null;
 
   const createdAsmt = await createAssessment({
     title,
@@ -2842,22 +3399,32 @@ async function handleAddNewAssessment(e) {
     assessment_type: type,
     max_score: 20,
     weight,
+    time_limit_minutes: duration,
     status,
     unlock_time: unlockTime,
+    deadline: deadlineTime,
+    due_date: deadlineTime,
     description: `Official ${subject} assessment item for ${classLevel}.`,
   });
 
   // Auto-generate 10 curriculum-aligned test items and register question pack
   if (createdAsmt && createdAsmt.id) {
     const dynamicPack = generateDynamicTestItems(title, subject, classLevel);
+    dynamicPack.time_limit_minutes = duration;
     ALL_OFFICIAL_QUESTION_PACKS[createdAsmt.id] = dynamicPack;
+    updateAssessmentDuration(createdAsmt.id, duration);
+    if (status === "AVAILABLE") {
+      notifyAssessmentActivated(createdAsmt.id);
+    }
   }
 
   addNewAssessmentForm.reset();
   if (newAsmtWeight) newAsmtWeight.value = "20";
+  if (newAsmtDuration) newAsmtDuration.value = "15";
 
   state.assessments = await fetchAssessments();
   renderAdminAssessmentConfigTable();
+  renderAdminAssessmentConfigTable2();
   renderAssessmentCards();
   updateKpiMetrics();
 }
@@ -3043,6 +3610,9 @@ function showAdminSubview(subviewKey) {
 }
 
 async function authenticateAsAdminEmail() {
+  showAuthLoaderSigningIn("Signing in....", "Authenticating Master Debrah (Admin)...");
+  await new Promise((resolve) => setTimeout(resolve, 450));
+
   const adminUser = {
     id: "admin-master-debrah",
     email: PRIMARY_ADMIN_EMAIL, // "computing.b9@gmail.com"
@@ -3071,6 +3641,10 @@ async function authenticateAsAdminEmail() {
   state.profile = adminProfile;
   state.isAdmin = true;
   state.activeView = "admin";
+
+  showAuthLoaderSuccess("Successfully signed in", "Welcome Master Debrah! Opening Admin Console...");
+  await new Promise((resolve) => setTimeout(resolve, 850));
+  hideAuthLoader();
 
   await initNotifications();
   await initChat();
@@ -3290,10 +3864,35 @@ function renderQuestionsConfigView() {
 
   const catFilter = state.questionCatFilter || "ALL";
   const trackFilter = state.questionTrackFilter || "ALL";
+  const searchQuery = (state.questionSearchQuery || "").trim().toLowerCase();
 
-  // Filter computing assessments only (no Mathematics)
-  let filtered = (state.assessments || []).filter((a) => {
-    if (a.subject === "Mathematics") return false;
+  // 1. Strict deduplication: Each assessment appears exactly once
+  const uniqueAsmts: any[] = [];
+  const seenKeys = new Set<string>();
+  for (const a of state.assessments || []) {
+    if (a.subject === "Mathematics") continue;
+    const key = `${(a.title || "").trim().toLowerCase()}___${(a.class_level || "").trim().toLowerCase()}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      uniqueAsmts.push(a);
+    }
+  }
+
+  // 2. Dynamic Category Tab Badges
+  const countAll = uniqueAsmts.length;
+  const countCAT = uniqueAsmts.filter((a) => (a.assessment_type || "").toUpperCase().includes("CAT") || (a.title || "").toUpperCase().includes("CAT")).length;
+  const countQuiz = uniqueAsmts.filter((a) => (a.assessment_type || "").toUpperCase().includes("QUIZ") || (a.title || "").toUpperCase().includes("QUIZ")).length;
+  const countProject = uniqueAsmts.filter((a) => (a.assessment_type || "").toUpperCase().includes("PROJECT") || (a.title || "").toUpperCase().includes("PROJECT")).length;
+  const countExam = uniqueAsmts.filter((a) => (a.assessment_type || "").toUpperCase().includes("EXAM") || (a.title || "").toUpperCase().includes("EXAM")).length;
+
+  if (catCountAll) catCountAll.textContent = `${countAll}`;
+  if (catCountCAT) catCountCAT.textContent = `${countCAT}`;
+  if (catCountQuiz) catCountQuiz.textContent = `${countQuiz}`;
+  if (catCountProject) catCountProject.textContent = `${countProject}`;
+  if (catCountExam) catCountExam.textContent = `${countExam}`;
+
+  // 3. Filter by Category & Track
+  const matchingAsmts = uniqueAsmts.filter((a) => {
     if (catFilter !== "ALL") {
       const aType = (a.assessment_type || "").toUpperCase();
       const aTitle = (a.title || "").toUpperCase();
@@ -3308,7 +3907,28 @@ function renderQuestionsConfigView() {
     return true;
   });
 
-  if (filtered.length === 0) {
+  // 4. Update Focus Sitting Dropdown
+  if (questionSittingSelect) {
+    const currentVal = state.questionSittingFilter || "ALL";
+    const optionsHtml = [
+      `<option value="ALL">All Sittings in Selected Category (${matchingAsmts.length})</option>`,
+      ...matchingAsmts.map((asmt) => {
+        const pack = getAssessmentQuestionPack(asmt.id, asmt.class_level || "Basic 9A", asmt.title);
+        const qCount = pack?.questions?.length || (Array.isArray(pack) ? pack.length : 0);
+        const isSel = currentVal === asmt.id ? "selected" : "";
+        return `<option value="${asmt.id}" ${isSel}>${escapeHtml(asmt.title)} (${qCount} Qs)</option>`;
+      }),
+    ].join("");
+    questionSittingSelect.innerHTML = optionsHtml;
+  }
+
+  // 5. Update Expand/Collapse Toggle Button Text
+  if (toggleExpandAllQuestionsBtnText) {
+    toggleExpandAllQuestionsBtnText.textContent = state.questionsCollapsedAll ? "Expand Questions" : "Collapse Questions";
+  }
+
+  // 6. Handle Empty State
+  if (matchingAsmts.length === 0) {
     adminQuestionSittingsContainer.innerHTML = `
       <div class="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-400">
         <i class="fa-solid fa-list-check text-4xl mb-3 text-indigo-400 block"></i>
@@ -3319,9 +3939,33 @@ function renderQuestionsConfigView() {
     return;
   }
 
-  adminQuestionSittingsContainer.innerHTML = filtered.map((asmt) => {
+  // 7. Determine which sittings to display (All vs Single selected sitting)
+  let displayAsmts = matchingAsmts;
+  if (state.questionSittingFilter && state.questionSittingFilter !== "ALL") {
+    const selected = matchingAsmts.find((a) => a.id === state.questionSittingFilter);
+    if (selected) {
+      displayAsmts = [selected];
+    } else {
+      state.questionSittingFilter = "ALL";
+    }
+  }
+
+  adminQuestionSittingsContainer.innerHTML = displayAsmts.map((asmt) => {
     const pack = getAssessmentQuestionPack(asmt.id, asmt.class_level || "Basic 9A", asmt.title);
-    const questions = pack?.questions || (Array.isArray(pack) ? pack : []);
+    let questions = pack?.questions || (Array.isArray(pack) ? pack : []);
+    const totalQuestionsCount = questions.length;
+
+    // Filter questions by real-time search query if active
+    if (searchQuery) {
+      questions = questions.filter((q: any) => {
+        const prompt = (q.prompt || "").toLowerCase();
+        const topic = (q.topic || "").toLowerCase();
+        const options = (q.options || []).join(" ").toLowerCase();
+        const expl = (q.explanation || "").toLowerCase();
+        return prompt.includes(searchQuery) || topic.includes(searchQuery) || options.includes(searchQuery) || expl.includes(searchQuery);
+      });
+    }
+
     const duration = pack?.time_limit_minutes || asmt.time_limit_minutes || 15;
     const isActive = asmt.status === "AVAILABLE";
     const statusColor = isActive ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200";
@@ -3329,6 +3973,19 @@ function renderQuestionsConfigView() {
     const statusText = isActive ? "Active & Open" : "Inactive / Turned Off";
 
     const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
+
+    let typeColor = "bg-indigo-100 text-indigo-800 border-indigo-200";
+    let typeIcon = "fa-clipboard-check";
+    if (asmt.assessment_type === "EXAM") {
+      typeColor = "bg-purple-100 text-purple-800 border-purple-200";
+      typeIcon = "fa-graduation-cap";
+    } else if (asmt.assessment_type === "QUIZ") {
+      typeColor = "bg-amber-100 text-amber-800 border-amber-200";
+      typeIcon = "fa-bolt";
+    } else if (asmt.assessment_type === "PROJECT_WORK") {
+      typeColor = "bg-sky-100 text-sky-800 border-sky-200";
+      typeIcon = "fa-diagram-project";
+    }
 
     return `
       <div class="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden" data-asmt-config-card="${asmt.id}">
@@ -3357,7 +4014,7 @@ function renderQuestionsConfigView() {
               ${escapeHtml(asmt.title)}
             </h3>
             <p class="text-xs text-slate-500 mt-0.5">
-              ${questions.length} Question items configured • Max Score: ${asmt.max_score || 20} Marks • Deadline: <strong class="text-slate-700">${dueDateStr}</strong>
+              ${searchQuery ? `<strong class="text-indigo-600">${questions.length} of ${totalQuestionsCount}</strong> items match search • ` : `${totalQuestionsCount} Question items configured • `}Max Score: ${asmt.max_score || 20} Marks • Deadline: <strong class="text-slate-700">${dueDateStr}</strong>
             </p>
           </div>
 
@@ -3429,17 +4086,91 @@ function renderQuestionsConfigView() {
           </div>
         </div>
 
+        <!-- Quick Question Jump Navigation Bar -->
+        ${questions.length > 0 ? `
+          <div class="px-5 sm:px-6 py-2.5 bg-indigo-50/40 border-b border-slate-200/80 flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1">
+                <i class="fa-solid fa-crosshairs text-indigo-500"></i> Jump to Question:
+              </span>
+              ${questions.map((q, idx) => `
+                <button
+                  type="button"
+                  class="q-jump-btn px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-600 hover:text-white border border-indigo-100 text-slate-700 transition cursor-pointer shadow-2xs"
+                  data-target-qid="q-card-${asmt.id}-${q.id}"
+                  title="Scroll directly to Question ${idx + 1}"
+                >
+                  Q${idx + 1}
+                </button>
+              `).join("")}
+            </div>
+            <div class="text-[11px] text-slate-500 font-medium">
+              Showing <strong class="text-slate-800">${questions.length}</strong> configured items
+            </div>
+          </div>
+        ` : ''}
+
         <!-- Questions List Body -->
-        <div class="p-5 sm:p-6 space-y-4">
+        <div class="p-5 sm:p-6 space-y-3.5">
           ${questions.length === 0 ? `
             <div class="p-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
               <i class="fa-solid fa-folder-open text-2xl mb-1 block"></i>
-              No questions configured yet for this sitting. Click "Add Question" to begin.
+              ${searchQuery ? `No questions in this sitting match "${escapeHtml(searchQuery)}".` : 'No questions configured yet for this sitting. Click "Add Question" to begin.'}
             </div>
           ` : questions.map((q, qIdx) => {
             const optionLetters = ["A", "B", "C", "D", "E"];
+            const qKey = `${asmt.id}_${q.id}`;
+            const isQCollapsed = state.questionsCollapsedAll || state.collapsedQuestionKeys.has(qKey);
+
+            if (isQCollapsed) {
+              return `
+                <div class="p-3.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50/80 shadow-2xs hover:border-indigo-200 transition-all flex items-center justify-between gap-3 cursor-pointer group" id="q-card-${asmt.id}-${q.id}">
+                  <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                      Q${qIdx + 1}
+                    </span>
+                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">${escapeHtml(q.topic || asmt.subject || "Computing")}</span>
+                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">${q.points || 2} Marks</span>
+                    <span class="text-xs font-semibold text-slate-800 truncate select-text">
+                      ${escapeHtml(q.prompt)}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      class="edit-question-btn p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Edit question"
+                    >
+                      <i class="fa-solid fa-pen-to-square text-xs"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="delete-question-btn p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Delete question"
+                    >
+                      <i class="fa-solid fa-trash text-xs"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="toggle-q-expand-btn px-2.5 py-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer inline-flex items-center gap-1"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Expand question details"
+                    >
+                      <span>Options</span>
+                      <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </button>
+                  </div>
+                </div>
+              `;
+            }
+
             return `
-              <div class="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3 hover:border-slate-300 transition-all">
+              <div class="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-3 hover:border-slate-300 transition-all" id="q-card-${asmt.id}-${q.id}">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div class="flex items-center gap-2">
                     <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs">
@@ -3449,7 +4180,7 @@ function renderQuestionsConfigView() {
                     <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600">${q.points || 2} Marks</span>
                   </div>
 
-                  <!-- Edit / Delete actions -->
+                  <!-- Edit / Delete / Collapse actions -->
                   <div class="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -3469,10 +4200,19 @@ function renderQuestionsConfigView() {
                     >
                       <i class="fa-solid fa-trash text-rose-600"></i> Delete
                     </button>
+                    <button
+                      type="button"
+                      class="toggle-q-expand-btn p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                      data-asmt-id="${asmt.id}"
+                      data-q-id="${q.id}"
+                      title="Collapse this question"
+                    >
+                      <i class="fa-solid fa-chevron-up text-xs"></i>
+                    </button>
                   </div>
                 </div>
 
-                <p class="text-sm font-semibold text-slate-900 leading-relaxed">
+                <p class="text-sm font-semibold text-slate-900 leading-relaxed select-text">
                   ${escapeHtml(q.prompt)}
                 </p>
 
@@ -3523,6 +4263,40 @@ function attachQuestionsConfigHandlers() {
   const container = adminQuestionSittingsContainer;
   if (!container) return;
 
+  // Jump to Question Smooth Scroll
+  container.querySelectorAll(".q-jump-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-target-qid");
+      if (!targetId) return;
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetEl.classList.add("ring-2", "ring-indigo-400");
+        setTimeout(() => targetEl.classList.remove("ring-2", "ring-indigo-400"), 1800);
+      }
+    });
+  });
+
+  // Toggle individual question collapse / expand
+  container.querySelectorAll(".toggle-q-expand-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const qId = btn.getAttribute("data-q-id");
+      if (!asmtId || !qId) return;
+      const key = `${asmtId}_${qId}`;
+      if (state.questionsCollapsedAll) {
+        state.questionsCollapsedAll = false;
+      }
+      if (state.collapsedQuestionKeys.has(key)) {
+        state.collapsedQuestionKeys.delete(key);
+      } else {
+        state.collapsedQuestionKeys.add(key);
+      }
+      renderQuestionsConfigView();
+    });
+  });
+
   // Save Sitting Duration
   container.querySelectorAll(".save-duration-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -3554,6 +4328,9 @@ function attachQuestionsConfigHandlers() {
       await updateAssessment(asmtId, { status: nextStatus });
       const asmt = (state.assessments || []).find((a) => a.id === asmtId);
       if (asmt) asmt.status = nextStatus;
+      if (nextStatus === "AVAILABLE" && asmtId) {
+        notifyAssessmentActivated(asmtId);
+      }
       renderQuestionsConfigView();
       renderAssessmentCards();
     });
@@ -3812,6 +4589,9 @@ function attachAdminAsmtTable2Handlers() {
       await updateAssessment(asmtId, { status: nextStatus });
       const asmt = (state.assessments || []).find((a) => a.id === asmtId);
       if (asmt) asmt.status = nextStatus;
+      if (nextStatus === "AVAILABLE" && asmtId) {
+        notifyAssessmentActivated(asmtId);
+      }
       renderAdminAssessmentConfigTable2();
       renderAssessmentCards();
     });
@@ -3878,6 +4658,583 @@ async function autoBalanceAssessmentWeights2() {
     adminAutoBalanceBtn2.disabled = false;
     adminAutoBalanceBtn2.innerHTML = `<i class="fa-solid fa-scale-balanced"></i> Auto-Balance to 100%`;
   }
+}
+
+// ------------------------------------------------------------------------------
+// Multi-Channel Assessment Activation & Retake Authorization Engine
+// (In-App Notifications, Student Email Broadcast & Web Push Notifications)
+// ------------------------------------------------------------------------------
+let toastTimer: any = null;
+
+function displayPremiumToast({
+  title,
+  message,
+  badgeText = "Ghana Education Service",
+  badgeColor = "indigo",
+  icon = "fa-bell",
+  iconGradient = "from-indigo-500 to-violet-600 shadow-indigo-500/30",
+  timestamp,
+  channels = [],
+  url,
+  durationMs = 6500,
+}: {
+  title: string;
+  message: string;
+  badgeText?: string;
+  badgeColor?: "indigo" | "emerald" | "amber" | "sky" | "rose" | "violet";
+  icon?: string;
+  iconGradient?: string;
+  timestamp?: string;
+  channels?: Array<{ name: string; icon: string }>;
+  url?: string;
+  durationMs?: number;
+}) {
+  const toast = document.getElementById("pushNotificationToast");
+  const titleEl = document.getElementById("pushToastTitle");
+  const bodyEl = document.getElementById("pushToastBody");
+  const timeEl = document.getElementById("pushToastTime");
+  const badgeEl = document.getElementById("pushToastBadge");
+  const iconWrapper = document.getElementById("pushToastIconWrapper");
+  const iconEl = document.getElementById("pushToastIcon");
+  const progressBar = document.getElementById("pushToastProgressBar");
+  if (!toast) return;
+
+  if (toastTimer) clearTimeout(toastTimer);
+
+  if (titleEl) titleEl.textContent = title;
+
+  let channelsHtml = "";
+  if (channels && channels.length > 0) {
+    channelsHtml = `
+      <div class="flex flex-wrap items-center gap-1.5 pt-1.5">
+        ${channels
+          .map(
+            (c) => `
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-white/10 text-slate-200 border border-white/10">
+            <i class="fa-solid ${c.icon} text-[9px] text-amber-300"></i> ${c.name}
+          </span>
+        `
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  if (bodyEl) {
+    bodyEl.innerHTML = `
+      <div class="leading-relaxed text-slate-200">${message}</div>
+      ${channelsHtml}
+    `;
+  }
+
+  if (timeEl) {
+    timeEl.textContent =
+      timestamp ||
+      new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  if (badgeEl) {
+    badgeEl.textContent = badgeText;
+    const badgeColors: Record<string, string> = {
+      emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-400/30",
+      amber: "bg-amber-500/20 text-amber-300 border-amber-400/30",
+      indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-400/30",
+      sky: "bg-sky-500/20 text-sky-300 border-sky-400/30",
+      violet: "bg-violet-500/20 text-violet-300 border-violet-400/30",
+      rose: "bg-rose-500/20 text-rose-300 border-rose-400/30",
+    };
+    badgeEl.className = `inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+      badgeColors[badgeColor] || badgeColors.indigo
+    } truncate`;
+  }
+
+  if (iconWrapper) {
+    iconWrapper.className = `w-9 h-9 rounded-xl bg-gradient-to-br ${iconGradient} text-white flex items-center justify-center shrink-0 text-sm border border-white/20`;
+  }
+  if (iconEl) {
+    iconEl.className = `fa-solid ${icon}`;
+  }
+
+  if (progressBar) {
+    progressBar.style.transition = "none";
+    progressBar.style.width = "100%";
+    requestAnimationFrame(() => {
+      progressBar.style.transition = `width ${durationMs}ms linear`;
+      progressBar.style.width = "0%";
+    });
+  }
+
+  toast.onclick = (e) => {
+    if ((e.target as HTMLElement)?.closest("#closePushToastBtn")) return;
+    if (url) navigateTo(url);
+    hideToast();
+  };
+
+  toast.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    toast.classList.remove("toast-hidden");
+    toast.classList.add("toast-visible");
+  });
+
+  function hideToast() {
+    toast.classList.remove("toast-visible");
+    toast.classList.add("toast-hidden");
+    setTimeout(() => {
+      if (toast.classList.contains("toast-hidden")) {
+        toast.classList.add("hidden");
+      }
+    }, 400);
+  }
+
+  toastTimer = setTimeout(() => {
+    hideToast();
+  }, durationMs);
+}
+
+function showActivationBroadcastToast(
+  title: string,
+  targetClass: string,
+  emailCount: number,
+  customMessage?: string
+) {
+  const isRetake = title.toLowerCase().includes("retake");
+
+  if (isRetake) {
+    displayPremiumToast({
+      title: title,
+      message:
+        customMessage ||
+        `Retake authorization enabled for <strong>${escapeHtml(targetClass)}</strong>.`,
+      badgeText: "Retake Authorized",
+      badgeColor: "emerald",
+      icon: "fa-rotate-right",
+      iconGradient: "from-emerald-500 to-teal-600 shadow-emerald-500/30",
+      channels: [
+        { name: "In-App Notification", icon: "fa-bell" },
+        { name: "Student Email Sent", icon: "fa-envelope" },
+        { name: "Web Push Alert", icon: "fa-tower-broadcast" },
+      ],
+      durationMs: 7000,
+    });
+  } else {
+    displayPremiumToast({
+      title: title,
+      message:
+        customMessage ||
+        `Continuous Assessment made active for <strong>${escapeHtml(targetClass)}</strong>.`,
+      badgeText: "Live Broadcast",
+      badgeColor: "indigo",
+      icon: "fa-tower-broadcast",
+      iconGradient: "from-indigo-500 to-violet-600 shadow-indigo-500/30",
+      channels: [
+        { name: "In-App Tray", icon: "fa-bell" },
+        { name: `${emailCount} Students Emailed`, icon: "fa-envelope" },
+        { name: "Web Push Alert", icon: "fa-tower-broadcast" },
+      ],
+      durationMs: 7000,
+    });
+  }
+}
+
+async function notifyAssessmentActivated(asmtId: string) {
+  const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+  if (!asmt) return;
+
+  const targetClass = asmt.class_level || "ALL";
+  const title = `🚀 ${asmt.title} is Now LIVE & Active!`;
+  const message = `Master Debrah (Admin) has activated ${asmt.title} (${asmt.subject}). You can now log into your learner dashboard and take this continuous assessment task. Time limit: ${asmt.time_limit_minutes || 15} minutes.`;
+
+  // 1. In-App Notification (Saved to DB & LocalStore)
+  try {
+    await sendNotification({
+      title,
+      message,
+      target_class: targetClass,
+      type: "ANNOUNCEMENT",
+      sender_name: "Master Debrah (Admin)",
+    });
+    state.notifications = await fetchNotifications(state.profile?.class_level || "ALL");
+    renderNotifications();
+  } catch (err) {
+    console.warn("In-app notification error on activation:", err);
+  }
+
+  // 2. Identify target learners for email dispatch
+  const learners = (state.allLearners && state.allLearners.length > 0)
+    ? state.allLearners
+    : (window as any).getFallbackAllLearners ? (window as any).getFallbackAllLearners() : [];
+
+  const targetLearners = learners.filter((l: any) => {
+    if (targetClass !== "ALL" && l.class_level && l.class_level !== targetClass) return false;
+    return (l.role || "learner") === "learner";
+  });
+
+  let dispatchedEmailCount = 0;
+  for (const learner of targetLearners) {
+    const studentEmail = learner.email || `${learner.full_name.toLowerCase().replace(/[^a-z]/g, "")}@ghana-edu.gov.gh`;
+    await dispatchEmailNotification({
+      to: studentEmail,
+      recipientName: learner.full_name,
+      subject: `🚨 Assessment Activated: ${asmt.title} is Now Open!`,
+      heading: `${asmt.title} is Now LIVE`,
+      previewText: `Master Debrah has opened ${asmt.title}. Time limit: ${asmt.time_limit_minutes || 15} mins.`,
+      bodyHtml: `
+        <p>Dear <strong>${escapeHtml(learner.full_name)}</strong>,</p>
+        <p>Your continuous assessment task <strong>${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject)}) for <strong>${escapeHtml(learner.class_level || asmt.class_level || "Basic 9")}</strong> has been officially activated by <strong>Master Debrah (Admin)</strong>.</p>
+        <div style="background:#f8fafc;border-left:4px solid #4f46e5;padding:12px;margin:16px 0;border-radius:6px;">
+          <p style="margin:0 0 6px 0;"><strong>Track:</strong> ${escapeHtml(asmt.subject)}</p>
+          <p style="margin:0 0 6px 0;"><strong>Time Allowed:</strong> ${asmt.time_limit_minutes || 15} minutes</p>
+          <p style="margin:0 0 6px 0;"><strong>Total Marks:</strong> ${asmt.max_score || 20} marks</p>
+          <p style="margin:0;"><strong>Term Weight:</strong> ${asmt.weight ? parseFloat(asmt.weight) : 20}%</p>
+        </div>
+        <p>Please log into your learner portal immediately to complete this assessment before the deadline.</p>
+      `,
+      actionUrl: "http://localhost:5176/learner",
+      actionText: "Open Portal & Start CAT",
+      senderName: "Master Debrah (Admin)",
+      senderEmail: PRIMARY_ADMIN_EMAIL,
+      meta: { asmtId: asmt.id, classLevel: targetClass }
+    });
+    dispatchedEmailCount++;
+  }
+
+  // 3. Browser Web Push Notification + Audio Chime
+  await triggerWebPushNotification(`🚀 Assessment Activated: ${asmt.title}`, {
+    body: `The CAT is now active for ${targetClass === "ALL" ? "all students" : targetClass}. Tap to start.`,
+    url: "/learner"
+  });
+  playNotificationChime();
+
+  showActivationBroadcastToast(asmt.title, targetClass, dispatchedEmailCount);
+}
+
+function updateRetakeStatusBox(learnerId: string) {
+  const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
+  const statusText = document.getElementById("retakeExistingStatusText");
+  const scoreBadge = document.getElementById("retakeExistingScoreBadge");
+  if (!asmtSelect || !statusText || !scoreBadge) return;
+
+  const asmtId = asmtSelect.value;
+  const sub = (state.submissions || []).find((s: any) => s.learner_id === learnerId && s.assessment_id === asmtId);
+
+  if (sub && sub.status === "GRADED") {
+    if (sub.retake_granted) {
+      statusText.textContent = `Retake already active: Teacher previously authorized a second sitting.`;
+      scoreBadge.className = "font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-300";
+      scoreBadge.textContent = `Retake Pending (${sub.score}/${sub.max_score || 20})`;
+    } else {
+      statusText.textContent = `Completed sitting recorded on ${formatDateOnly(sub.submitted_at)}. Re-take will grant a fresh attempt.`;
+      scoreBadge.className = "font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200";
+      scoreBadge.textContent = `Score: ${sub.score} / ${sub.max_score || 20}`;
+    }
+  } else {
+    statusText.textContent = `No completed submission found for this student. Retake authorization will unlock an open attempt.`;
+    scoreBadge.className = "font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200";
+    scoreBadge.textContent = `Unattempted`;
+  }
+}
+
+function openGrantRetakeModal(learnerId: string, preselectedAsmtId: string | null = null) {
+  const modal = document.getElementById("adminGrantRetakeModal");
+  if (!modal) return;
+
+  const learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  if (!learner) return;
+
+  const idInput = document.getElementById("retakeStudentId") as HTMLInputElement | null;
+  const avatarEl = document.getElementById("retakeStudentAvatar") as HTMLImageElement | null;
+  const nameEl = document.getElementById("retakeStudentName");
+  const classEl = document.getElementById("retakeStudentClass");
+  const numberEl = document.getElementById("retakeStudentNumber");
+  const emailEl = document.getElementById("retakeStudentEmail");
+
+  if (idInput) idInput.value = learner.id;
+  if (avatarEl) avatarEl.src = learner.avatar_url || AVATAR_PRESETS[0];
+  if (nameEl) nameEl.textContent = learner.full_name;
+  if (classEl) classEl.textContent = learner.class_level || "Basic 9A";
+  if (numberEl) numberEl.textContent = learner.student_id || generateStudentId(learner.class_level, 1);
+  if (emailEl) emailEl.textContent = learner.email || "student@ghana-edu.gov.gh";
+
+  const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
+  if (asmtSelect) {
+    const learnerClass = learner.class_level || "Basic 9A";
+    const availableAsmts = (state.assessments || []).filter((a: any) => {
+      if (!a.class_level || a.class_level === "ALL") return true;
+      return a.class_level === learnerClass;
+    });
+
+    asmtSelect.innerHTML = availableAsmts.map((a: any) => {
+      const existingSub = (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.assessment_id === a.id);
+      const isSelected = preselectedAsmtId ? a.id === preselectedAsmtId : false;
+      const statusNote = existingSub
+        ? `[Scored: ${existingSub.score}/${a.max_score || 20}]`
+        : `[Unattempted]`;
+      return `<option value="${a.id}" ${isSelected ? 'selected' : ''}>${escapeHtml(a.title)} ${statusNote}</option>`;
+    }).join("");
+  }
+
+  updateRetakeStatusBox(learner.id);
+
+  const reasonInput = document.getElementById("adminRetakeReasonInput") as HTMLTextAreaElement | null;
+  if (reasonInput) {
+    reasonInput.value = `Master Debrah (Admin) authorized retake for student ${learner.full_name} to improve mastery under NaCCA Standards.`;
+  }
+
+  modal.classList.remove("hidden");
+}
+
+async function handleGrantRetakeSubmit(e: Event) {
+  e.preventDefault();
+  const idInput = document.getElementById("retakeStudentId") as HTMLInputElement | null;
+  const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
+  const reasonInput = document.getElementById("adminRetakeReasonInput") as HTMLTextAreaElement | null;
+  const inAppChecked = (document.getElementById("retakeNotifyInApp") as HTMLInputElement | null)?.checked ?? true;
+  const emailChecked = (document.getElementById("retakeNotifyEmail") as HTMLInputElement | null)?.checked ?? true;
+  const pushChecked = (document.getElementById("retakeNotifyPush") as HTMLInputElement | null)?.checked ?? true;
+  const submitBtn = document.getElementById("submitGrantRetakeBtn") as HTMLButtonElement | null;
+
+  const learnerId = idInput?.value;
+  const asmtId = asmtSelect?.value;
+  const reason = reasonInput?.value || "Teacher authorized retake";
+
+  if (!learnerId || !asmtId) return;
+
+  const learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  const asmt = (state.assessments || []).find((a: any) => a.id === asmtId);
+  if (!learner || !asmt) return;
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Authorizing...`;
+  }
+
+  try {
+    await grantSubmissionRetake(learnerId, asmtId, reason, "Master Debrah (Admin)");
+    state.submissions = await fetchAllSubmissions();
+
+    if (inAppChecked) {
+      try {
+        await sendNotification({
+          title: `🔄 Retake Authorized: ${asmt.title}`,
+          message: `Master Debrah (Admin) has authorized a re-take for you on ${asmt.title}. Note: "${reason}". You may now retake the assessment directly from your dashboard.`,
+          target_class: learner.class_level || "ALL",
+          type: "ANNOUNCEMENT",
+          sender_name: "Master Debrah (Admin)",
+        });
+        state.notifications = await fetchNotifications(state.profile?.class_level || "ALL");
+        renderNotifications();
+      } catch (notifErr) {
+        console.warn("In-app retake notification dispatch warning:", notifErr);
+      }
+    }
+
+    if (emailChecked) {
+      try {
+        const studentEmail = learner.email || `${learner.full_name.toLowerCase().replace(/[^a-z]/g, "")}@ghana-edu.gov.gh`;
+        await dispatchEmailNotification({
+          to: studentEmail,
+          recipientName: learner.full_name,
+          subject: `🔄 Retake Authorized: ${asmt.title} - Ghana JHS Assessment Portal`,
+          heading: `Retake Authorized for ${asmt.title}`,
+          previewText: `Master Debrah has approved a second sitting for ${asmt.title}.`,
+          bodyHtml: `
+            <p>Dear <strong>${escapeHtml(learner.full_name)}</strong>,</p>
+            <p>Your request / teacher authorization to retake <strong>${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject)}) has been <strong>approved</strong> by Master Debrah (Admin).</p>
+            <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:12px;margin:16px 0;border-radius:6px;">
+              <p style="margin:0 0 6px 0;color:#92400e;"><strong>Reason / Teacher Note:</strong> ${escapeHtml(reason)}</p>
+              <p style="margin:0 0 6px 0;"><strong>Time Allowed:</strong> ${asmt.time_limit_minutes || 15} minutes</p>
+              <p style="margin:0;"><strong>Maximum Score:</strong> ${asmt.max_score || 20} marks</p>
+            </div>
+            <p>Log in to your learner portal to begin your re-take sitting. Your new attempt will be recorded upon submission.</p>
+          `,
+          actionUrl: "http://localhost:5176/learner",
+          actionText: "Open Portal & Retake CAT",
+          senderName: "Master Debrah (Admin)",
+          senderEmail: PRIMARY_ADMIN_EMAIL,
+          meta: { type: "RETAKE", learnerId, asmtId }
+        });
+      } catch (emailErr) {
+        console.warn("Email retake notification dispatch warning:", emailErr);
+      }
+    }
+
+    if (pushChecked) {
+      try {
+        await triggerWebPushNotification(`🔄 Retake Authorized: ${asmt.title}`, {
+          body: `Master Debrah authorized a retake for you on ${asmt.title}. Tap to begin.`,
+          url: "/learner"
+        });
+        playNotificationChime();
+      } catch (pushErr) {
+        console.warn("Push retake notification dispatch warning:", pushErr);
+      }
+    }
+
+    document.getElementById("adminGrantRetakeModal")?.classList.add("hidden");
+    renderAdminLearnersTable();
+    if (activeLearnersModal && !activeLearnersModal.classList.contains("hidden")) {
+      showActiveLearnerDetail(learnerId);
+    }
+
+    showActivationBroadcastToast(
+      `Retake Authorized for ${learner.full_name}`,
+      learner.class_level || "Student",
+      1,
+      `Retake unlocked on <strong class="text-white">${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject || "Computing")}). Student may now retake the assessment directly from their dashboard.`
+    );
+  } catch (err: any) {
+    console.error("Retake authorization error:", err);
+    alert("Could not authorize retake: " + (err.message || "Unknown error"));
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Authorize Retake &amp; Notify`;
+    }
+  }
+}
+
+function openEmailPreviewModal(emailData: any) {
+  const modal = document.getElementById("emailPreviewModal");
+  const container = document.getElementById("emailPreviewContainer");
+  if (!modal || !container) return;
+
+  const to = escapeHtml(emailData.to || "student@ghana-edu.gov.gh");
+  const recipient = escapeHtml(emailData.recipientName || "Learner");
+  const subject = escapeHtml(emailData.subject || "Continuous Assessment Notification");
+  const senderName = escapeHtml(emailData.senderName || "Master Debrah (Admin)");
+  const senderEmail = escapeHtml(emailData.senderEmail || PRIMARY_ADMIN_EMAIL);
+  const time = emailData.timestamp ? new Date(emailData.timestamp).toLocaleString() : new Date().toLocaleString();
+  const bodyHtml = emailData.bodyHtml || `<p>${escapeHtml(emailData.message || emailData.previewText || "")}</p>`;
+  const actionUrl = emailData.actionUrl || "http://localhost:5176/learner";
+  const actionText = escapeHtml(emailData.actionText || "Open Assessment Portal");
+
+  container.innerHTML = `
+    <!-- Email Envelope Meta -->
+    <div class="bg-white rounded-xl border border-slate-200 p-3.5 space-y-2 shadow-2xs">
+      <div class="flex items-center justify-between text-[11px] pb-2 border-b border-slate-100">
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 text-[10px]">
+          <i class="fa-solid fa-circle-check text-emerald-600"></i> DELIVERED VIA GHANA EDU MAIL ENGINE
+        </span>
+        <span class="text-slate-400 font-mono">${time}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+        <div>
+          <span class="text-slate-400 block text-[10px] font-bold uppercase">From:</span>
+          <span class="font-bold text-slate-800">${senderName}</span>
+          <span class="text-slate-500 font-mono text-[11px] block">&lt;${senderEmail}&gt;</span>
+        </div>
+        <div>
+          <span class="text-slate-400 block text-[10px] font-bold uppercase">To:</span>
+          <span class="font-bold text-slate-800">${recipient}</span>
+          <span class="text-slate-500 font-mono text-[11px] block">&lt;${to}&gt;</span>
+        </div>
+      </div>
+      <div class="pt-2 border-t border-slate-100">
+        <span class="text-slate-400 block text-[10px] font-bold uppercase">Subject:</span>
+        <span class="font-bold text-slate-900 text-xs sm:text-sm">${subject}</span>
+      </div>
+    </div>
+
+    <!-- Official Ghana Education Service Letterhead Body -->
+    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+      <!-- Ghana Colors Banner -->
+      <div class="h-1.5 w-full bg-gradient-to-r from-red-600 via-amber-400 to-emerald-600"></div>
+      <div class="p-4 sm:p-5 space-y-3.5">
+        <div class="flex items-center gap-3 pb-3 border-b border-slate-100">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shadow-xs">
+            <i class="fa-solid fa-graduation-cap"></i>
+          </div>
+          <div>
+            <h4 class="font-extrabold text-slate-900 text-sm">GHANA EDUCATION SERVICE</h4>
+            <p class="text-[11px] text-slate-500 font-medium">JHS Continuous Assessment Portal &bull; Computing Directorate</p>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-700 leading-relaxed space-y-2">
+          ${bodyHtml}
+        </div>
+
+        <div class="pt-3 text-center sm:text-left">
+          <a
+            href="${actionUrl}"
+            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition cursor-pointer"
+          >
+            <span>${actionText}</span>
+            <i class="fa-solid fa-arrow-right text-[10px]"></i>
+          </a>
+        </div>
+
+        <div class="pt-4 border-t border-slate-100 text-[11px] text-slate-500">
+          <p class="font-bold text-slate-800">Master Debrah</p>
+          <p class="text-[10px] text-slate-400">Head of Computing / Administrator &bull; Basic 9</p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove("hidden");
+}
+
+function initEmailAndPushListeners() {
+  window.addEventListener("jhs:push-notification", (e: any) => {
+    const payload = e.detail;
+    if (!payload) return;
+
+    const isTarget = payload.title?.toLowerCase().includes("target") || payload.title?.toLowerCase().includes("milestone");
+    const isSuccess = payload.title?.toLowerCase().includes("conquered") || payload.title?.toLowerCase().includes("authorized");
+
+    displayPremiumToast({
+      title: payload.title || "Assessment Notification",
+      message: payload.body || "A new continuous assessment update has been recorded.",
+      badgeText: isTarget ? "AI Milestone Quest" : (isSuccess ? "Milestone Conquered" : "Assessment Alert"),
+      badgeColor: isTarget ? "amber" : (isSuccess ? "emerald" : "indigo"),
+      icon: isTarget ? "fa-bullseye" : (isSuccess ? "fa-award" : "fa-bell"),
+      iconGradient: isTarget
+        ? "from-amber-500 to-orange-600 shadow-amber-500/30"
+        : (isSuccess ? "from-emerald-500 to-teal-600 shadow-emerald-500/30" : "from-indigo-500 to-violet-600 shadow-indigo-500/30"),
+      timestamp: payload.timestamp,
+      url: payload.url,
+      durationMs: 6500,
+    });
+  });
+
+  window.addEventListener("jhs:email-dispatched", (e: any) => {
+    const email = e.detail;
+    console.log("Email dispatch caught in UI listener:", email);
+  });
+
+  document.getElementById("closePushToastBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const toast = document.getElementById("pushNotificationToast");
+    if (toast) {
+      toast.classList.remove("toast-visible");
+      toast.classList.add("toast-hidden");
+      setTimeout(() => {
+        if (toast.classList.contains("toast-hidden")) {
+          toast.classList.add("hidden");
+        }
+      }, 400);
+    }
+  });
+
+  document.getElementById("closeEmailPreviewModalBtn")?.addEventListener("click", () => {
+    document.getElementById("emailPreviewModal")?.classList.add("hidden");
+  });
+  document.getElementById("closeEmailPreviewModalBtn2")?.addEventListener("click", () => {
+    document.getElementById("emailPreviewModal")?.classList.add("hidden");
+  });
+
+  document.getElementById("closeGrantRetakeModalBtn")?.addEventListener("click", () => {
+    document.getElementById("adminGrantRetakeModal")?.classList.add("hidden");
+  });
+  document.getElementById("cancelGrantRetakeBtn")?.addEventListener("click", () => {
+    document.getElementById("adminGrantRetakeModal")?.classList.add("hidden");
+  });
+  document.getElementById("adminGrantRetakeForm")?.addEventListener("submit", handleGrantRetakeSubmit);
+  document.getElementById("adminRetakeAsmtSelect")?.addEventListener("change", () => {
+    const idInput = document.getElementById("retakeStudentId") as HTMLInputElement | null;
+    if (idInput?.value) updateRetakeStatusBox(idInput.value);
+  });
 }
 
 // ------------------------------------------------------------------------------
@@ -3958,6 +5315,11 @@ function handleQuestionEditorSubmit(e) {
     return;
   }
 
+  if (isIdentityOrRegistrationQuestion(promptVal)) {
+    alert("Invalid Question: Learners must not be asked to provide their email, full name, class, or student ID. These details are already captured and authenticated by the system.");
+    return;
+  }
+
   const optionsMap = { A: optA, B: optB, C: optC, D: optD };
   const correctText = optionsMap[correctLetter] || optA;
 
@@ -3997,8 +5359,18 @@ function openExtendPeriodModal(asmtId) {
       : "No deadline currently configured";
   }
 
-  // Pre-set custom datetime input to 24 hours from now
-  const defaultExtend = new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16);
+  if (extendDurationInput) {
+    extendDurationInput.value = asmt.time_limit_minutes || 15;
+  }
+
+  if (extendUnlockDatetimeInput) {
+    extendUnlockDatetimeInput.value = asmt.unlock_time ? new Date(asmt.unlock_time).toISOString().slice(0, 16) : "";
+  }
+
+  // Pre-set custom datetime input to current deadline or 24 hours from now
+  const defaultExtend = currentDue
+    ? new Date(currentDue).toISOString().slice(0, 16)
+    : new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16);
   if (extendCustomDatetimeInput) {
     extendCustomDatetimeInput.value = defaultExtend;
   }
@@ -4011,37 +5383,70 @@ async function handleSaveExtendPeriod() {
   if (!asmtId) return;
 
   const customVal = extendCustomDatetimeInput?.value;
-  if (!customVal) {
-    alert("Please pick a custom deadline or choose a preset.");
-    return;
-  }
+  const unlockVal = extendUnlockDatetimeInput?.value;
+  const durationVal = parseInt(extendDurationInput?.value, 10) || 15;
 
-  const newIso = new Date(customVal).toISOString();
+  const newDeadlineIso = customVal ? new Date(customVal).toISOString() : null;
+  const newUnlockIso = unlockVal ? new Date(unlockVal).toISOString() : null;
+
   if (saveExtendPeriodBtn) {
     saveExtendPeriodBtn.disabled = true;
     saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Saving...`;
   }
 
-  await updateAssessment(asmtId, { deadline: newIso, due_date: newIso });
+  updateAssessmentDuration(asmtId, durationVal);
+
+  const updates: any = {
+    time_limit_minutes: durationVal,
+  };
+  if (newDeadlineIso) {
+    updates.deadline = newDeadlineIso;
+    updates.due_date = newDeadlineIso;
+  }
+  if (newUnlockIso !== undefined) {
+    updates.unlock_time = newUnlockIso;
+  }
+
+  await updateAssessment(asmtId, updates);
   const asmt = (state.assessments || []).find((a) => a.id === asmtId);
   if (asmt) {
-    asmt.deadline = newIso;
-    asmt.due_date = newIso;
+    asmt.time_limit_minutes = durationVal;
+    if (newDeadlineIso) {
+      asmt.deadline = newDeadlineIso;
+      asmt.due_date = newDeadlineIso;
+    }
+    if (newUnlockIso !== undefined) {
+      asmt.unlock_time = newUnlockIso;
+    }
   }
 
   if (saveExtendPeriodBtn) {
     saveExtendPeriodBtn.disabled = false;
-    saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-calendar-check"></i> Apply Extension`;
+    saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-calendar-check"></i> Save Validity &amp; Duration`;
   }
 
   extendPeriodModal?.classList.add("hidden");
   renderQuestionsConfigView();
+  renderAdminAssessmentConfigTable();
   renderAdminAssessmentConfigTable2();
   renderAssessmentCards();
 }
 
+function getAdminLearnersPageSize(): number {
+  if (state.adminLearnersCustomPageSize) {
+    return state.adminLearnersCustomPageSize;
+  }
+  // User Requirement:
+  // "on lg to xl we have 5 on row but 2xl we have 10 on row"
+  // Tailwind 2xl breakpoint is 1536px:
+  // Width >= 1536px (2xl): 10 rows per page
+  // Width < 1536px (lg to xl, e.g. 1024px - 1535px, and smaller): 5 rows per page
+  return window.innerWidth >= 1536 ? 10 : 5;
+}
+
 function renderAdminLearnersTable() {
   if (!adminLearnersTableBody) return;
+  const paginationContainer = document.getElementById("adminLearnersPaginationContainer");
 
   if (!state.allLearners || state.allLearners.length === 0) {
     adminLearnersTableBody.innerHTML = `
@@ -4055,6 +5460,7 @@ function renderAdminLearnersTable() {
         </td>
       </tr>
     `;
+    if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
 
@@ -4076,10 +5482,30 @@ function renderAdminLearnersTable() {
         </td>
       </tr>
     `;
+    if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
 
-  adminLearnersTableBody.innerHTML = filtered.map((learner) => {
+  // Calculate Responsive Pagination
+  // "on lg to xl we have 5 on row but 2xl we have 10 on row"
+  const pageSize = getAdminLearnersPageSize();
+  const totalItems = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  // Clamp current page within valid bounds
+  if (state.adminLearnersCurrentPage > totalPages) {
+    state.adminLearnersCurrentPage = totalPages;
+  }
+  if (state.adminLearnersCurrentPage < 1) {
+    state.adminLearnersCurrentPage = 1;
+  }
+
+  const currentPage = state.adminLearnersCurrentPage;
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const pageItems = filtered.slice(startIndex, endIndex);
+
+  adminLearnersTableBody.innerHTML = pageItems.map((learner) => {
     const isOnline = isLearnerOnline(learner);
     const presenceBadge = isOnline
       ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -4133,6 +5559,14 @@ function renderAdminLearnersTable() {
         <td class="py-3.5 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
             <button
+              class="admin-retake-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
+              data-student-id="${learner.id}"
+              title="Authorize Assessment Retake for this learner"
+            >
+              <i class="fa-solid fa-rotate-right text-amber-600"></i>
+              <span>Retake</span>
+            </button>
+            <button
               class="admin-record-student-mark-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
               data-student-id="${learner.id}"
               title="Record Assessment Mark for this student"
@@ -4170,6 +5604,14 @@ function renderAdminLearnersTable() {
     `;
   }).join("");
 
+  // Attach Retake button handlers
+  document.querySelectorAll(".admin-retake-student-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const studentId = btn.getAttribute("data-student-id");
+      if (studentId) openGrantRetakeModal(studentId);
+    });
+  });
+
   // Attach Mark button handlers
   document.querySelectorAll(".admin-record-student-mark-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -4205,6 +5647,114 @@ function renderAdminLearnersTable() {
       handleDeleteLearner(studentId, name);
     });
   });
+
+  // Render Pagination Controls in Footer
+  if (paginationContainer) {
+    const is2xl = window.innerWidth >= 1536;
+    const modeLabel = is2xl ? "10 on row (2xl display)" : "5 on row (lg-xl display)";
+
+    // Generate page numbers
+    let pageNumbersHtml = "";
+    for (let p = 1; p <= totalPages; p++) {
+      if (totalPages > 7) {
+        // Sliding window
+        if (p !== 1 && p !== totalPages && Math.abs(p - currentPage) > 1) {
+          if (p === 2 || p === totalPages - 1) {
+            pageNumbersHtml += `<span class="px-1 text-slate-300">...</span>`;
+          }
+          continue;
+        }
+      }
+      const isActive = p === currentPage;
+      pageNumbersHtml += `
+        <button
+          type="button"
+          data-page="${p}"
+          class="admin-learner-page-btn w-7 h-7 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center ${
+            isActive
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+          }"
+        >
+          ${p}
+        </button>
+      `;
+    }
+
+    paginationContainer.innerHTML = `
+      <div class="flex items-center gap-3 flex-wrap">
+        <div>
+          Showing <span class="font-bold text-slate-800">${startIndex + 1}</span> to <span class="font-bold text-slate-800">${endIndex}</span> of <span class="font-bold text-slate-800">${totalItems}</span> users
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 border border-slate-200">
+          <i class="fa-solid fa-table-cells text-[10px] text-indigo-500"></i>
+          <span>${modeLabel}</span>
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Previous Page Button -->
+        <button
+          id="adminLearnersPrevPageBtn"
+          type="button"
+          class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            currentPage > 1
+              ? 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer shadow-2xs'
+              : 'bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed opacity-60'
+          }"
+          ${currentPage <= 1 ? 'disabled' : ''}
+        >
+          <i class="fa-solid fa-chevron-left text-[10px]"></i>
+          <span>Previous</span>
+        </button>
+
+        <!-- Page Numbers -->
+        <div class="flex items-center gap-1">
+          ${pageNumbersHtml}
+        </div>
+
+        <!-- Next Page Button -->
+        <button
+          id="adminLearnersNextPageBtn"
+          type="button"
+          class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            currentPage < totalPages
+              ? 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 cursor-pointer shadow-2xs'
+              : 'bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed opacity-60'
+          }"
+          ${currentPage >= totalPages ? 'disabled' : ''}
+        >
+          <span>Next</span>
+          <i class="fa-solid fa-chevron-right text-[10px]"></i>
+        </button>
+      </div>
+    `;
+
+    // Wire pagination events
+    document.getElementById("adminLearnersPrevPageBtn")?.addEventListener("click", () => {
+      if (state.adminLearnersCurrentPage > 1) {
+        state.adminLearnersCurrentPage--;
+        renderAdminLearnersTable();
+      }
+    });
+
+    document.getElementById("adminLearnersNextPageBtn")?.addEventListener("click", () => {
+      if (state.adminLearnersCurrentPage < totalPages) {
+        state.adminLearnersCurrentPage++;
+        renderAdminLearnersTable();
+      }
+    });
+
+    document.querySelectorAll(".admin-learner-page-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const page = parseInt(btn.getAttribute("data-page") || "1", 10);
+        if (page !== state.adminLearnersCurrentPage) {
+          state.adminLearnersCurrentPage = page;
+          renderAdminLearnersTable();
+        }
+      });
+    });
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -4237,6 +5787,26 @@ async function handleEnrollStudentSubmit(e) {
   if (!name) {
     alert("Please enter the user's full name.");
     return;
+  }
+
+  // Strict Uniqueness Check: Registered Name and Email must be unique
+  const existingLearners = state.allLearners || [];
+  const nameExists = existingLearners.some(
+    (l: any) => l.full_name && l.full_name.trim().toLowerCase() === name.toLowerCase()
+  );
+  if (nameExists) {
+    alert(`A user with the registered name "${name}" already exists. Registered full names must be unique across all learners and staff.`);
+    return;
+  }
+
+  if (emailVal) {
+    const emailExists = existingLearners.some(
+      (l: any) => l.email && l.email.trim().toLowerCase() === emailVal.toLowerCase()
+    );
+    if (emailExists) {
+      alert(`A user with the email address "${emailVal}" is already registered. Email addresses must be unique.`);
+      return;
+    }
   }
 
   try {
@@ -4316,6 +5886,26 @@ async function handleEditLearnerSubmit(e) {
   if (!fullName) {
     alert("Please enter the user's full name.");
     return;
+  }
+
+  // Strict Uniqueness Check: Exclude the user currently being edited
+  const otherLearners = (state.allLearners || []).filter((l: any) => l.id !== userId);
+  const nameExists = otherLearners.some(
+    (l: any) => l.full_name && l.full_name.trim().toLowerCase() === fullName.toLowerCase()
+  );
+  if (nameExists) {
+    alert(`Another user with the registered name "${fullName}" already exists. Registered full names must be unique across all users.`);
+    return;
+  }
+
+  if (emailVal) {
+    const emailExists = otherLearners.some(
+      (l: any) => l.email && l.email.trim().toLowerCase() === emailVal.toLowerCase()
+    );
+    if (emailExists) {
+      alert(`Another user with the email address "${emailVal}" is already registered. Email addresses must be unique.`);
+      return;
+    }
   }
 
   const btn = submitEditLearnerBtn;
@@ -4584,6 +6174,19 @@ function showActiveLearnerDetail(learner) {
     });
   });
 
+  document.querySelectorAll(".active-modal-retake-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openGrantRetakeModal(learner.id);
+    });
+  });
+
+  document.querySelectorAll(".active-modal-row-retake-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const asmtId = btn.getAttribute("data-asmt-id");
+      openGrantRetakeModal(learner.id, asmtId);
+    });
+  });
+
   document.querySelectorAll(".active-modal-mark-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       closeActiveLearnersModal();
@@ -4640,6 +6243,13 @@ function renderActiveLearnerDetailHtml(learner) {
 
         <!-- Quick Action Buttons inside Card -->
         <div class="flex flex-wrap sm:flex-col gap-2 shrink-0">
+          <button
+            class="active-modal-retake-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-sm"
+            data-learner-id="${learner.id}"
+            title="Authorize student to retake a CAT"
+          >
+            <i class="fa-solid fa-rotate-right"></i> Authorize Retake
+          </button>
           <button
             class="active-modal-chat-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition cursor-pointer shadow-sm"
             data-learner-id="${learner.id}"
@@ -4745,6 +6355,7 @@ function renderActiveLearnerDetailHtml(learner) {
                 <th class="py-2 px-2">Status</th>
                 <th class="py-2 px-2">Submitted</th>
                 <th class="py-2 px-2">Remarks</th>
+                <th class="py-2 px-2 text-right">Action</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -4752,9 +6363,23 @@ function renderActiveLearnerDetailHtml(learner) {
                 <tr class="hover:bg-slate-50">
                   <td class="py-2.5 px-2 font-semibold text-slate-800">${escapeHtml(s.assessments?.title || s.assessment_id)}</td>
                   <td class="py-2.5 px-2 font-bold text-indigo-700 font-mono">${s.score}/${s.max_score || 20}</td>
-                  <td class="py-2.5 px-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">${s.status || "GRADED"}</span></td>
+                  <td class="py-2.5 px-2">
+                    ${s.retake_granted 
+                      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Retake Open</span>`
+                      : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">${s.status || "GRADED"}</span>`}
+                  </td>
                   <td class="py-2.5 px-2 text-slate-500 text-[11px]">${formatDateOnly(s.submitted_at)}</td>
                   <td class="py-2.5 px-2 text-slate-500 italic text-[11px]">${escapeHtml(s.teacher_remarks || "Marked.")}</td>
+                  <td class="py-2.5 px-2 text-right">
+                    <button
+                      class="active-modal-row-retake-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
+                      data-learner-id="${learner.id}"
+                      data-asmt-id="${s.assessment_id}"
+                      title="Grant retake for this assessment"
+                    >
+                      <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake
+                    </button>
+                  </td>
                 </tr>
               `).join("")}
             </tbody>
@@ -5051,68 +6676,244 @@ function renderNotifications() {
   if (!notifListContainer) return;
 
   const readSet = state.readNotificationIds;
+  const totalCount = state.notifications.length;
   const unreadCount = state.notifications.filter((n) => !readSet.has(n.id)).length;
 
+  // Update Bell Badge
   if (notifBadge) {
     if (unreadCount > 0) {
-      notifBadge.textContent = unreadCount;
+      notifBadge.textContent = unreadCount > 99 ? "99+" : `${unreadCount}`;
       notifBadge.classList.remove("hidden");
     } else {
       notifBadge.classList.add("hidden");
     }
   }
 
+  // Update Header Pill
   if (notifUnreadPill) {
-    notifUnreadPill.textContent = `${unreadCount} New`;
+    if (unreadCount === 0) {
+      notifUnreadPill.textContent = "All caught up";
+      notifUnreadPill.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70 shadow-2xs";
+    } else {
+      notifUnreadPill.textContent = `${unreadCount} New`;
+      notifUnreadPill.className = "px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/70 shadow-2xs";
+    }
   }
 
-  if (state.notifications.length === 0) {
-    notifListContainer.innerHTML = `
-      <div class="p-8 text-center text-slate-400">
-        <i class="fa-regular fa-bell-slash text-2xl mb-1 block"></i>
-        <p class="text-xs">No notifications at this time.</p>
-      </div>
-    `;
+  // Update Tab Counters & Active Styles
+  if (notifCountAll) notifCountAll.textContent = `${totalCount}`;
+  if (notifCountUnread) notifCountUnread.textContent = `${unreadCount}`;
+
+  if (notifTabAll && notifTabUnread) {
+    if (state.notificationFilter === "unread") {
+      notifTabUnread.className = "px-2.5 py-1 rounded-lg font-bold text-xs bg-indigo-600 text-white transition-all shadow-xs cursor-pointer";
+      notifTabAll.className = "px-2.5 py-1 rounded-lg font-semibold text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer";
+    } else {
+      notifTabAll.className = "px-2.5 py-1 rounded-lg font-bold text-xs bg-indigo-600 text-white transition-all shadow-xs cursor-pointer";
+      notifTabUnread.className = "px-2.5 py-1 rounded-lg font-semibold text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer";
+    }
+  }
+
+  // Filter List Based on Active Tab
+  const displayItems = state.notificationFilter === "unread"
+    ? state.notifications.filter((n) => !readSet.has(n.id))
+    : state.notifications;
+
+  if (displayItems.length === 0) {
+    if (state.notificationFilter === "unread") {
+      notifListContainer.innerHTML = `
+        <div class="p-8 text-center">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center text-xl mb-3 shadow-2xs">
+            <i class="fa-solid fa-check-double"></i>
+          </div>
+          <h6 class="text-sm font-bold text-slate-800 mb-1">All Caught Up!</h6>
+          <p class="text-xs text-slate-500 max-w-xs mx-auto">You have reviewed all announcements and deadlines.</p>
+        </div>
+      `;
+    } else {
+      notifListContainer.innerHTML = `
+        <div class="p-8 text-center text-slate-400">
+          <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 mx-auto flex items-center justify-center text-xl mb-3">
+            <i class="fa-regular fa-bell-slash"></i>
+          </div>
+          <h6 class="text-sm font-bold text-slate-700 mb-1">No Notifications</h6>
+          <p class="text-xs text-slate-400 max-w-xs mx-auto">There are no school announcements posted at this time.</p>
+        </div>
+      `;
+    }
     return;
   }
 
-  notifListContainer.innerHTML = state.notifications.map((n) => {
+  notifListContainer.innerHTML = displayItems.map((n) => {
     const isUnread = !readSet.has(n.id);
-    let icon = "fa-bullhorn text-indigo-600";
-    if (n.type === "DEADLINE") icon = "fa-clock text-rose-500";
-    if (n.type === "GENERAL") icon = "fa-info-circle text-blue-500";
+    const isExpanded = state.expandedNotifIds.has(n.id);
+    const isLongMessage = n.message && n.message.length > 80;
+
+    let icon = "fa-bullhorn";
+    let label = "Announcement";
+    let badgeClass = "bg-indigo-50 text-indigo-700 border border-indigo-200/60";
+
+    if (n.type === "DEADLINE") {
+      icon = "fa-clock";
+      label = "Deadline";
+      badgeClass = "bg-rose-50 text-rose-700 border border-rose-200/60";
+    } else if (n.type === "GENERAL") {
+      icon = "fa-circle-info";
+      label = "Notice";
+      badgeClass = "bg-sky-50 text-sky-700 border border-sky-200/60";
+    }
 
     return `
-      <div class="p-4 hover:bg-slate-50 transition cursor-pointer relative ${isUnread ? 'bg-indigo-50/40 border-l-4 border-indigo-600' : ''}" data-notif-id="${n.id}">
-        <div class="flex items-start gap-3">
-          <div class="w-8 h-8 rounded-lg bg-white shadow-xs border border-slate-100 flex items-center justify-center shrink-0 mt-0.5">
-            <i class="fa-solid ${icon} text-xs"></i>
+      <div class="p-3.5 sm:p-4 transition-all relative group cursor-pointer ${
+        isUnread ? 'bg-indigo-50/35 hover:bg-indigo-50/60' : 'bg-white hover:bg-slate-50/80'
+      }" data-notif-id="${n.id}">
+        <!-- Top Meta Row -->
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${badgeClass}">
+              <i class="fa-solid ${icon} text-[9px]"></i>
+              <span>${label}</span>
+            </span>
+            <span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-600">
+              ${escapeHtml(n.target_class || "ALL")}
+            </span>
           </div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center justify-between gap-1 mb-0.5">
-              <h5 class="text-xs font-bold text-slate-900 truncate">${escapeHtml(n.title)}</h5>
-              <span class="text-[10px] text-slate-400 shrink-0">${formatTimeAgo(n.created_at)}</span>
-            </div>
-            <p class="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-2">${escapeHtml(n.message)}</p>
-            <div class="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-100">
-              <span class="text-slate-400 font-medium">By: ${escapeHtml(n.sender_name || "Admin")}</span>
-              <div class="flex items-center gap-1.5">
-                <span class="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-semibold">${escapeHtml(n.target_class || "ALL")}</span>
-                ${isUnread 
-                  ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Unseen</span>` 
-                  : `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1"><i class="fa-solid fa-check-double text-emerald-600"></i> Read &amp; Seen</span>`}
-              </div>
-            </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-[11px] text-slate-400 font-medium">${formatTimeAgo(n.created_at)}</span>
+            ${isUnread ? '<span class="w-2 h-2 rounded-full bg-indigo-600 ring-4 ring-indigo-100 shrink-0" title="Unread announcement"></span>' : ''}
           </div>
+        </div>
+
+        <!-- Title -->
+        <h5 class="text-xs sm:text-sm font-bold text-slate-900 leading-snug mb-1 group-hover:text-indigo-600 transition-colors">
+          ${escapeHtml(n.title)}
+        </h5>
+
+        <!-- Message Body with Inline Expand -->
+        <div class="text-xs text-slate-600 leading-relaxed mb-2.5">
+          <p class="${isExpanded ? '' : 'line-clamp-2'} text-slate-600 text-xs leading-relaxed select-text">${escapeHtml(n.message)}</p>
+          ${isLongMessage ? `
+            <button type="button" class="notif-expand-btn text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1 mt-1 cursor-pointer" data-expand-id="${n.id}">
+              <span>${isExpanded ? 'Show less' : 'Read more'}</span>
+              <i class="fa-solid ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-[9px]"></i>
+            </button>
+          ` : ''}
+        </div>
+
+        <!-- Action bar for Retake and Activated tests -->
+        ${(n.title.includes("Retake Authorized") || n.title.includes("Assessment Activated") || n.title.includes("is Now LIVE")) ? `
+          <div class="mb-2.5 pt-2 border-t border-slate-100 flex items-center gap-2">
+            <button
+              type="button"
+              class="view-dispatched-email-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+              data-notif-title="${escapeHtml(n.title)}"
+              data-notif-msg="${escapeHtml(n.message)}"
+            >
+              <i class="fa-solid fa-envelope-open-text text-indigo-600"></i> View Official Email
+            </button>
+            <button
+              type="button"
+              class="open-notif-asmt-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer"
+            >
+              <i class="fa-solid fa-play text-[9px]"></i> Go to Assessment
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- Bottom Row: Sender Info & Toggle Button -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+          <div class="flex items-center gap-1.5 text-slate-500 font-medium truncate max-w-[200px] sm:max-w-[240px]">
+            <i class="fa-solid fa-chalkboard-user text-slate-400 text-[10px]"></i>
+            <span class="truncate">By: ${escapeHtml(n.sender_name || "Admin")}</span>
+          </div>
+
+          <!-- Mark as Read / Seen Toggle Button -->
+          <button type="button" class="notif-action-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+            isUnread 
+              ? 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/80 shadow-2xs' 
+              : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200/80'
+          }" data-toggle-id="${n.id}" title="${isUnread ? 'Click to mark as read' : 'Click to mark as unread'}">
+            ${isUnread 
+              ? '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Mark as read' 
+              : '<i class="fa-solid fa-check-double text-emerald-600"></i> Read'}
+          </button>
         </div>
       </div>
     `;
   }).join("");
 
-  // Clicking an unread notification marks it read
-  notifListContainer.querySelectorAll("[data-notif-id]").forEach((item) => {
-    item.addEventListener("click", () => {
-      const notifId = item.getAttribute("data-notif-id");
+  // Attach Event Handlers with StopPropagation to Prevent Dropdown from Closing
+  notifListContainer.querySelectorAll(".view-dispatched-email-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const notifTitle = btn.getAttribute("data-notif-title") || "Assessment Notification";
+      const notifMsg = btn.getAttribute("data-notif-msg") || "";
+      const emails = getDispatchedEmails();
+      const matchedEmail = emails.find((em: any) => em.subject && (em.subject.includes(notifTitle) || notifTitle.includes(em.heading || "___")));
+
+      if (matchedEmail) {
+        openEmailPreviewModal(matchedEmail);
+      } else {
+        openEmailPreviewModal({
+          subject: notifTitle,
+          heading: notifTitle,
+          recipientName: state.profile?.full_name || "Student Learner",
+          to: state.profile?.email || "student@ghana-edu.gov.gh",
+          senderName: "Master Debrah (Admin)",
+          senderEmail: PRIMARY_ADMIN_EMAIL,
+          bodyHtml: `<p>${escapeHtml(notifMsg)}</p>`,
+          actionUrl: "http://localhost:5176/learner",
+          actionText: "Open Assessment Portal",
+        });
+      }
+    });
+  });
+
+  notifListContainer.querySelectorAll(".open-notif-asmt-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      notifDropdown?.classList.add("hidden");
+      navigateTo("/learner");
+      const grid = document.getElementById("assessmentGrid");
+      if (grid) grid.scrollIntoView({ behavior: "smooth" });
+    });
+  });
+
+  notifListContainer.querySelectorAll(".notif-expand-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-expand-id");
+      if (id) {
+        if (state.expandedNotifIds.has(id)) {
+          state.expandedNotifIds.delete(id);
+        } else {
+          state.expandedNotifIds.add(id);
+        }
+        renderNotifications();
+      }
+    });
+  });
+
+  notifListContainer.querySelectorAll(".notif-action-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-toggle-id");
+      if (id) {
+        if (state.readNotificationIds.has(id)) {
+          state.readNotificationIds.delete(id);
+        } else {
+          state.readNotificationIds.add(id);
+        }
+        localStorage.setItem("jhs_read_notifications", JSON.stringify([...state.readNotificationIds]));
+        renderNotifications();
+      }
+    });
+  });
+
+  notifListContainer.querySelectorAll("[data-notif-id]").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const notifId = card.getAttribute("data-notif-id");
       if (notifId && !state.readNotificationIds.has(notifId)) {
         state.readNotificationIds.add(notifId);
         localStorage.setItem("jhs_read_notifications", JSON.stringify([...state.readNotificationIds]));
@@ -6051,6 +7852,11 @@ async function initChat() {
         handleIncomingCallSignal(callSignal);
       }
     );
+    try {
+      queryActiveCallsOnConnect();
+    } catch (e) {
+      console.warn("queryActiveCallsOnConnect error:", e);
+    }
   }
   } catch (err) {
     console.warn("initChat error:", err);
@@ -7394,21 +9200,51 @@ function updateCallStageUI() {
     if (localVideoContainer) localVideoContainer.classList.remove("hidden");
   }
 
+  // Update asymmetric remote camera off placeholder
+  if (callRemoteCameraOffPlaceholder) {
+    if (!isVoice && activeCall.isRemoteCameraOff) {
+      callRemoteCameraOffPlaceholder.classList.remove("hidden");
+      if (callRemoteVideo) callRemoteVideo.classList.add("hidden");
+    } else {
+      callRemoteCameraOffPlaceholder.classList.add("hidden");
+      if (callRemoteVideo) callRemoteVideo.classList.remove("hidden");
+    }
+  }
+
+  // Update local camera off overlay inside self-view PiP
+  if (callLocalCameraOffOverlay) {
+    if (!isVoice && activeCall.isCameraOff) {
+      callLocalCameraOffOverlay.classList.remove("hidden");
+    } else {
+      callLocalCameraOffOverlay.classList.add("hidden");
+    }
+  }
+
   if (isVoice) {
     if (callTypeBadgeText) callTypeBadgeText.textContent = isConference ? "Group Voice" : "HD Voice";
     if (callTypeBadgeIcon) callTypeBadgeIcon.className = "fa-solid fa-phone text-[9px]";
     if (callToggleModeText) callToggleModeText.textContent = "Switch to Video";
     if (callToggleCameraBtn) {
-      callToggleCameraBtn.title = "Turn On Video";
-      callToggleCameraBtn.classList.remove("bg-white/25", "bg-rose-600");
-      callToggleCameraBtn.classList.add("bg-white/10");
+      callToggleCameraBtn.title = "Request Switch to Video";
+      callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
+      callToggleCameraBtn.classList.remove("bg-rose-600");
+      callToggleCameraBtn.classList.add("bg-white/15");
     }
   } else {
     if (callTypeBadgeText) callTypeBadgeText.textContent = isConference ? "Group Video" : "1080p Video";
     if (callTypeBadgeIcon) callTypeBadgeIcon.className = "fa-solid fa-video text-[9px]";
     if (callToggleModeText) callToggleModeText.textContent = "Switch to Audio";
     if (callToggleCameraBtn) {
-      callToggleCameraBtn.title = "Turn Camera On / Off";
+      callToggleCameraBtn.title = activeCall.isCameraOff ? "Turn Camera On" : "Turn Camera Off";
+      if (activeCall.isCameraOff) {
+        callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video-slash"></i>`;
+        callToggleCameraBtn.classList.remove("bg-white/15");
+        callToggleCameraBtn.classList.add("bg-rose-600");
+      } else {
+        callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
+        callToggleCameraBtn.classList.remove("bg-rose-600");
+        callToggleCameraBtn.classList.add("bg-white/15");
+      }
     }
   }
 }
@@ -7875,41 +9711,282 @@ function copyConferenceLink() {
   }
 }
 
-async function switchCallMode(targetMode?: "voice" | "video", force: boolean = false) {
-  const newMode = targetMode || (activeCall.callType === "voice" ? "video" : "voice");
-  if (activeCall.callType === newMode && !force) return;
+async function handleToggleCallMode() {
+  if (activeCall.callType === "voice") {
+    if (activeCall.status === "connected") {
+      await requestSwitchToVideoCall();
+    } else {
+      await switchCallMode("video");
+    }
+  } else {
+    await switchToVoiceCall();
+  }
+}
 
-  activeCall.callType = newMode;
-  if (newMode === "video") {
-    // Acquire video if missing
-    if (!activeCall.localStream || activeCall.localStream.getVideoTracks().length === 0) {
-      const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
-      activeCall.localStream = await acquireCallMediaStream(myName, true);
-      if (callLocalVideo && activeCall.localStream) {
-        callLocalVideo.srcObject = activeCall.localStream;
-        callLocalVideo.play().catch(() => {});
+async function requestSwitchToVideoCall() {
+  if (activeCall.callType !== "voice" || activeCall.status !== "connected") return;
+  const partner = activeCall.partner;
+  if (!partner) return;
+
+  const myId = getMyUserId();
+  const myName = state.isAdmin && state.activeView === "admin"
+    ? "Master Debrah"
+    : (state.profile?.full_name || "Kwame Mensah");
+  const myAvatar = state.isAdmin && state.activeView === "admin"
+    ? TEACHER_AVATAR
+    : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+  const partnerName = partner.full_name || (partner.role === "admin" || partner.id === ADMIN_CONTACT.id ? "Master Debrah" : "Partner");
+
+  // Display caller waiting notification notice
+  if (callVideoUpgradeNotice) {
+    if (callVideoUpgradeNoticeText) {
+      callVideoUpgradeNoticeText.textContent = `Asking ${partnerName} to switch to Video Call...`;
+    }
+    callVideoUpgradeNotice.classList.remove("hidden");
+  }
+
+  showCallNoticeToast(`Video call request sent to ${partnerName}`);
+
+  // Broadcast WebRTC video upgrade request signal
+  broadcastCallSignal({
+    type: "video_upgrade_request",
+    callId: activeCall.callId,
+    callerId: myId,
+    callerName: myName,
+    callerAvatar: myAvatar,
+    targetId: partner.id,
+    timestamp: Date.now(),
+  });
+
+  // Self-test / Demo Mode: if calling Master Debrah (admin contact) or in single-window mode,
+  // simulate partner receiving the prompt so all 3 interactive options can be directly tested
+  if (partner.id === ADMIN_CONTACT.id || partner.role === "admin" || !partner.id) {
+    setTimeout(() => {
+      if (activeCall.status === "connected" && activeCall.callType === "voice") {
+        showVideoUpgradeRequestPrompt({
+          callId: activeCall.callId,
+          callerId: partner.id,
+          callerName: partnerName,
+          callerAvatar: partner.avatar_url || TEACHER_AVATAR,
+          isSelfDemo: true,
+        });
+      }
+    }, 900);
+  }
+}
+
+function cancelVideoUpgradeRequest() {
+  if (callVideoUpgradeNotice) callVideoUpgradeNotice.classList.add("hidden");
+  if (activeCall.partner && activeCall.callId) {
+    broadcastCallSignal({
+      type: "video_upgrade_cancel",
+      callId: activeCall.callId,
+      callerId: getMyUserId(),
+      targetId: activeCall.partner.id,
+    });
+  }
+  showCallNoticeToast("Video upgrade request cancelled.");
+}
+
+function showVideoUpgradeRequestPrompt(signal: any) {
+  activeCall.pendingVideoUpgradeRequest = signal;
+  if (videoUpgradeRequesterAvatar) {
+    videoUpgradeRequesterAvatar.src = signal.callerAvatar || AVATAR_PRESETS[0];
+  }
+  if (videoUpgradeRequesterName) {
+    videoUpgradeRequesterName.textContent = signal.callerName || "Calling Partner";
+  }
+  if (videoUpgradeRequestModal) {
+    videoUpgradeRequestModal.classList.remove("hidden");
+  }
+}
+
+async function respondToVideoUpgradeRequest(accepted: boolean, withCamera: boolean = true) {
+  const signal = activeCall.pendingVideoUpgradeRequest;
+  if (videoUpgradeRequestModal) {
+    videoUpgradeRequestModal.classList.add("hidden");
+  }
+  if (!signal) return;
+  activeCall.pendingVideoUpgradeRequest = null;
+
+  const myId = getMyUserId();
+  const myName = state.isAdmin && state.activeView === "admin"
+    ? "Master Debrah"
+    : (state.profile?.full_name || "Kwame Mensah");
+
+  if (!accepted) {
+    broadcastCallSignal({
+      type: "video_upgrade_response",
+      callId: activeCall.callId,
+      callerId: myId,
+      targetId: signal.callerId,
+      accepted: false,
+      withCamera: false,
+      responderName: myName,
+    });
+    showCallNoticeToast("Declined video switch. Staying on voice call.");
+    if (callVideoUpgradeNotice) callVideoUpgradeNotice.classList.add("hidden");
+    return;
+  }
+
+  // Accepted!
+  broadcastCallSignal({
+    type: "video_upgrade_response",
+    callId: activeCall.callId,
+    callerId: myId,
+    targetId: signal.callerId,
+    accepted: true,
+    withCamera: withCamera,
+    responderName: myName,
+  });
+
+  if (callVideoUpgradeNotice) callVideoUpgradeNotice.classList.add("hidden");
+
+  // Activate video mode on receiver side:
+  // Caller requested video switch, so caller camera is on (remoteCameraOn = true).
+  // Receiver local camera depends on whether they accepted with camera or kept camera off!
+  await activateVideoMode({
+    localCameraOn: withCamera,
+    remoteCameraOn: true,
+  });
+
+  if (signal.isSelfDemo) {
+    setTimeout(async () => {
+      await activateVideoMode({
+        localCameraOn: true,
+        remoteCameraOn: withCamera,
+      });
+    }, 200);
+  }
+}
+
+async function handleVideoUpgradeResponse(signal: any) {
+  if (signal.callId !== activeCall.callId) return;
+  if (callVideoUpgradeNotice) callVideoUpgradeNotice.classList.add("hidden");
+
+  if (!signal.accepted) {
+    showCallNoticeToast(`${signal.responderName || "Partner"} declined to switch to video. Staying in voice call.`);
+    return;
+  }
+
+  showCallNoticeToast(`${signal.responderName || "Partner"} accepted video switch!`);
+
+  // Caller requested video switch, so caller camera is ON.
+  // Remote camera depends on partner's choice (withCamera).
+  await activateVideoMode({
+    localCameraOn: true,
+    remoteCameraOn: signal.withCamera !== false,
+  });
+}
+
+async function activateVideoMode({ localCameraOn, remoteCameraOn }: { localCameraOn: boolean; remoteCameraOn: boolean }) {
+  activeCall.callType = "video";
+  activeCall.isCameraOff = !localCameraOn;
+  activeCall.isRemoteCameraOff = !remoteCameraOn;
+
+  const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
+
+  if (localCameraOn) {
+    // Acquire camera stream
+    activeCall.localStream = await acquireCallMediaStream(myName, true);
+    if (callLocalVideo && activeCall.localStream) {
+      callLocalVideo.srcObject = activeCall.localStream;
+      callLocalVideo.play().catch(() => {});
+    }
+
+    // Update WebRTC peer connection sender
+    if (activeCall.pc && activeCall.localStream) {
+      const videoTrack = activeCall.localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video" || s.receiver?.track?.kind === "video");
+        if (sender) {
+          sender.replaceTrack(videoTrack).catch(() => {});
+        } else {
+          try {
+            activeCall.pc.addTrack(videoTrack, activeCall.localStream);
+          } catch (e) {}
+        }
       }
     }
-    // Enable video track
-    activeCall.localStream?.getVideoTracks().forEach((t) => (t.enabled = true));
-    activeCall.isCameraOff = false;
   } else {
-    // In voice mode, physically stop camera tracks so the webcam hardware LED turns off!
-    if (activeCall.localStream) {
-      activeCall.localStream.getVideoTracks().forEach((t) => {
-        try {
-          t.stop();
-          t.enabled = false;
-        } catch (e) {}
-      });
-    }
+    // Local camera is OFF (user chose audio-only)
     if (callLocalVideo) {
       try { callLocalVideo.pause(); } catch (e) {}
       callLocalVideo.srcObject = null;
     }
-    activeCall.isCameraOff = true;
+    if (activeCall.pc) {
+      const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        sender.replaceTrack(null).catch(() => {});
+      }
+    }
   }
+
+  // Ensure remote stream is active if remoteCameraOn
+  const partnerName = activeCall.partner?.full_name || (activeCall.partner?.role === "admin" ? "Master Debrah" : "Partner");
+  const partnerAvatar = activeCall.partner?.role === "admin" ? TEACHER_AVATAR : (activeCall.partner?.avatar_url || AVATAR_PRESETS[0]);
+  
+  if (callRemoteCameraOffName) callRemoteCameraOffName.textContent = partnerName;
+  if (callRemoteCameraOffAvatar) callRemoteCameraOffAvatar.src = partnerAvatar;
+
+  if (remoteCameraOn) {
+    if (!activeCall.remoteStream || activeCall.remoteStream.getVideoTracks().length === 0) {
+      activeCall.remoteStream = createSyntheticCallStream(`${partnerName} (Live Remote)`);
+    }
+    if (callRemoteVideo && activeCall.remoteStream) {
+      callRemoteVideo.srcObject = activeCall.remoteStream;
+      callRemoteVideo.play().catch(() => {});
+    }
+  }
+
+  if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
   updateCallStageUI();
+}
+
+async function switchToVoiceCall() {
+  if (activeCall.callType === "voice") return;
+  activeCall.callType = "voice";
+  activeCall.isCameraOff = true;
+  activeCall.isRemoteCameraOff = true;
+
+  if (activeCall.localStream) {
+    activeCall.localStream.getVideoTracks().forEach((t) => {
+      try { t.stop(); t.enabled = false; } catch (e) {}
+    });
+  }
+  if (callLocalVideo) {
+    try { callLocalVideo.pause(); } catch (e) {}
+    callLocalVideo.srcObject = null;
+  }
+  if (activeCall.pc) {
+    const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+    if (sender) {
+      sender.replaceTrack(null).catch(() => {});
+    }
+  }
+
+  if (activeCall.partner && activeCall.callId) {
+    broadcastCallSignal({
+      type: "switch_to_voice",
+      callId: activeCall.callId,
+      callerId: getMyUserId(),
+      targetId: activeCall.partner.id,
+    });
+  }
+
+  showCallNoticeToast("Switched to voice call mode.");
+  updateCallStageUI();
+}
+
+async function switchCallMode(targetMode?: "voice" | "video", force: boolean = false) {
+  const newMode = targetMode || (activeCall.callType === "voice" ? "video" : "voice");
+  if (activeCall.callType === newMode && !force) return;
+
+  if (newMode === "video") {
+    await activateVideoMode({ localCameraOn: true, remoteCameraOn: true });
+  } else {
+    await switchToVoiceCall();
+  }
 }
 
 function startCallTimer() {
@@ -7935,7 +10012,7 @@ function connectCallWithSyntheticRemote(remoteName: string, remoteAvatar: string
   activeCall.status = "connected";
   activeCall.remoteStream = createSyntheticCallStream(`${remoteName} (Live Remote)`);
 
-  if (callRemoteVideo && activeCall.remoteStream) {
+  if (activeCall.callType === "video" && callRemoteVideo && activeCall.remoteStream) {
     callRemoteVideo.srcObject = activeCall.remoteStream;
     callRemoteVideo.play().catch(() => {});
   }
@@ -7960,6 +10037,14 @@ async function createPeerConnection(isInitiator: boolean): Promise<RTCPeerConnec
     });
   }
 
+  // Ensure video transceiver exists up-front so video track can be dynamically enabled/replaced without SDP issues
+  try {
+    const hasVideo = pc.getTransceivers().some((t) => t.receiver?.track?.kind === "video");
+    if (!hasVideo) {
+      pc.addTransceiver("video", { direction: "sendrecv" });
+    }
+  } catch (e) {}
+
   pc.ontrack = (event) => {
     if (event.streams && event.streams[0]) {
       activeCall.remoteStream = event.streams[0];
@@ -7968,6 +10053,17 @@ async function createPeerConnection(isInitiator: boolean): Promise<RTCPeerConnec
         callRemoteVideo.play().catch(() => {});
       }
       if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+    }
+
+    if (event.track && event.track.kind === "video") {
+      event.track.onmute = () => {
+        activeCall.isRemoteCameraOff = true;
+        updateCallStageUI();
+      };
+      event.track.onunmute = () => {
+        activeCall.isRemoteCameraOff = false;
+        updateCallStageUI();
+      };
     }
   };
 
@@ -8011,6 +10107,128 @@ async function startVideoCall(targetPartner?: any) {
   return initiateCallSession("video", targetPartner);
 }
 
+// ------------------------------------------------------------------------------
+// Active Call Session Persistence & Multi-Window / Post-Login Synchronization
+// Allows a partner who logs in while a call hasn't ended to still receive the call
+// ------------------------------------------------------------------------------
+function updateLiveCallSessionInStorage() {
+  if (!activeCall.callId || (activeCall.status !== "calling" && activeCall.status !== "connected")) {
+    clearLiveCallSessionInStorage();
+    return;
+  }
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const sessionData = {
+    callId: activeCall.callId,
+    callType: activeCall.callType,
+    callerId: getMyUserId(),
+    callerName: isCurrentUserAdmin ? "Master Debrah" : (state.profile?.full_name || "Student Learner"),
+    callerAvatar: isCurrentUserAdmin ? TEACHER_AVATAR : (state.profile?.avatar_url || AVATAR_PRESETS[0]),
+    callerRole: isCurrentUserAdmin ? "admin" : "learner",
+    targetId: activeCall.partner?.id || null,
+    targetRole: activeCall.partner?.role || null,
+    status: activeCall.status,
+    isConference: !!activeCall.isConference,
+    conferenceTitle: activeCall.conferenceTitle || null,
+    timestamp: Date.now(),
+  };
+  try {
+    localStorage.setItem("jhs_live_call_session", JSON.stringify(sessionData));
+  } catch (e) {}
+}
+
+function clearLiveCallSessionInStorage() {
+  try {
+    localStorage.removeItem("jhs_live_call_session");
+  } catch (e) {}
+}
+
+function checkForPendingActiveCallOnLogin() {
+  const myId = getMyUserId();
+  if (!myId) return;
+
+  // Don't interrupt if this window already has an open call
+  const isCallModalOpen = videoCallModal && !videoCallModal.classList.contains("hidden");
+  if (isCallModalOpen || activeCall.status === "connected" || activeCall.status === "calling" || activeCall.status === "incoming") {
+    return;
+  }
+
+  try {
+    const raw = localStorage.getItem("jhs_live_call_session");
+    if (!raw) return;
+    const sessionData = JSON.parse(raw);
+    if (!sessionData || !sessionData.callId) return;
+
+    // Check if session is recent (under 90 seconds old and still active)
+    const isRecent = Date.now() - (sessionData.timestamp || 0) < 90000;
+    if (!isRecent || sessionData.status === "ended") {
+      localStorage.removeItem("jhs_live_call_session");
+      return;
+    }
+
+    // Do not notify self if caller is current user
+    if (sessionData.callerId === myId) return;
+
+    const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    const isForMe = sessionData.isConference ||
+      sessionData.targetId === myId ||
+      (isCurrentUserAdmin && (sessionData.targetId === ADMIN_CONTACT.id || sessionData.targetRole === "admin"));
+
+    if (isForMe && (sessionData.status === "calling" || sessionData.status === "connected")) {
+      handleIncomingCallSignal({
+        type: sessionData.isConference ? "conference_invite" : "invite",
+        callId: sessionData.callId,
+        callType: sessionData.callType,
+        callerId: sessionData.callerId,
+        callerName: sessionData.callerName,
+        callerAvatar: sessionData.callerAvatar,
+        callerRole: sessionData.callerRole,
+        conferenceTitle: sessionData.conferenceTitle,
+        targetId: myId,
+        timestamp: sessionData.timestamp,
+      });
+    }
+  } catch (e) {
+    console.warn("checkForPendingActiveCallOnLogin error:", e);
+  }
+}
+
+function queryActiveCallsOnConnect() {
+  const myId = getMyUserId();
+  if (!myId) return;
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  // 1. Broadcast query via Supabase realtime so any other device/tab in an active call responds
+  broadcastCallSignal({
+    type: "query_active_calls",
+    userId: myId,
+    userEmail: state.user?.email,
+    userRole: isCurrentUserAdmin ? "admin" : "learner",
+    timestamp: Date.now(),
+  });
+
+  // 2. Also check local storage for cross-tab sessions
+  checkForPendingActiveCallOnLogin();
+}
+
+// Window storage listener for instant cross-tab call detection
+window.addEventListener("storage", (e) => {
+  if (e.key === "jhs_live_call_session") {
+    if (e.newValue) {
+      checkForPendingActiveCallOnLogin();
+    } else {
+      if (incomingCallModal && !incomingCallModal.classList.contains("hidden")) {
+        incomingCallModal.classList.add("hidden");
+        if (activeCall.stopRingTone) {
+          activeCall.stopRingTone();
+          activeCall.stopRingTone = null;
+        }
+        activeCall.status = "idle";
+        activeCall.pendingSignal = null;
+      }
+    }
+  }
+});
+
 async function initiateCallSession(callType: "voice" | "video", targetPartner?: any) {
   const myId = getMyUserId();
   const partner = targetPartner || state.activeChatPartner;
@@ -8033,6 +10251,7 @@ async function initiateCallSession(callType: "voice" | "video", targetPartner?: 
   const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   activeCall.callId = callId;
+  (activeCall as any).isEnding = false;
   activeCall.partner = partner;
   activeCall.callType = callType;
   activeCall.isCaller = true;
@@ -8082,6 +10301,34 @@ async function initiateCallSession(callType: "voice" | "video", targetPartner?: 
     timestamp: Date.now(),
   });
 
+  // Save active live call session in storage for instant cross-tab / post-login pickup
+  updateLiveCallSessionInStorage();
+
+  // Periodic heartbeat re-broadcasting invite every 2.5s while ringing
+  // Ensures any person who logs in or connects after call has started gets notified!
+  if (activeCall.inviteHeartbeatTimer) clearInterval(activeCall.inviteHeartbeatTimer);
+  activeCall.inviteHeartbeatTimer = setInterval(() => {
+    if (activeCall.status === "calling" && activeCall.callId && activeCall.partner) {
+      broadcastCallSignal({
+        type: "invite",
+        callId: activeCall.callId,
+        callType: activeCall.callType,
+        callerId: myId,
+        callerName: myName,
+        callerAvatar: myAvatar,
+        callerRole: state.isAdmin && state.activeView === "admin" ? "admin" : "learner",
+        targetId: activeCall.partner.id,
+        timestamp: Date.now(),
+      });
+      updateLiveCallSessionInStorage();
+    } else {
+      if (activeCall.inviteHeartbeatTimer) {
+        clearInterval(activeCall.inviteHeartbeatTimer);
+        activeCall.inviteHeartbeatTimer = null;
+      }
+    }
+  }, 2500);
+
   // Self-test / Demo Mode: If Kwame calls Master Debrah or vice-versa in the same window,
   // simulate answer after 2.5 seconds so user can experience the live call immediately!
   if (partner.id === ADMIN_CONTACT.id || partner.role === "admin" || !partner.id) {
@@ -8098,12 +10345,64 @@ async function handleIncomingCallSignal(signal: any) {
   const myId = getMyUserId();
   const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
 
+  // If another user is querying whether there's an active call waiting for them upon signing in:
+  if (signal.type === "query_active_calls") {
+    if (signal.userId === myId) return;
+    if (activeCall.callId && (activeCall.status === "calling" || activeCall.status === "connected")) {
+      const partner = activeCall.partner;
+      const isTarget = activeCall.isConference ||
+        (partner && (
+          partner.id === signal.userId ||
+          (signal.userRole === "admin" && (partner.role === "admin" || partner.id === ADMIN_CONTACT.id))
+        ));
+
+      if (isTarget) {
+        const myName = isCurrentUserAdmin && state.activeView === "admin"
+          ? "Master Debrah"
+          : (state.profile?.full_name || "Student Learner");
+        const myAvatar = isCurrentUserAdmin && state.activeView === "admin"
+          ? TEACHER_AVATAR
+          : (state.profile?.avatar_url || AVATAR_PRESETS[0]);
+
+        if (activeCall.isConference) {
+          broadcastCallSignal({
+            type: "conference_invite",
+            callId: activeCall.callId,
+            callType: activeCall.callType,
+            conferenceTitle: activeCall.conferenceTitle,
+            callerId: myId,
+            callerName: myName,
+            callerAvatar: myAvatar,
+            callerRole: isCurrentUserAdmin ? "admin" : "learner",
+            targetId: signal.userId,
+            timestamp: Date.now(),
+          });
+        } else {
+          broadcastCallSignal({
+            type: "invite",
+            callId: activeCall.callId,
+            callType: activeCall.callType,
+            callerId: myId,
+            callerName: myName,
+            callerAvatar: myAvatar,
+            callerRole: isCurrentUserAdmin ? "admin" : "learner",
+            targetId: signal.userId,
+            timestamp: Date.now(),
+          });
+        }
+      }
+    }
+    return;
+  }
+
   const isAddressedToMe = signal.targetId === myId || (isCurrentUserAdmin && (signal.targetId === ADMIN_CONTACT.id || signal.targetRole === "admin"));
   if (!isAddressedToMe && signal.callerId !== myId) return;
 
   switch (signal.type) {
     case "conference_invite": {
       if (signal.callerId === myId) return;
+      if (activeCall.status === "incoming" && activeCall.callId === signal.callId) return;
+
       activeCall.pendingSignal = signal;
       activeCall.callId = signal.callId;
       activeCall.isConference = true;
@@ -8141,6 +10440,11 @@ async function handleIncomingCallSignal(signal: any) {
     case "invite": {
       if (signal.callerId === myId) return;
 
+      // If already receiving this exact incoming call invite and modal is visible, don't restart ringtone
+      if (activeCall.status === "incoming" && activeCall.callId === signal.callId) {
+        return;
+      }
+
       // Check if this window actually has an active visible call
       const isCallModalOpen = videoCallModal && !videoCallModal.classList.contains("hidden");
       if (!isCallModalOpen) {
@@ -8149,6 +10453,7 @@ async function handleIncomingCallSignal(signal: any) {
       }
 
       if (isCallModalOpen && (activeCall.status === "connected" || activeCall.status === "calling")) {
+        if (signal.callId === activeCall.callId) return;
         broadcastCallSignal({
           type: "busy",
           callId: signal.callId,
@@ -8269,6 +10574,86 @@ async function handleIncomingCallSignal(signal: any) {
       break;
     }
 
+    case "video_upgrade_request": {
+      if (signal.callerId === myId) return;
+      if (activeCall.status !== "connected") return;
+      showVideoUpgradeRequestPrompt(signal);
+      break;
+    }
+
+    case "video_upgrade_cancel": {
+      if (signal.callerId === myId) return;
+      if (videoUpgradeRequestModal) videoUpgradeRequestModal.classList.add("hidden");
+      activeCall.pendingVideoUpgradeRequest = null;
+      showCallNoticeToast("Partner cancelled the video switch request.");
+      break;
+    }
+
+    case "video_upgrade_response": {
+      if (signal.callerId === myId) return;
+      handleVideoUpgradeResponse(signal);
+      break;
+    }
+
+    case "camera_state_change": {
+      if (signal.callerId === myId) return;
+      activeCall.isRemoteCameraOff = !!signal.cameraOff;
+      updateCallStageUI();
+      const partnerName = activeCall.partner?.full_name || (activeCall.partner?.role === "admin" ? "Master Debrah" : "Partner");
+      if (signal.cameraOff) {
+        showCallNoticeToast(`${partnerName} turned their camera off`);
+      } else {
+        showCallNoticeToast(`${partnerName} turned their camera back on`);
+      }
+      break;
+    }
+
+    case "switch_to_voice": {
+      if (signal.callerId === myId) return;
+      const partnerName = activeCall.partner?.full_name || (activeCall.partner?.role === "admin" ? "Master Debrah" : "Partner");
+      showCallNoticeToast(`${partnerName} switched call to voice mode`);
+      activeCall.callType = "voice";
+      activeCall.isCameraOff = true;
+      activeCall.isRemoteCameraOff = true;
+      if (activeCall.localStream) {
+        activeCall.localStream.getVideoTracks().forEach((t) => {
+          try { t.stop(); t.enabled = false; } catch (e) {}
+        });
+      }
+      if (callLocalVideo) {
+        try { callLocalVideo.pause(); } catch (e) {}
+        callLocalVideo.srcObject = null;
+      }
+      if (activeCall.pc) {
+        const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+        if (sender) {
+          sender.replaceTrack(null).catch(() => {});
+        }
+      }
+      updateCallStageUI();
+      break;
+    }
+
+    case "call_reaction": {
+      if (signal.callerId === myId) return;
+      if (signal.callId === activeCall.callId && (activeCall.status === "connected" || activeCall.status === "calling")) {
+        spawnCallReaction(signal.emoji, signal.callerName || "Partner", false);
+      }
+      break;
+    }
+
+    case "call_hand_raise": {
+      if (signal.callerId === myId) return;
+      if (signal.callId === activeCall.callId) {
+        if (signal.isLowered) {
+          lowerRaisedHand(false);
+        } else {
+          handleRaiseHand(false, signal.callerName);
+        }
+      }
+      break;
+    }
+
     case "hangup": {
       if (signal.callId === activeCall.callId) {
         endVideoCall(false);
@@ -8301,7 +10686,10 @@ async function acceptIncomingCall() {
   const callType = signal.callType || "video";
   activeCall.isCaller = false;
   activeCall.status = "connected";
+  (activeCall as any).isEnding = false;
   activeCall.callType = callType;
+  activeCall.isCameraOff = callType === "voice";
+  activeCall.isRemoteCameraOff = callType === "voice";
   activeCall.partner = {
     id: signal.callerId,
     full_name: signal.callerName,
@@ -8426,10 +10814,15 @@ window.addEventListener("pagehide", () => releaseAllMediaHardware());
 window.addEventListener("beforeunload", () => releaseAllMediaHardware());
 
 function endVideoCall(notifyPeer: boolean = true) {
+  // Re-entrancy guard: prevent duplicate terminations from triggering multiple saves/uploads
+  if (activeCall.status === "idle" || (activeCall as any).isEnding) return;
+  (activeCall as any).isEnding = true;
+  activeCall.status = "idle";
+
   // 1. Immediately terminate and disconnect all physical camera and microphone hardware!
   releaseAllMediaHardware();
 
-  // 2. Wrap background recording upload safely
+  // 2. Wrap background recording upload safely (single execution per call)
   try {
     stopAndSaveCallRecording().catch((err) => console.warn("Recording save error:", err));
   } catch (err) {
@@ -8460,12 +10853,19 @@ function endVideoCall(notifyPeer: boolean = true) {
   }
   activeCall.secondsElapsed = 0;
 
-  // 6. Hide Call Modals
+  // 6. Hide Call Modals and Overlays
   if (videoCallModal) {
     videoCallModal.classList.remove("call-minimized");
     videoCallModal.classList.add("hidden");
   }
   if (incomingCallModal) incomingCallModal.classList.add("hidden");
+  if (videoUpgradeRequestModal) videoUpgradeRequestModal.classList.add("hidden");
+  if (callVideoUpgradeNotice) callVideoUpgradeNotice.classList.add("hidden");
+  if (callRemoteCameraOffPlaceholder) callRemoteCameraOffPlaceholder.classList.add("hidden");
+  if (callLocalCameraOffOverlay) callLocalCameraOffOverlay.classList.add("hidden");
+  toggleCallReactionPicker(true);
+  if (callReactionsContainer) callReactionsContainer.innerHTML = "";
+  lowerRaisedHand(false);
 
   // 7. Reset Dock Control Buttons
   if (callToggleMicBtn) {
@@ -8495,8 +10895,15 @@ function endVideoCall(notifyPeer: boolean = true) {
   activeCall.partner = null;
   activeCall.isMuted = false;
   activeCall.isCameraOff = false;
+  activeCall.isRemoteCameraOff = false;
   activeCall.isScreenSharing = false;
   activeCall.pendingSignal = null;
+  activeCall.pendingVideoUpgradeRequest = null;
+  if (activeCall.inviteHeartbeatTimer) {
+    clearInterval(activeCall.inviteHeartbeatTimer);
+    activeCall.inviteHeartbeatTimer = null;
+  }
+  clearLiveCallSessionInStorage();
 }
 
 function toggleCallMic() {
@@ -8523,8 +10930,12 @@ function toggleCallMic() {
 
 async function toggleCallCamera() {
   if (activeCall.callType === "voice") {
-    // In voice call mode, clicking camera turns on video!
-    switchCallMode("video");
+    // In voice call mode, clicking camera initiates request to switch to video!
+    if (activeCall.status === "connected") {
+      await requestSwitchToVideoCall();
+    } else {
+      switchCallMode("video");
+    }
     return;
   }
 
@@ -8544,11 +10955,25 @@ async function toggleCallCamera() {
       try { callLocalVideo.pause(); } catch (e) {}
       callLocalVideo.srcObject = null;
     }
-    if (callToggleCameraBtn) {
-      callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video-slash"></i>`;
-      callToggleCameraBtn.classList.remove("bg-white/15");
-      callToggleCameraBtn.classList.add("bg-rose-600");
+    if (activeCall.pc) {
+      const sender = activeCall.pc.getSenders().find((s) => s.track?.kind === "video");
+      if (sender) {
+        sender.replaceTrack(null).catch(() => {});
+      }
     }
+
+    // Broadcast camera state change to remote peer
+    if (activeCall.partner && activeCall.callId) {
+      broadcastCallSignal({
+        type: "camera_state_change",
+        callId: activeCall.callId,
+        callerId: getMyUserId(),
+        targetId: activeCall.partner.id,
+        cameraOff: true,
+      });
+    }
+
+    showCallNoticeToast("Your camera is off. Audio remains active.");
   } else {
     // Re-acquire camera
     const myName = state.profile?.full_name || (state.isAdmin ? "Master Debrah" : "Student");
@@ -8567,12 +10992,22 @@ async function toggleCallCamera() {
         try { activeCall.pc.addTrack(newTrack, newStream); } catch (e) {}
       }
     }
-    if (callToggleCameraBtn) {
-      callToggleCameraBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
-      callToggleCameraBtn.classList.remove("bg-rose-600");
-      callToggleCameraBtn.classList.add("bg-white/15");
+
+    // Broadcast camera state change to remote peer
+    if (activeCall.partner && activeCall.callId) {
+      broadcastCallSignal({
+        type: "camera_state_change",
+        callId: activeCall.callId,
+        callerId: getMyUserId(),
+        targetId: activeCall.partner.id,
+        cameraOff: false,
+      });
     }
+
+    showCallNoticeToast("Your camera is now on.");
   }
+
+  updateCallStageUI();
 }
 
 async function startScreenShare() {
@@ -8684,6 +11119,207 @@ function toggleCallMinimized() {
 }
 
 // ------------------------------------------------------------------------------
+// In-Call Live Reactions & Raised Hand Sound Synthesizers & Controllers
+// ------------------------------------------------------------------------------
+function playReactionChimeSound(emoji?: string) {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    // Pleasant sparkle chime based on emoji personality
+    const freqs = emoji === "❤️" ? [523.25, 659.25, 783.99, 1046.5] :
+                  emoji === "🎉" || emoji === "🔥" ? [587.33, 739.99, 880, 1174.66] :
+                  [659.25, 830.61, 987.77, 1318.51];
+
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.05);
+
+      gain.gain.setValueAtTime(0.001, now + idx * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.08, now + idx * 0.05 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.05 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + idx * 0.05);
+      osc.stop(now + idx * 0.05 + 0.38);
+    });
+  } catch (e) {}
+}
+
+function playHandRaisedChimeSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    // Distinct double-tone alert chime (F5 -> A5)
+    [698.46, 880.00].forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+      gain.gain.setValueAtTime(0.001, now + idx * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + idx * 0.12 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.12 + 0.42);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(now + idx * 0.12);
+      osc.stop(now + idx * 0.12 + 0.45);
+    });
+  } catch (e) {}
+}
+
+function toggleCallReactionPicker(forceClose: boolean = false) {
+  if (!callReactionPicker) return;
+  if (forceClose || !callReactionPicker.classList.contains("hidden")) {
+    callReactionPicker.classList.add("hidden");
+  } else {
+    callReactionPicker.classList.remove("hidden");
+  }
+}
+
+function spawnCallReaction(emoji: string, senderName?: string, isSelf: boolean = false) {
+  if (!callReactionsContainer) return;
+
+  const reactionEl = document.createElement("div");
+  reactionEl.className = "floating-call-reaction";
+
+  // Randomize horizontal trajectory across screen width (25% to 75%)
+  const randomLeft = Math.floor(Math.random() * 50) + 25;
+  reactionEl.style.left = `${randomLeft}%`;
+
+  const emojiSpan = document.createElement("span");
+  emojiSpan.textContent = emoji;
+  reactionEl.appendChild(emojiSpan);
+
+  if (senderName) {
+    const senderBadge = document.createElement("span");
+    senderBadge.className = "reaction-sender";
+    senderBadge.textContent = isSelf ? "You" : senderName;
+    reactionEl.appendChild(senderBadge);
+  }
+
+  callReactionsContainer.appendChild(reactionEl);
+  playReactionChimeSound(emoji);
+
+  // Automatically remove from DOM once float animation ends
+  setTimeout(() => {
+    try {
+      if (reactionEl.parentNode) {
+        reactionEl.parentNode.removeChild(reactionEl);
+      }
+    } catch (e) {}
+  }, 2900);
+}
+
+function sendCallReaction(emoji: string) {
+  toggleCallReactionPicker(true);
+
+  const myId = getMyUserId();
+  const isMeAdmin = state.isAdmin && state.activeView === "admin";
+  const myName = isMeAdmin ? "Master Debrah" : (state.profile?.full_name || "Student");
+
+  if (emoji === "✋") {
+    // Raise Hand
+    handleRaiseHand(true);
+    return;
+  }
+
+  // Spawn locally with instant particle feedback
+  spawnCallReaction(emoji, myName, true);
+
+  // Broadcast reaction to remote participant(s)
+  if (activeCall.callId) {
+    broadcastCallSignal({
+      type: "call_reaction",
+      callId: activeCall.callId,
+      callerId: myId,
+      callerName: myName,
+      targetId: activeCall.partner?.id,
+      emoji: emoji,
+      timestamp: Date.now(),
+    });
+  }
+
+  // Self-test / Demo Mode: When calling Master Debrah (or demo contact),
+  // partner returns an engaging reaction back after a short pause
+  if (activeCall.status === "connected" && (!activeCall.partner?.id || activeCall.partner.id === ADMIN_CONTACT.id || activeCall.partner.role === "admin")) {
+    setTimeout(() => {
+      if (activeCall.status === "connected") {
+        const partnerName = activeCall.partner?.full_name || "Master Debrah";
+        const replyEmojis = ["👏", "👍", "💡", "❤️", "🎉"];
+        const partnerEmoji = replyEmojis[Math.floor(Math.random() * replyEmojis.length)];
+        spawnCallReaction(partnerEmoji, partnerName, false);
+      }
+    }, 1100);
+  }
+}
+
+function handleRaiseHand(isSelf: boolean, senderName?: string) {
+  const isMeAdmin = state.isAdmin && state.activeView === "admin";
+  const myName = isMeAdmin ? "Master Debrah" : (state.profile?.full_name || "Student");
+  const myId = getMyUserId();
+
+  if (isSelf) {
+    if (callRaisedHandBanner && callRaisedHandText) {
+      callRaisedHandText.textContent = "You raised your hand";
+      callRaisedHandBanner.classList.remove("hidden");
+    }
+    playHandRaisedChimeSound();
+
+    if (activeCall.callId) {
+      broadcastCallSignal({
+        type: "call_hand_raise",
+        callId: activeCall.callId,
+        callerId: myId,
+        callerName: myName,
+        targetId: activeCall.partner?.id,
+        isLowered: false,
+        timestamp: Date.now(),
+      });
+    }
+
+    showCallNoticeToast("Hand raised ✋");
+  } else {
+    if (callRaisedHandBanner && callRaisedHandText) {
+      callRaisedHandText.textContent = `${senderName || "Partner"} raised hand`;
+      callRaisedHandBanner.classList.remove("hidden");
+    }
+    playHandRaisedChimeSound();
+    showCallNoticeToast(`${senderName || "Partner"} raised hand ✋`);
+  }
+}
+
+function lowerRaisedHand(isSelfInitiated: boolean = true) {
+  if (callRaisedHandBanner) {
+    callRaisedHandBanner.classList.add("hidden");
+  }
+
+  if (isSelfInitiated && activeCall.callId) {
+    broadcastCallSignal({
+      type: "call_hand_raise",
+      callId: activeCall.callId,
+      callerId: getMyUserId(),
+      callerName: state.profile?.full_name || "Participant",
+      targetId: activeCall.partner?.id,
+      isLowered: true,
+      timestamp: Date.now(),
+    });
+    showCallNoticeToast("Hand lowered.");
+  }
+}
+
+// ------------------------------------------------------------------------------
 // Behind-the-Scene Automatic Call Recording & Google Drive Cloud Backup (computing.b9@gmail.com)
 // ------------------------------------------------------------------------------
 function startBehindTheSceneCallRecording() {
@@ -8737,11 +11373,20 @@ function startBehindTheSceneCallRecording() {
 }
 
 async function stopAndSaveCallRecording() {
+  const currentCallId = activeCall.callId;
+  if (!currentCallId) return;
+
+  // Global Set of already saved call sessions to guarantee 100% single-upload deduplication
+  if (!(window as any)._savedCallSessionIds) {
+    (window as any)._savedCallSessionIds = new Set<string>();
+  }
+  if ((window as any)._savedCallSessionIds.has(currentCallId)) {
+    return;
+  }
+  (window as any)._savedCallSessionIds.add(currentCallId);
+
   const chunks = [...activeCall.recordedChunks];
-  const callType = activeCall.callType;
-  const partner = activeCall.partner;
-  const callId = activeCall.callId || `call_${Date.now()}`;
-  const durationSec = activeCall.secondsElapsed || (activeCall.recordingStartedAt ? Math.round((Date.now() - activeCall.recordingStartedAt) / 1000) : 5);
+  activeCall.recordedChunks = []; // Drain immediately to prevent any duplicate capture
 
   if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
     try {
@@ -8750,20 +11395,48 @@ async function stopAndSaveCallRecording() {
   }
   activeCall.recorder = null;
 
-  // Identify who the learner is in this call
+  const durationSec = activeCall.secondsElapsed || (activeCall.recordingStartedAt ? Math.round((Date.now() - activeCall.recordingStartedAt) / 1000) : 0);
+
+  // If the call was instantly cancelled/declined or has 0 chunks and under 1s duration, skip upload
+  if (chunks.length === 0 && durationSec < 1) {
+    return;
+  }
+
+  const callType = activeCall.callType;
+  const partner = activeCall.partner;
+  const callId = currentCallId;
+
+  // Identify who the participants are
   const isCurrentAdmin = state.isAdmin && state.activeView === "admin";
-  const student = isCurrentAdmin ? partner : (state.profile || { full_name: "Kwame Mensah", class_level: "Basic 9A" });
-  const studentName = student?.full_name || (isCurrentAdmin ? "Student Learner" : "Kwame Mensah");
-  const studentClass = student?.class_level || "Basic 9";
+  const myName = isCurrentAdmin ? "Master Debrah" : (state.profile?.full_name || "Learner");
+  const myClass = isCurrentAdmin ? "Staff" : (state.profile?.class_level || "Basic 9");
+  const otherName = partner?.full_name || (isCurrentAdmin ? "Learner" : "Master Debrah");
+  const otherClass = partner?.class_level || (isCurrentAdmin ? "Basic 9" : "");
+
+  const callerName = activeCall.isCaller ? myName : otherName;
+  const recipientName = activeCall.isCaller ? otherName : myName;
 
   const isConf = activeCall.isConference;
   const confTitle = activeCall.conferenceTitle || "Basic_9_Study_Conference";
   const cleanTitle = confTitle.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
-  const userFolderName = isConf
-    ? `Study_Conference_Sessions`
-    : `${studentName} (${studentClass})`;
 
-  // Generate clean, well-labelled file name with user's name or conference title, call type, and readable time
+  // Determine intelligent user folder in Google Drive:
+  // 1. If group conference: "Study_Conference_Sessions"
+  // 2. If call between 2 learners: "[Learner A] & [Learner B] (Learner Peer Session)"
+  // 3. If call between admin & learner: "[Learner Name] ([Class])"
+  let userFolderName = "";
+  if (isConf) {
+    userFolderName = "Study_Conference_Sessions";
+  } else if (isCurrentAdmin) {
+    userFolderName = `${otherName} (${otherClass || "Basic 9"})`;
+  } else if (partner?.role === "admin" || partner?.role === "teacher" || otherName.includes("Master")) {
+    userFolderName = `${myName} (${myClass})`;
+  } else {
+    // 2 learners calling each other
+    userFolderName = `${myName} & ${otherName} (Learner Peer Session)`;
+  }
+
+  // Generate clean, well-labelled file name with user names or conference title, call type, and readable time
   const now = new Date();
   const pad = (n: number) => (n < 10 ? "0" + n : "" + n);
   const year = now.getFullYear();
@@ -8775,13 +11448,22 @@ async function stopAndSaveCallRecording() {
   hours = hours % 12;
   hours = hours ? hours : 12;
   const timeLabel = `${year}-${month}-${day}_${pad(hours)}-${minutes}${ampm}`;
-  const cleanStudent = studentName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
   const callTypeLabel = isConf
     ? (callType === "video" ? "Video_Conference" : "Voice_Conference")
     : (callType === "video" ? "Video_Call" : "Voice_Call");
-  const fileName = isConf
-    ? `${cleanTitle}_${callTypeLabel}_${timeLabel}.webm`
-    : `${cleanStudent}_${callTypeLabel}_${timeLabel}.webm`;
+
+  let fileName = "";
+  if (isConf) {
+    fileName = `${cleanTitle}_${callTypeLabel}_${timeLabel}.webm`;
+  } else if (!isCurrentAdmin && !otherName.includes("Master") && partner?.role !== "admin") {
+    const cleanA = myName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+    const cleanB = otherName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+    fileName = `${cleanA}_and_${cleanB}_${callTypeLabel}_${timeLabel}.webm`;
+  } else {
+    const learnerSubject = isCurrentAdmin ? otherName : myName;
+    const cleanStudent = learnerSubject.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+    fileName = `${cleanStudent}_${callTypeLabel}_${timeLabel}.webm`;
+  }
 
   let mimeType = callType === "video" ? "video/webm" : "audio/webm";
   let finalBlob: Blob;
@@ -8799,15 +11481,12 @@ async function stopAndSaveCallRecording() {
     ? `${(fileSizeBytes / (1024 * 1024)).toFixed(1)} MB`
     : `${Math.max(1, Math.round(fileSizeBytes / 1024))} KB`;
 
-  const callerName = isCurrentAdmin ? "Master Debrah" : studentName;
-  const partnerName = isCurrentAdmin ? studentName : "Master Debrah";
-
   const recId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const blobUrl = URL.createObjectURL(finalBlob);
 
   const participantNames = isConf
     ? activeCall.conferenceParticipants.map((p) => p.name).join(", ")
-    : partnerName;
+    : `${callerName} & ${recipientName}`;
 
   const recordingRecord: any = {
     id: recId,
@@ -8816,9 +11495,9 @@ async function stopAndSaveCallRecording() {
     caller_id: getMyUserId(),
     caller_name: isConf ? `${callerName} (Conference Host)` : callerName,
     recipient_id: partner?.id || null,
-    recipient_name: isConf ? `Conference (${participantNames})` : partnerName,
-    student_name: isConf ? "Basic 9 Study Group" : studentName,
-    student_class: isConf ? "Basic 9 Group" : studentClass,
+    recipient_name: isConf ? `Conference (${participantNames})` : recipientName,
+    student_name: isConf ? "Basic 9 Study Group" : (isCurrentAdmin ? otherName : myName),
+    student_class: isConf ? "Basic 9 Group" : myClass,
     user_folder: userFolderName,
     file_name: fileName,
     file_size: fileSizeStr,
@@ -8830,7 +11509,7 @@ async function stopAndSaveCallRecording() {
     created_at: now.toISOString(),
   };
 
-  // 1. Store blob into IndexedDB Vault for persistent local playback
+  // 1. Buffer blob temporarily in IndexedDB Vault while uploading
   await storeRecordingBlobInVault(recId, finalBlob);
 
   // 2. Read as base64 and dispatch to Google Drive webhook behind the scenes
@@ -8839,14 +11518,28 @@ async function stopAndSaveCallRecording() {
     const base64Data = (reader.result as string || "").split(",")[1] || "";
     try {
       const driveRes = await syncCallRecordingToGoogleDrive(recordingRecord, base64Data);
-      if (driveRes && driveRes.userFolderUrl) {
-        recordingRecord.user_folder_url = driveRes.userFolderUrl;
-      }
-      if (driveRes && driveRes.webViewLink) {
-        recordingRecord.drive_web_link = driveRes.webViewLink;
+      if (driveRes && driveRes.success) {
+        recordingRecord.drive_sync_status = "synced";
+        if (driveRes.userFolderUrl) {
+          recordingRecord.user_folder_url = driveRes.userFolderUrl;
+        }
+        if (driveRes.webViewLink) {
+          recordingRecord.drive_web_link = driveRes.webViewLink;
+        }
+
+        // USER STRICT PRIVACY REQUIREMENT:
+        // Once successfully uploaded to Google Drive, DELETE the media blob from browser storage completely!
+        await deleteRecordingBlobFromVault(recId);
+        if (blobUrl) {
+          try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+        }
+        recordingRecord.recording_url = driveRes.webViewLink || null;
+      } else {
+        recordingRecord.drive_sync_status = "local_vault";
       }
     } catch (e) {
       console.warn("Drive sync background dispatch error:", e);
+      recordingRecord.drive_sync_status = "local_vault";
     }
 
     // 3. Save to Supabase & local cache
@@ -8913,6 +11606,7 @@ async function renderAdminCallRecordings() {
   if (statTotalRecordings) {
     statTotalRecordings.textContent = String(recordings.length);
   }
+  updateDriveBackupHealthUI();
 
   if (filtered.length === 0) {
     adminRecordingsContainer.innerHTML = `
@@ -8928,6 +11622,8 @@ async function renderAdminCallRecordings() {
     `;
     return;
   }
+
+  const isDriveConfigured = !!localStorage.getItem("jhs_gdrive_webhook_url");
 
   let html = `
     <div class="overflow-x-auto">
@@ -8956,6 +11652,17 @@ async function renderAdminCallRecordings() {
     const driveFileUrl = rec.drive_web_link || userFolderUrl;
     const formattedDuration = formatRecordingTime(rec.duration_seconds || 0);
     const dateStr = new Date(rec.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+
+    const isSynced = rec.drive_sync_status === "synced";
+    const driveBadge = isSynced
+      ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Archived in computing.b9@gmail.com Drive">
+          <i class="fa-brands fa-google-drive text-[10px]"></i>
+          <span>Synced to Drive</span>
+        </span>`
+      : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Stored in Local Vault. Ready for Google Drive sync.">
+          <i class="fa-solid fa-hard-drive text-[10px]"></i>
+          <span>Local Vault</span>
+        </span>`;
 
     html += `
       <tr class="hover:bg-slate-50/80 transition group">
@@ -8987,10 +11694,7 @@ async function renderAdminCallRecordings() {
           ${dateStr}
         </td>
         <td class="py-3 px-3 whitespace-nowrap">
-          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <i class="fa-brands fa-google-drive text-[10px]"></i>
-            <span>computing.b9@gmail.com</span>
-          </span>
+          ${driveBadge}
         </td>
         <td class="py-3 px-3 text-right whitespace-nowrap">
           <div class="inline-flex items-center gap-1.5">
@@ -9010,15 +11714,34 @@ async function renderAdminCallRecordings() {
             >
               <i class="fa-solid fa-download text-[10px]"></i>
             </button>
-            <a
-              href="${driveFileUrl}"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer flex items-center gap-1"
-              title="View in Google Drive"
+            ${
+              !isSynced
+                ? `<button
+                    type="button"
+                    data-id="${rec.id}"
+                    class="sync-single-recording-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition cursor-pointer flex items-center gap-1"
+                    title="Upload to Google Drive now"
+                  >
+                    <i class="fa-solid fa-cloud-arrow-up text-[10px]"></i> Upload
+                  </button>`
+                : `<a
+                    href="${driveFileUrl}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="px-2 py-1 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer flex items-center gap-1"
+                    title="View in Google Drive"
+                  >
+                    <i class="fa-brands fa-google-drive text-[10px]"></i>
+                  </a>`
+            }
+            <button
+              type="button"
+              data-id="${rec.id}"
+              class="delete-recording-btn px-2 py-1 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer flex items-center gap-1"
+              title="Delete recording (Admin only)"
             >
-              <i class="fa-brands fa-google-drive text-[10px]"></i>
-            </a>
+              <i class="fa-solid fa-trash-can text-[10px]"></i>
+            </button>
           </div>
         </td>
       </tr>
@@ -9050,6 +11773,200 @@ async function renderAdminCallRecordings() {
       if (rec) downloadRecordingFile(rec);
     });
   });
+
+  // Bind Admin Delete buttons (Admin only)
+  adminRecordingsContainer.querySelectorAll(".delete-recording-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const recId = btn.getAttribute("data-id");
+      const rec = recordings.find((r: any) => r.id === recId);
+      if (!rec) return;
+
+      const confirmed = confirm(
+        `Are you sure you want to delete this call recording reference?\n\nFile: ${rec.file_name}\nParticipants: ${rec.caller_name} & ${rec.recipient_name}\n\nThis action can only be performed by the Head of Computing (Admin).`
+      );
+      if (!confirmed) return;
+
+      const userRole = state.isAdmin ? "admin" : (state.profile?.role || "learner");
+      const res = await deleteCallRecording(rec.id, userRole);
+      if (res && res.success) {
+        renderAdminCallRecordings();
+      } else {
+        alert(res?.error || "Failed to delete call recording.");
+      }
+    });
+  });
+
+  // Bind Single Upload buttons
+  adminRecordingsContainer.querySelectorAll(".sync-single-recording-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const recId = btn.getAttribute("data-id");
+      const rec = recordings.find((r: any) => r.id === recId);
+      if (!rec) return;
+
+      const webhookUrl = localStorage.getItem("jhs_gdrive_webhook_url");
+      if (!webhookUrl) {
+        openDriveWebhookModal();
+        return;
+      }
+
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-[10px]"></i>`;
+      (btn as HTMLButtonElement).disabled = true;
+
+      try {
+        const blob = await getRecordingBlobFromVault(rec.id);
+        if (blob) {
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64Data = ((reader.result as string || "")).split(",")[1] || "";
+            const res = await syncCallRecordingToGoogleDrive(rec, base64Data);
+            if (res && res.success) {
+              rec.drive_sync_status = "synced";
+              if (res.webViewLink) rec.drive_web_link = res.webViewLink;
+              if (res.userFolderUrl) rec.user_folder_url = res.userFolderUrl;
+              await deleteRecordingBlobFromVault(rec.id);
+              rec.recording_url = res.webViewLink || null;
+              renderAdminCallRecordings();
+            } else {
+              alert("Google Drive upload failed. Please check your Webhook URL.");
+              btn.innerHTML = origHtml;
+              (btn as HTMLButtonElement).disabled = false;
+            }
+          };
+          reader.readAsDataURL(blob);
+        } else {
+          alert("Recording audio/video data was not found in local vault.");
+          btn.innerHTML = origHtml;
+          (btn as HTMLButtonElement).disabled = false;
+        }
+      } catch (err) {
+        btn.innerHTML = origHtml;
+        (btn as HTMLButtonElement).disabled = false;
+      }
+    });
+  });
+}
+
+function updateDriveBackupHealthUI() {
+  const webhookUrl = getGoogleDriveWebhookUrl();
+  if (!driveBackupHealthStat) return;
+  if (webhookUrl && webhookUrl.startsWith("http")) {
+    driveBackupHealthStat.innerHTML = `<span class="text-emerald-600 flex items-center gap-1 font-bold"><i class="fa-solid fa-circle-check text-emerald-500"></i> Connected</span>`;
+  } else {
+    driveBackupHealthStat.innerHTML = `<span class="text-amber-600 flex items-center gap-1 font-bold"><i class="fa-solid fa-circle-exclamation text-amber-500"></i> Setup Required</span>`;
+  }
+}
+
+function openDriveWebhookModal() {
+  if (!driveWebhookConfigModal) return;
+  const currentUrl = getGoogleDriveWebhookUrl();
+  if (driveWebhookUrlInput) driveWebhookUrlInput.value = currentUrl;
+
+  if (driveWebhookStatusAlert && driveWebhookStatusTitle && driveWebhookStatusText && driveWebhookStatusIcon) {
+    if (currentUrl) {
+      driveWebhookStatusAlert.className = "p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs";
+      driveWebhookStatusIcon.className = "text-base text-emerald-600 mt-0.5";
+      driveWebhookStatusIcon.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
+      driveWebhookStatusTitle.textContent = "Google Drive Webhook Configured";
+      driveWebhookStatusTitle.className = "font-bold text-emerald-900";
+      driveWebhookStatusText.textContent = "Target: computing.b9@gmail.com / Ghana_JHS_Computing_Call_Recordings";
+      driveWebhookStatusText.className = "text-emerald-700 mt-0.5";
+    } else {
+      driveWebhookStatusAlert.className = "p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs";
+      driveWebhookStatusIcon.className = "text-base text-amber-500 mt-0.5";
+      driveWebhookStatusIcon.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i>`;
+      driveWebhookStatusTitle.textContent = "Webhook Connection Needed";
+      driveWebhookStatusTitle.className = "font-bold text-amber-900";
+      driveWebhookStatusText.textContent = "Paste your deployed Web App URL from computing.b9@gmail.com to auto-upload call recordings.";
+      driveWebhookStatusText.className = "text-amber-700 mt-0.5";
+    }
+  }
+
+  driveWebhookConfigModal.classList.remove("hidden");
+}
+
+function closeDriveWebhookModal() {
+  if (driveWebhookConfigModal) {
+    driveWebhookConfigModal.classList.add("hidden");
+  }
+}
+
+async function handleSaveDriveWebhook() {
+  const url = (driveWebhookUrlInput?.value || "").trim();
+  if (!url) {
+    alert("Please enter your Google Apps Script Web App URL.");
+    return;
+  }
+  if (!url.startsWith("https://script.google.com")) {
+    alert("Please enter a valid Google Apps Script Web App URL starting with https://script.google.com");
+    return;
+  }
+
+  if (saveDriveWebhookBtn) {
+    saveDriveWebhookBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Testing Connection...`;
+    (saveDriveWebhookBtn as HTMLButtonElement).disabled = true;
+  }
+
+  try {
+    const res = await testGoogleDriveWebhook(url);
+    localStorage.setItem("jhs_gdrive_webhook_url", url);
+    updateDriveBackupHealthUI();
+
+    if (driveWebhookStatusAlert && driveWebhookStatusTitle && driveWebhookStatusText && driveWebhookStatusIcon) {
+      driveWebhookStatusAlert.className = "p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs";
+      driveWebhookStatusIcon.className = "text-base text-emerald-600 mt-0.5";
+      driveWebhookStatusIcon.innerHTML = `<i class="fa-solid fa-circle-check"></i>`;
+      driveWebhookStatusTitle.textContent = "Google Drive Connected Successfully!";
+      driveWebhookStatusTitle.className = "font-bold text-emerald-900";
+      driveWebhookStatusText.textContent = "All future calls will automatically upload to computing.b9@gmail.com Drive.";
+      driveWebhookStatusText.className = "text-emerald-700 mt-0.5";
+    }
+
+    // Attempt to sync pending recordings in local vault
+    await handleSyncVaultRecordingsToDrive();
+    renderAdminCallRecordings();
+
+    setTimeout(() => {
+      closeDriveWebhookModal();
+    }, 1200);
+  } catch (err: any) {
+    localStorage.setItem("jhs_gdrive_webhook_url", url);
+    updateDriveBackupHealthUI();
+    renderAdminCallRecordings();
+    alert("Webhook URL saved! Future call recordings will now be sent to this endpoint.");
+    closeDriveWebhookModal();
+  } finally {
+    if (saveDriveWebhookBtn) {
+      saveDriveWebhookBtn.innerHTML = `<i class="fa-solid fa-check"></i> <span>Save &amp; Test Connection</span>`;
+      (saveDriveWebhookBtn as HTMLButtonElement).disabled = false;
+    }
+  }
+}
+
+async function handleSyncVaultRecordingsToDrive() {
+  if (syncVaultRecordingsToDriveBtn) {
+    syncVaultRecordingsToDriveBtn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Syncing...`;
+    (syncVaultRecordingsToDriveBtn as HTMLButtonElement).disabled = true;
+  }
+
+  try {
+    const res = await syncAllPendingVaultRecordings();
+    if (res.success) {
+      if (res.syncedCount > 0) {
+        alert(`Successfully uploaded ${res.syncedCount} call recording(s) to computing.b9@gmail.com Google Drive!`);
+      }
+      renderAdminCallRecordings();
+    } else {
+      alert(res.error || "Unable to sync recordings. Please ensure your Webhook URL is saved.");
+    }
+  } catch (e: any) {
+    alert("Sync error: " + (e?.message || e));
+  } finally {
+    if (syncVaultRecordingsToDriveBtn) {
+      syncVaultRecordingsToDriveBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <span>Upload Local Calls</span>`;
+      (syncVaultRecordingsToDriveBtn as HTMLButtonElement).disabled = false;
+    }
+  }
 }
 
 async function playRecordingModal(rec: any) {
@@ -9070,6 +11987,10 @@ async function playRecordingModal(rec: any) {
   const storedBlob = await getRecordingBlobFromVault(rec.id);
   if (storedBlob) {
     mediaUrl = URL.createObjectURL(storedBlob);
+  } else if (rec.drive_web_link) {
+    // Media was uploaded and purged from browser storage: play in Google Drive
+    window.open(rec.drive_web_link, "_blank");
+    return;
   }
 
   const isVideo = rec.call_type === "video";
@@ -9123,7 +12044,7 @@ function closeRecordingPlayerModal() {
 
 async function downloadRecordingFile(rec: any) {
   let blobToDownload: Blob | null = await getRecordingBlobFromVault(rec.id);
-  if (!blobToDownload && rec.recording_url) {
+  if (!blobToDownload && rec.recording_url && !rec.recording_url.startsWith("http")) {
     try {
       const resp = await fetch(rec.recording_url);
       blobToDownload = await resp.blob();
@@ -9137,8 +12058,8 @@ async function downloadRecordingFile(rec: any) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  } else {
-    alert("Recording file link: " + (rec.drive_web_link || rec.user_folder_url));
+  } else if (rec.drive_web_link || rec.user_folder_url) {
+    window.open(rec.drive_web_link || rec.user_folder_url, "_blank");
   }
 }
 
@@ -9198,6 +12119,14 @@ function openScoreDetailsModal(submission) {
     `;
   } else {
     modalRemarks.textContent = submission.teacher_remarks || "Assessment verified and recorded in school registry.";
+  }
+
+  // Render AI Potentials & Realistic Target Projection Card
+  const scoreModalAiContainer = document.getElementById("scoreModalAiContainer");
+  if (scoreModalAiContainer) {
+    const learnerName = state.profile?.full_name?.split(" ")[0] || "Learner";
+    const profile = generateLearnerAIPotentials(learnerName, submission, asmt.title || "Computing CAT");
+    scoreModalAiContainer.innerHTML = renderAIPotentialCardHTML(profile);
   }
 
   scoreDetailsModal.classList.remove("hidden");
@@ -9331,6 +12260,9 @@ function attachEventListeners() {
   headerSignInBtn?.addEventListener("click", handleGoogleSignIn);
   demoModeBtn?.addEventListener("click", startDemoMode);
   demoAdminBtn?.addEventListener("click", startAdminDemoMode);
+  document.getElementById("quickLogin9ABtn")?.addEventListener("click", startDemoMode);
+  document.getElementById("quickLogin9BBtn")?.addEventListener("click", startDemoMode9B);
+  document.getElementById("quickLoginAdminBtn")?.addEventListener("click", startAdminDemoMode);
   signOutBtn?.addEventListener("click", handleSignOut);
 
   // Auth Error Banner Actions
@@ -9385,17 +12317,45 @@ function attachEventListeners() {
 
   // Questions Configuration Listeners
   addNewQuestionBtn?.addEventListener("click", () => openQuestionEditor());
-  questionTrackFilter?.addEventListener("change", (e) => {
-    state.questionTrackFilter = e.target.value;
+
+  toggleExpandAllQuestionsBtn?.addEventListener("click", () => {
+    state.questionsCollapsedAll = !state.questionsCollapsedAll;
+    if (!state.questionsCollapsedAll) {
+      state.collapsedQuestionKeys.clear();
+    }
     renderQuestionsConfigView();
   });
+
+  questionTrackFilter?.addEventListener("change", (e: any) => {
+    state.questionTrackFilter = e.target.value;
+    state.questionSittingFilter = "ALL";
+    renderQuestionsConfigView();
+  });
+
+  questionSittingSelect?.addEventListener("change", (e: any) => {
+    state.questionSittingFilter = e.target.value;
+    renderQuestionsConfigView();
+  });
+
+  questionSearchInput?.addEventListener("input", (e: any) => {
+    state.questionSearchQuery = e.target.value;
+    renderQuestionsConfigView();
+  });
+
   document.querySelectorAll(".question-cat-filter").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".question-cat-filter").forEach((b) => {
-        b.className = "question-cat-filter px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer";
+        b.className = "question-cat-filter px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer font-semibold";
+        const badge = b.querySelector("span");
+        if (badge) badge.className = "ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-extrabold";
       });
-      btn.className = "question-cat-filter px-3 py-1.5 rounded-xl bg-slate-900 text-white transition cursor-pointer font-bold";
-      state.questionCatFilter = btn.getAttribute("data-category");
+      btn.className = "question-cat-filter px-3.5 py-1.5 rounded-xl bg-slate-900 text-white transition-all cursor-pointer font-bold shadow-xs";
+      const activeBadge = btn.querySelector("span");
+      if (activeBadge) activeBadge.className = "ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-extrabold";
+
+      const cat = btn.getAttribute("data-category") || "ALL";
+      state.questionCatFilter = cat;
+      state.questionSittingFilter = "ALL";
       renderQuestionsConfigView();
     });
   });
@@ -9436,18 +12396,58 @@ function attachEventListeners() {
     e.stopPropagation();
     notifDropdown?.classList.toggle("hidden");
   });
+
+  // Stop clicks inside the dropdown from bubbling to document (prevents unwanted dismissal)
+  notifDropdown?.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
+
   document.addEventListener("click", (e) => {
-    if (!notifDropdown?.contains(e.target) && !notifBellBtn?.contains(e.target)) {
-      notifDropdown?.classList.add("hidden");
+    const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+    if (notifDropdown && !notifDropdown.classList.contains("hidden")) {
+      const target = e.target as Node;
+      if (
+        path.includes(notifDropdown) || 
+        (notifBellBtn && path.includes(notifBellBtn)) || 
+        notifDropdown.contains(target) || 
+        (notifBellBtn && notifBellBtn.contains(target))
+      ) {
+        return;
+      }
+      notifDropdown.classList.add("hidden");
     }
   });
-  markAllReadBtn?.addEventListener("click", markAllNotificationsRead);
+
+  markAllReadBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    markAllNotificationsRead();
+  });
+
+  notifTabAll?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    state.notificationFilter = "all";
+    renderNotifications();
+  });
+
+  notifTabUnread?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    state.notificationFilter = "unread";
+    renderNotifications();
+  });
 
   // Broadcast Notification Form
   broadcastNotifForm?.addEventListener("submit", handleBroadcastSubmit);
 
   // Admin Learners Directory Class Filter & Excel Export
-  adminClassFilter?.addEventListener("change", renderAdminLearnersTable);
+  adminClassFilter?.addEventListener("change", () => {
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  window.addEventListener("resize", () => {
+    if (state.activeView === "admin") {
+      renderAdminLearnersTable();
+    }
+  });
   adminExportExcelBtn?.addEventListener("click", handleExcelExport);
   adminTopExportExcelBtn?.addEventListener("click", handleExcelExport);
 
@@ -9482,7 +12482,16 @@ function attachEventListeners() {
   callConferenceSearchInput?.addEventListener("input", (e) => renderConferenceContactsList((e.target as HTMLInputElement).value));
   callToggleGridBtn?.addEventListener("click", toggleConferenceGridMode);
   callCopyLinkBtn?.addEventListener("click", copyConferenceLink);
-  callToggleModeBtn?.addEventListener("click", () => switchCallMode());
+  callToggleModeBtn?.addEventListener("click", () => handleToggleCallMode());
+  cancelVideoUpgradeRequestBtn?.addEventListener("click", cancelVideoUpgradeRequest);
+  acceptVideoWithCameraBtn?.addEventListener("click", () => respondToVideoUpgradeRequest(true, true));
+  acceptVideoCameraOffBtn?.addEventListener("click", () => respondToVideoUpgradeRequest(true, false));
+  declineVideoUpgradeBtn?.addEventListener("click", () => respondToVideoUpgradeRequest(false, false));
+  videoUpgradeRequestModal?.addEventListener("click", (e) => {
+    if (e.target === videoUpgradeRequestModal) {
+      respondToVideoUpgradeRequest(false, false);
+    }
+  });
   callStopShareTopBtn?.addEventListener("click", () => stopScreenShare());
   callToggleMicBtn?.addEventListener("click", toggleCallMic);
   callToggleCameraBtn?.addEventListener("click", toggleCallCamera);
@@ -9491,6 +12500,36 @@ function attachEventListeners() {
   callMinimizeBtn?.addEventListener("click", toggleCallMinimized);
   acceptIncomingCallBtn?.addEventListener("click", acceptIncomingCall);
   declineIncomingCallBtn?.addEventListener("click", declineIncomingCall);
+
+  // In-Call Live Reactions & Hand Raise Listeners
+  callReactionBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleCallReactionPicker();
+  });
+  document.querySelectorAll(".call-emoji-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const emoji = (e.currentTarget as HTMLElement).getAttribute("data-emoji");
+      if (emoji) sendCallReaction(emoji);
+    });
+  });
+  callLowerHandBtn?.addEventListener("click", () => lowerRaisedHand(true));
+  document.addEventListener("click", (e) => {
+    if (callReactionPicker && !callReactionPicker.classList.contains("hidden")) {
+      const target = e.target as Node;
+      if (!callReactionPicker.contains(target) && target !== callReactionBtn && !callReactionBtn?.contains(target)) {
+        toggleCallReactionPicker(true);
+      }
+    }
+  });
+
+  // Self-View Horizontal Mirror Toggle Listener
+  callToggleMirrorBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (callLocalVideo) {
+      const isMirrored = callLocalVideo.classList.toggle("-scale-x-100");
+      showCallNoticeToast(isMirrored ? "Self-view mirrored" : "Self-view standard (unmirrored)");
+    }
+  });
 
   // Call Recording Player & Google Drive Admin Listeners
   closeRecordingPlayerBtn?.addEventListener("click", closeRecordingPlayerModal);
@@ -9501,6 +12540,16 @@ function attachEventListeners() {
   adminRefreshRecordingsBtn?.addEventListener("click", renderAdminCallRecordings);
   recordingsTypeFilter?.addEventListener("change", renderAdminCallRecordings);
   recordingsSearchInput?.addEventListener("input", renderAdminCallRecordings);
+
+  // Google Drive Cloud Webhook Settings Listeners
+  adminOpenDriveConfigModalBtn?.addEventListener("click", openDriveWebhookModal);
+  backupHealthCard?.addEventListener("click", openDriveWebhookModal);
+  closeDriveWebhookModalBtn?.addEventListener("click", closeDriveWebhookModal);
+  driveWebhookConfigModal?.addEventListener("click", (e) => {
+    if (e.target === driveWebhookConfigModal) closeDriveWebhookModal();
+  });
+  saveDriveWebhookBtn?.addEventListener("click", handleSaveDriveWebhook);
+  syncVaultRecordingsToDriveBtn?.addEventListener("click", handleSyncVaultRecordingsToDrive);
 
   // Attachment & Voice Recording Listeners
   chatAttachBtn?.addEventListener("click", () => chatFileInput?.click());
@@ -9550,6 +12599,7 @@ function attachEventListeners() {
 
   // Quiz Runner Listeners
   closeQuizRunnerBtn?.addEventListener("click", closeQuizRunner);
+  quizPrevBtn?.addEventListener("click", handleQuizPrev);
   quizNextBtn?.addEventListener("click", handleQuizNext);
   quizSubmitBtn?.addEventListener("click", handleQuizSubmit);
   quizDoneBtn?.addEventListener("click", closeQuizRunner);
@@ -9629,4 +12679,7 @@ function attachEventListeners() {
   closeRecordScoreModalBtn?.addEventListener("click", () => recordScoreModal?.classList.add("hidden"));
   cancelRecordScoreBtn?.addEventListener("click", () => recordScoreModal?.classList.add("hidden"));
   recordScoreForm?.addEventListener("submit", handleRecordScoreSubmit);
+
+  // Initialize Email and Push Notification listeners & modals
+  initEmailAndPushListeners();
 }

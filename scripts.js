@@ -52,12 +52,13 @@ let displayStudentPerformance = (firstCat, secondCat, thirdCat, projectWork) => 
   document.querySelector(".user-performance").innerHTML = studentPerformance;
 };
 
-studentFormBtn.addEventListener("click", (e) => {
-  e.preventDefault();
-  if (
-    !fullName.value ||
-    !ageInput.value ||
-    !levelInput.value ||
+if (studentFormBtn) {
+  studentFormBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (
+      !fullName.value ||
+      !ageInput.value ||
+      !levelInput.value ||
     !genderInput.value ||
     !emailInput.value
   ) {
@@ -126,26 +127,27 @@ studentFormBtn.addEventListener("click", (e) => {
 
     displayStudentPerformance(cat1, cat2, cat3, pw);
   }
-
-
 });
+}
 
 //  localStorage.removeItem('learner');
-//  localStorage.clean;
+//  localStorage.clear();
 
 let quoteBtn = document.getElementById("btn1");
 
-quoteBtn.addEventListener("click", async () => {
-  quoteBtn.innerText = "Fetching...";
+if (quoteBtn) {
+  quoteBtn.addEventListener("click", async () => {
+    quoteBtn.innerText = "Fetching...";
 
-  await randomQuotes();
-  setTimeout(() => {
-    quoteBtn.innerText = "Finished";
-  }, 500);
-  setTimeout(() => {
-    quoteBtn.innerText = "New Quote";
-  }, 1500);
-});
+    await randomQuotes();
+    setTimeout(() => {
+      quoteBtn.innerText = "Finished";
+    }, 500);
+    setTimeout(() => {
+      quoteBtn.innerText = "New Quote";
+    }, 1500);
+  });
+}
 
 // Example starter JavaScript for disabling form submissions if there are invalid fields
 (() => {

@@ -116,6 +116,32 @@ code, pre, .font-mono {
   height: 0 !important;
 }
 
+/* Quiz Runner Active Body Smooth Scrolling */
+#quizActiveBody {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+#quizActiveBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+#quizActiveBody::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+#quizActiveBody::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+#quizActiveBody::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
 /* Admin Tabs and Interactive Pill Navigation Polish */
 .admin-nav-tab {
   white-space: nowrap;
@@ -536,3 +562,120 @@ code, pre, .font-mono {
 .voice-wave-bar:nth-child(10) { animation-delay: 0.3s; }
 .voice-wave-bar:nth-child(11) { animation-delay: 0.12s; }
 .voice-wave-bar:nth-child(12) { animation-delay: 0.28s; }
+
+/* In-Call Live Floating Emoji Reactions (Voice & Video Calls) */
+@keyframes floatReactionUp {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(-28px) scale(1.3) rotate(-6deg);
+  }
+  30% {
+    transform: translateY(-75px) scale(1.15) rotate(6deg);
+  }
+  65% {
+    opacity: 0.95;
+    transform: translateY(-200px) scale(1.05) rotate(-3deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-340px) scale(0.85) rotate(8deg);
+  }
+}
+
+.floating-call-reaction {
+  position: absolute;
+  bottom: 25px;
+  pointer-events: none;
+  font-size: 2.75rem;
+  line-height: 1;
+  user-select: none;
+  will-change: transform, opacity;
+  animation: floatReactionUp 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.5));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  z-index: 100;
+}
+
+.floating-call-reaction .reaction-sender {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ==============================================================================
+   Google Authentication Guard & Dynamic Sign-in Loader
+   ============================================================================== */
+html.google-signing-in #authSection {
+  display: none !important;
+}
+html.google-signing-in #authLoaderSection {
+  display: block !important;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.2;
+  }
+}
+
+.auth-pulse-glow {
+  animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes popSuccess {
+  0% {
+    transform: scale(0.65);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.auth-pop-success {
+  animation: popSuccess 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* ========================================================================== */
+/* Premier Floating Notification Toast & Spring Transitions                   */
+/* ========================================================================== */
+#pushNotificationToast {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease, filter 0.3s ease;
+  will-change: transform, opacity;
+}
+
+#pushNotificationToast.toast-visible {
+  transform: translateY(0) scale(1) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+#pushNotificationToast.toast-hidden {
+  transform: translateY(-24px) scale(0.96) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

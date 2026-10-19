@@ -1,7 +1,8 @@
 const hallelujahAudio = document.getElementById("hallelujah");
 
 const startButton = document.getElementById("startButton");
-startButton.addEventListener("click", () => {
+if (startButton) {
+  startButton.addEventListener("click", () => {
 //   window.location.href = "./countdown.html";
 
 console.log("Playing 'Hallelujah'");
@@ -14,5 +15,5 @@ setTimeout(()=> {
     });
 }, 2000)
 
-  
-});
+  });
+}
