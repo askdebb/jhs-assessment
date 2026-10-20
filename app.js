@@ -1291,6 +1291,105 @@ function highlightAvatarPreset(targetUrl) {
     }
   });
 }
+function setOnboardingFormLockdown(isBusy) {
+  const form = document.getElementById("onboardingForm");
+  const saveBtn = document.getElementById("saveOnboardingBtn");
+  const closeBtn = document.getElementById("closeOnboardingModalBtn");
+  const avatarFile = document.getElementById("regAvatarFile");
+  const avatarPresetsContainer = document.getElementById("avatarPresets");
+  const uploadLabels = document.querySelectorAll('label[for="regAvatarFile"]');
+
+  if (form) {
+    if (isBusy) {
+      form.classList.add("form-saving-lockdown");
+    } else {
+      form.classList.remove("form-saving-lockdown");
+    }
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = isBusy;
+    if (isBusy) {
+      saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Saving Profile...`;
+    } else {
+      saveBtn.innerHTML = `<i class="fa-solid fa-check mr-2"></i> Save Profile & Enter Dashboard`;
+    }
+  }
+
+  if (closeBtn) closeBtn.disabled = isBusy;
+  if (regFullName) regFullName.disabled = isBusy;
+  if (regGender) regGender.disabled = isBusy;
+  if (regClass) regClass.disabled = isBusy;
+  if (avatarFile) avatarFile.disabled = isBusy;
+
+  const isDobImmutable = Boolean(state.profile?.onboarding_completed && state.profile?.date_of_birth);
+  if (regDob) {
+    regDob.disabled = isBusy || isDobImmutable;
+  }
+
+  uploadLabels.forEach((lbl) => {
+    if (isBusy) {
+      lbl.classList.add("pointer-events-none", "opacity-40", "cursor-not-allowed");
+    } else {
+      lbl.classList.remove("pointer-events-none", "opacity-40", "cursor-not-allowed");
+    }
+  });
+
+  if (avatarPresetsContainer) {
+    avatarPresetsContainer.querySelectorAll("button").forEach((btn) => {
+      btn.disabled = isBusy;
+      if (isBusy) {
+        btn.classList.add("pointer-events-none", "opacity-40", "cursor-not-allowed");
+      } else {
+        btn.classList.remove("pointer-events-none", "opacity-40", "cursor-not-allowed");
+      }
+    });
+  }
+}
+
+function showClassChangeWarningModal(oldClass, newClass, onConfirm, onCancel) {
+  const modal = document.getElementById("classChangeWarningModal");
+  const oldSpan = document.getElementById("classChangeOldClass");
+  const newSpan = document.getElementById("classChangeNewClass");
+  const confirmBtn = document.getElementById("confirmClassChangeBtn");
+  const cancelBtn = document.getElementById("cancelClassChangeBtn");
+
+  if (!modal) {
+    const ok = confirm(
+      `⚠️ ACADEMIC CLASS CHANGE WARNING:\n\nYou are changing your class stream from ${oldClass} to ${newClass}.\n\n` +
+      `• You may lose previously accumulated continuous assessment data, marks, and rank for ${oldClass}.\n` +
+      `• Under Ghana Education Service (GES) examination regulations, any fraudulent stream switching will be penalized severely.\n\n` +
+      `Do you confirm this change?`
+    );
+    if (ok) onConfirm();
+    else onCancel();
+    return;
+  }
+
+  if (oldSpan) oldSpan.textContent = oldClass;
+  if (newSpan) newSpan.textContent = newClass;
+  modal.classList.remove("hidden");
+
+  const cleanup = () => {
+    modal.classList.add("hidden");
+    confirmBtn?.removeEventListener("click", handleConfirm);
+    cancelBtn?.removeEventListener("click", handleCancel);
+  };
+
+  const handleConfirm = () => {
+    cleanup();
+    onConfirm();
+  };
+
+  const handleCancel = () => {
+    cleanup();
+    onCancel();
+  };
+
+  confirmBtn?.addEventListener("click", handleConfirm);
+  cancelBtn?.addEventListener("click", handleCancel);
+}
+
 async function handleOnboardingSubmit(e) {
   e.preventDefault();
   const nameVal = regFullName.value.trim();
@@ -1305,12 +1404,28 @@ async function handleOnboardingSubmit(e) {
     alert("Please fill out all required fields, including your Date of Birth.");
     return;
   }
-  const saveBtn = document.getElementById("saveOnboardingBtn");
-  saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving Profile...`;
-  saveBtn.disabled = true;
+
+  const oldClass = state.profile?.class_level;
+  if (oldClass && oldClass !== classVal && state.profile?.onboarding_completed) {
+    showClassChangeWarningModal(
+      oldClass,
+      classVal,
+      () => executeOnboardingSave(nameVal, genderVal, classVal, avatarVal, finalDob),
+      () => {
+        regClass.value = oldClass;
+      }
+    );
+    return;
+  }
+
+  await executeOnboardingSave(nameVal, genderVal, classVal, avatarVal, finalDob);
+}
+
+async function executeOnboardingSave(nameVal, genderVal, classVal, avatarVal, finalDob) {
+  setOnboardingFormLockdown(true);
   try {
     let studentId = state.profile?.student_id;
-    if (!studentId) {
+    if (!studentId || (state.profile?.class_level && state.profile.class_level !== classVal)) {
       const nextSeq = await getNextStudentSequence(classVal);
       studentId = generateStudentId(classVal, nextSeq);
     }
@@ -1334,8 +1449,7 @@ async function handleOnboardingSubmit(e) {
     console.error("Onboarding save error:", err);
     alert("Failed to save profile. Please verify your Supabase credentials.");
   } finally {
-    saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> Save Profile & Enter Dashboard`;
-    saveBtn.disabled = false;
+    setOnboardingFormLockdown(false);
   }
 }
 function checkAndHandleBirthday(profile) {
@@ -2063,6 +2177,7 @@ function renderQuizQuestion() {
         setTimeout(() => inputEl.focus(), 60);
         inputEl.addEventListener("input", (e) => {
           quiz.answers[currentQ.id] = e.target.value;
+          syncQuizNavigationButtons(quiz);
         });
         inputEl.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
@@ -2124,6 +2239,7 @@ function renderQuizQuestion() {
               radioInner.innerHTML = isThis ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : "";
             }
           });
+          syncQuizNavigationButtons(quiz);
         });
       });
     }
@@ -2145,8 +2261,38 @@ function renderQuizQuestion() {
     quizNextBtn?.classList.remove("hidden");
     quizSubmitBtn?.classList.add("hidden");
   }
+  syncQuizNavigationButtons(quiz);
   if (quizActiveBody) {
     quizActiveBody.scrollTop = 0;
+  }
+}
+
+function syncQuizNavigationButtons(quiz) {
+  if (!quiz || !quiz.paper) return;
+  const currentQ = quiz.paper[quiz.currentIndex];
+  const userAns = quiz.answers[currentQ.id];
+  const hasAnswer = Boolean(userAns && (typeof userAns !== "string" || userAns.trim().length > 0));
+
+  if (quizNextBtn) {
+    quizNextBtn.disabled = !hasAnswer;
+    if (hasAnswer) {
+      quizNextBtn.classList.remove("opacity-40", "cursor-not-allowed", "pointer-events-none");
+      quizNextBtn.classList.add("cursor-pointer", "hover:bg-indigo-700");
+    } else {
+      quizNextBtn.classList.add("opacity-40", "cursor-not-allowed", "pointer-events-none");
+      quizNextBtn.classList.remove("cursor-pointer", "hover:bg-indigo-700");
+    }
+  }
+
+  if (quizSubmitBtn) {
+    quizSubmitBtn.disabled = !hasAnswer;
+    if (hasAnswer) {
+      quizSubmitBtn.classList.remove("opacity-40", "cursor-not-allowed", "pointer-events-none");
+      quizSubmitBtn.classList.add("cursor-pointer", "hover:bg-emerald-700");
+    } else {
+      quizSubmitBtn.classList.add("opacity-40", "cursor-not-allowed", "pointer-events-none");
+      quizSubmitBtn.classList.remove("cursor-pointer", "hover:bg-emerald-700");
+    }
   }
 }
 function handleQuizPrev() {
@@ -2341,6 +2487,88 @@ function closeQuizRunner() {
   quizRunnerModal?.classList.add("hidden");
   updateKpiMetrics();
   renderAssessmentCards();
+}
+
+function handleRequestCloseQuiz() {
+  const quiz = state.activeQuiz;
+  if (quiz && quizResultScreen && quizResultScreen.classList.contains("hidden")) {
+    const modal = document.getElementById("quizAbandonWarningModal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      return;
+    }
+    const ok = confirm(
+      "CRITICAL EXAMINATION ALERT:\n\nIf you close this assessment now, your test sitting will be terminated and recorded as FAILED (0.0 Marks / F9 Grade).\n\nAre you sure you want to abandon this assessment and fail?"
+    );
+    if (ok) {
+      handleConfirmAbandonQuiz();
+    }
+    return;
+  }
+  closeQuizRunner();
+}
+
+async function handleConfirmAbandonQuiz() {
+  const modal = document.getElementById("quizAbandonWarningModal");
+  if (modal) modal.classList.add("hidden");
+
+  const quiz = state.activeQuiz;
+  if (!quiz) {
+    closeQuizRunner();
+    return;
+  }
+
+  if (state.quizTimerInterval) {
+    clearInterval(state.quizTimerInterval);
+    state.quizTimerInterval = null;
+  }
+
+  const totalQuestions = quiz.paper ? quiz.paper.length : 10;
+  const maxScore = quiz.asmtMaxScore || 20;
+  const learnerId = state.profile?.id || state.user?.id || "lrn-001";
+  const existingSubs = (state.submissions || []).filter((s) => s.assessment_id === quiz.asmtId);
+  const rankNum = existingSubs.length + 1;
+
+  try {
+    await saveAssessmentSubmission({
+      assessment_id: quiz.asmtId,
+      learner_id: learnerId,
+      score: 0,
+      max_score: maxScore,
+      correct_count: 0,
+      incorrect_count: totalQuestions,
+      answers: quiz.answers || {},
+      submission_rank: rankNum,
+      teacher_remarks: `Assessment sitting terminated early by learner. Graded as FAILED (0.0/${maxScore}) with penalty applied for abandoning test sitting.`,
+    });
+
+    state.submissions = await fetchLearnerSubmissions(learnerId);
+  } catch (err) {
+    console.error("Failed to record failed assessment:", err);
+  }
+
+  if (quizActiveBody) quizActiveBody.classList.add("hidden");
+  if (quizActiveFooter) quizActiveFooter.classList.add("hidden");
+  if (quizResultScreen) quizResultScreen.classList.remove("hidden");
+
+  if (quizResultScore) quizResultScore.textContent = "0.0";
+  if (quizResultMax) quizResultMax.textContent = `/ ${maxScore}`;
+  if (quizResultPct) quizResultPct.textContent = "0.0%";
+  if (quizCorrectCount) quizCorrectCount.textContent = "0";
+  if (quizIncorrectCount) quizIncorrectCount.textContent = `${totalQuestions}`;
+  if (quizResultRankText) quizResultRankText.textContent = `Turn-in Order: ${getOrdinalSuffix(rankNum)} (Terminated sitting)`;
+
+  if (quizResultBadge) {
+    quizResultBadge.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs";
+    quizResultBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Terminated &bull; Failed (F9)`;
+  }
+
+  if (quizResultRemarks) {
+    quizResultRemarks.textContent = "Test sitting was closed before completion. Per WAEC & GES Assessment Integrity Regulations, an abandoned assessment is automatically recorded as 0.0 marks (F9 Grade / Failed).";
+  }
+
+  renderAssessmentCards();
+  updateKpiMetrics();
 }
 async function switchStudentTrack(targetClass) {
   if (targetClass === "Basic 9A") {
@@ -2842,7 +3070,7 @@ async function handleAddNewAssessment(e) {
   const type = newAsmtType?.value || "CAT";
   const weight = parseFloat(newAsmtWeight?.value) || 20;
   const duration = parseInt(newAsmtDuration?.value, 10) || 15;
-  const status = newAsmtStatus?.value || "AVAILABLE";
+  const status = newAsmtStatus?.value || "CLOSED";
   const unlockVal = newAsmtUnlockTime?.value;
   const unlockTime = unlockVal ? new Date(unlockVal).toISOString() : null;
   const deadlineVal = newAsmtDeadline?.value;
@@ -2871,6 +3099,7 @@ async function handleAddNewAssessment(e) {
     }
   }
   addNewAssessmentForm.reset();
+  if (newAsmtStatus) newAsmtStatus.value = "CLOSED";
   if (newAsmtWeight) newAsmtWeight.value = "20";
   if (newAsmtDuration) newAsmtDuration.value = "15";
   state.assessments = await fetchAssessments();
@@ -3700,8 +3929,12 @@ function renderAdminAssessmentConfigTable2() {
       adminWeightStatusBadge2.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Calibrate (${totalWeight.toFixed(1)}% / 100%)`;
     }
   }
+  const mobileCardsContainer = document.getElementById("adminAsmtCardsMobile");
   if (asmts.length === 0) {
     adminAsmtTableBody2.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No assessments found.</td></tr>`;
+    if (mobileCardsContainer) {
+      mobileCardsContainer.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">No assessments found.</div>`;
+    }
     return;
   }
   adminAsmtTableBody2.innerHTML = asmts.map((asmt) => {
@@ -3713,12 +3946,12 @@ function renderAdminAssessmentConfigTable2() {
         <td class="py-3 px-3">
           <div class="font-bold text-slate-900">${escapeHtml(asmt.title)}</div>
           <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
-            <span class="text-[11px] text-slate-500">${escapeHtml(asmt.subject || "Computing")}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+            <span class="text-[11px] text-slate-500 whitespace-nowrap">${escapeHtml(asmt.subject || "Computing")}</span>
           </div>
         </td>
         <td class="py-3 px-2">
-          <span class="font-semibold text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
+          <span class="font-semibold text-slate-700 whitespace-nowrap">${escapeHtml(asmt.assessment_type || "CAT")}</span>
         </td>
         <td class="py-3 px-2">
           <div class="flex items-center gap-1">
@@ -3728,7 +3961,7 @@ function renderAdminAssessmentConfigTable2() {
               max="180"
               step="5"
               value="${duration}"
-              class="asmt-duration-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              class="asmt-duration-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               data-asmt-id="${asmt.id}"
             />
             <span class="text-slate-400 font-semibold">m</span>
@@ -3748,7 +3981,7 @@ function renderAdminAssessmentConfigTable2() {
               min="1"
               max="100"
               value="${parseFloat(asmt.weight) || 20}"
-              class="asmt-weight-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              class="asmt-weight-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               data-asmt-id="${asmt.id}"
             />
             <span class="text-slate-400 font-semibold">%</span>
@@ -3761,23 +3994,23 @@ function renderAdminAssessmentConfigTable2() {
             </button>
           </div>
         </td>
-        <td class="py-3 px-2 font-mono font-bold text-slate-700">${asmt.max_score || 20}</td>
+        <td class="py-3 px-2 font-mono font-bold text-slate-700 whitespace-nowrap">${asmt.max_score || 20}</td>
         <td class="py-3 px-3">
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-1.5">
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-slate-100 text-slate-600 border border-slate-200"}">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${isActive ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-slate-100 text-slate-600 border border-slate-200"}">
                 <i class="fa-solid ${isActive ? "fa-circle-check text-emerald-600" : "fa-lock text-slate-400"}"></i> ${isActive ? "Active" : "Closed"}
               </span>
               <button
                 type="button"
-                class="toggle-status-btn2 text-[10px] font-bold px-2 py-0.5 rounded border ${isActive ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"} cursor-pointer"
+                class="toggle-status-btn2 text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${isActive ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"} cursor-pointer"
                 data-asmt-id="${asmt.id}"
                 data-current="${asmt.status}"
               >
                 ${isActive ? "Turn Off" : "Turn On"}
               </button>
             </div>
-            <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500 whitespace-nowrap">
               <span>Due: ${dueDateStr}</span>
               <button
                 type="button"
@@ -3791,7 +4024,7 @@ function renderAdminAssessmentConfigTable2() {
           </div>
         </td>
         <td class="py-3 px-3 text-right">
-          <div class="flex items-center justify-end gap-1.5">
+          <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
             <button
               type="button"
               class="asmt-nav-questions-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
@@ -3813,79 +4046,202 @@ function renderAdminAssessmentConfigTable2() {
       </tr>
     `;
   }).join("");
+
+  if (mobileCardsContainer) {
+    mobileCardsContainer.innerHTML = asmts.map((asmt) => {
+      const isActive = asmt.status === "AVAILABLE";
+      const duration = asmt.time_limit_minutes || 15;
+      const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
+      return `
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 space-y-3.5" data-asmt-row2="${asmt.id}">
+          <div class="flex items-start justify-between gap-2.5">
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-sm text-slate-900 leading-snug">${escapeHtml(asmt.title)}</div>
+              <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
+                <span class="text-[11px] text-slate-400">• ${asmt.max_score || 20} Marks</span>
+              </div>
+            </div>
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                isActive ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }">
+                <i class="fa-solid ${isActive ? 'fa-circle-check text-emerald-600' : 'fa-lock text-slate-400'}"></i> ${isActive ? 'Active' : 'Closed'}
+              </span>
+              <button
+                type="button"
+                class="toggle-status-btn2 text-[10px] font-bold px-2.5 py-1 rounded-lg border shadow-2xs ${
+                  isActive ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                } cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                data-current="${asmt.status}"
+              >
+                ${isActive ? 'Turn Off' : 'Turn On'}
+              </button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/70 text-xs">
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Duration</label>
+              <div class="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="5"
+                  max="180"
+                  step="5"
+                  value="${duration}"
+                  class="asmt-duration-input2 w-14 bg-white border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  data-asmt-id="${asmt.id}"
+                />
+                <span class="text-slate-400 font-semibold text-[11px]">min</span>
+                <button
+                  type="button"
+                  class="save-duration-btn2 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+                  data-asmt-id="${asmt.id}"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Term Weight</label>
+              <div class="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value="${parseFloat(asmt.weight) || 20}"
+                  class="asmt-weight-input2 w-14 bg-white border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  data-asmt-id="${asmt.id}"
+                />
+                <span class="text-slate-400 font-semibold text-[11px]">%</span>
+                <button
+                  type="button"
+                  class="save-weight-btn2 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+                  data-asmt-id="${asmt.id}"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span>Due: ${dueDateStr}</span>
+              <button
+                type="button"
+                class="open-extend-modal-btn2 text-amber-600 hover:text-amber-800 font-bold cursor-pointer text-[11px]"
+                data-asmt-id="${asmt.id}"
+                title="Extend Deadline"
+              >
+                <i class="fa-solid fa-clock-rotate-left"></i> Extend
+              </button>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                class="asmt-nav-questions-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="Configure questions for this assessment"
+              >
+                <i class="fa-solid fa-list-check"></i> Questions
+              </button>
+              <button
+                type="button"
+                class="asmt-open-key-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="View marking scheme"
+              >
+                <i class="fa-solid fa-key"></i> Key
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
   attachAdminAsmtTable2Handlers();
 }
 function attachAdminAsmtTable2Handlers() {
-  const tbody = adminAsmtTableBody2;
-  if (!tbody) return;
-  tbody.querySelectorAll(".save-duration-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
-      const val = parseInt(row?.querySelector(".asmt-duration-input2")?.value, 10) || 15;
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      updateAssessmentDuration(asmtId, val);
-      await updateAssessment(asmtId, { time_limit_minutes: val });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.time_limit_minutes = val;
-      btn.disabled = false;
-      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
-      setTimeout(() => {
-        btn.textContent = "Save";
-      }, 2e3);
+  const containers = [
+    adminAsmtTableBody2,
+    document.getElementById("adminAsmtCardsMobile"),
+  ].filter(Boolean);
+
+  containers.forEach((container) => {
+    container.querySelectorAll(".save-duration-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const row = btn.closest("[data-asmt-row2]");
+        const val = parseInt(row?.querySelector(".asmt-duration-input2")?.value, 10) || 15;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        updateAssessmentDuration(asmtId, val);
+        await updateAssessment(asmtId, { time_limit_minutes: val });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.time_limit_minutes = val;
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 2e3);
+      });
     });
-  });
-  tbody.querySelectorAll(".save-weight-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
-      const val = parseFloat(row?.querySelector(".asmt-weight-input2")?.value) || 20;
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      await updateAssessment(asmtId, { weight: val });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.weight = val;
-      btn.disabled = false;
-      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
-      setTimeout(() => {
-        btn.textContent = "Save";
-      }, 2e3);
-      renderAdminAssessmentConfigTable2();
+    container.querySelectorAll(".save-weight-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const row = btn.closest("[data-asmt-row2]");
+        const val = parseFloat(row?.querySelector(".asmt-weight-input2")?.value) || 20;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        await updateAssessment(asmtId, { weight: val });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.weight = val;
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 2e3);
+        renderAdminAssessmentConfigTable2();
+      });
     });
-  });
-  tbody.querySelectorAll(".toggle-status-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const current = btn.getAttribute("data-current");
-      const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      await updateAssessment(asmtId, { status: nextStatus });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.status = nextStatus;
-      if (nextStatus === "AVAILABLE" && asmtId) {
-        notifyAssessmentActivated(asmtId);
-      }
-      renderAdminAssessmentConfigTable2();
-      renderAssessmentCards();
+    container.querySelectorAll(".toggle-status-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const current = btn.getAttribute("data-current");
+        const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        await updateAssessment(asmtId, { status: nextStatus });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.status = nextStatus;
+        if (nextStatus === "AVAILABLE" && asmtId) {
+          notifyAssessmentActivated(asmtId);
+        }
+        renderAdminAssessmentConfigTable2();
+        renderAssessmentCards();
+      });
     });
-  });
-  tbody.querySelectorAll(".open-extend-modal-btn2").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      openExtendPeriodModal(asmtId);
+    container.querySelectorAll(".open-extend-modal-btn2").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        openExtendPeriodModal(asmtId);
+      });
     });
-  });
-  tbody.querySelectorAll(".asmt-nav-questions-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      navigateTo("/admin/questions");
+    container.querySelectorAll(".asmt-nav-questions-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        navigateTo("/admin/questions");
+      });
     });
-  });
-  tbody.querySelectorAll(".asmt-open-key-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      openAnswerKeyModal(asmtId);
+    container.querySelectorAll(".asmt-open-key-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        openAnswerKeyModal(asmtId);
+      });
     });
   });
 }
@@ -10825,7 +11181,11 @@ function attachEventListeners() {
   });
   closeScoreModalBtn?.addEventListener("click", () => scoreDetailsModal.classList.add("hidden"));
   closeScoreModalBtn2?.addEventListener("click", () => scoreDetailsModal.classList.add("hidden"));
-  closeQuizRunnerBtn?.addEventListener("click", closeQuizRunner);
+  closeQuizRunnerBtn?.addEventListener("click", handleRequestCloseQuiz);
+  document.getElementById("cancelAbandonQuizBtn")?.addEventListener("click", () => {
+    document.getElementById("quizAbandonWarningModal")?.classList.add("hidden");
+  });
+  document.getElementById("confirmAbandonQuizBtn")?.addEventListener("click", handleConfirmAbandonQuiz);
   quizPrevBtn?.addEventListener("click", handleQuizPrev);
   quizNextBtn?.addEventListener("click", handleQuizNext);
   quizSubmitBtn?.addEventListener("click", handleQuizSubmit);

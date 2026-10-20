@@ -727,3 +727,76 @@ html.google-signing-in #authLoaderSection {
 .active-test-marquee-item:hover {
   opacity: 0.9;
 }
+
+/* ========================================================================== */
+/* Mobile Viewport Polish & Admin Interface Touch Optimizations               */
+/* ========================================================================== */
+@media (max-width: 640px) {
+  /* Prevent horizontal screen jiggle on mobile */
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  /* Admin tabs touch rail polish with smooth momentum */
+  #adminTabsScrollContainer {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 2px;
+  }
+
+  .admin-nav-tab {
+    scroll-snap-align: start;
+    min-height: 38px;
+  }
+
+  /* Compact top active test banner on small screens */
+  #topAnnouncementBar {
+    font-size: 11px;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .active-test-marquee-item {
+    padding: 0 0.75rem;
+    font-size: 11px;
+  }
+
+  /* Mobile floating live chat button offset - avoid colliding with pagination & cards */
+  #floatingChatContainer {
+    bottom: 4.5rem !important;
+    right: 0.75rem !important;
+  }
+}
+
+/* Horizontal touch rail scroll fade mask */
+.touch-rail-scroll-mask {
+  position: relative;
+}
+.touch-rail-scroll-mask::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.95));
+  pointer-events: none;
+  border-top-right-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+/* Onboarding Form Saving Lockdown State */
+.form-saving-lockdown {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+.form-saving-lockdown input,
+.form-saving-lockdown select,
+.form-saving-lockdown button:not(#saveOnboardingBtn),
+.form-saving-lockdown label {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}

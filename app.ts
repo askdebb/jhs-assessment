@@ -173,11 +173,12 @@ const state = {
   activeView: "learner", // 'learner' | 'admin'
   questionCatFilter: "ALL",
   questionTrackFilter: "ALL",
-  questionSittingFilter: "ALL",
+  questionSittingFilter: "",
   questionSearchQuery: "",
   questionsCollapsedAll: false,
   collapsedQuestionKeys: new Set<string>(),
   allLearners: [],
+  learnerSearchQuery: "",
   adminLearnersCurrentPage: 1,
   adminLearnersCustomPageSize: null as number | null,
   notifications: [],
@@ -300,6 +301,7 @@ const subjectSelect = document.getElementById("subjectSelect");
 // Admin Dashboard Elements
 const kpiOnlineCount = document.getElementById("kpiOnlineCount");
 const kpiOnlineSubtext = document.getElementById("kpiOnlineSubtext");
+const adminLiveUsersBadge = document.getElementById("adminLiveUsersBadge");
 const kpiTotalStudents = document.getElementById("kpiTotalStudents");
 const kpiRegisteredSubtext = document.getElementById("kpiRegisteredSubtext");
 const kpiActiveAsmtCount = document.getElementById("kpiActiveAsmtCount");
@@ -312,10 +314,13 @@ const notifTargetClass = document.getElementById("notifTargetClass");
 const notifMessageInput = document.getElementById("notifMessageInput");
 const sendBroadcastSubmitBtn = document.getElementById("sendBroadcastSubmitBtn");
 const adminClassFilter = document.getElementById("adminClassFilter");
+const adminLearnerSearchInput = document.getElementById("adminLearnerSearchInput") as HTMLInputElement | null;
 const adminLearnersTableBody = document.getElementById("adminLearnersTableBody");
+const adminLearnersCardsMobile = document.getElementById("adminLearnersCardsMobile");
 const adminSwitchLearnerBtn = document.getElementById("adminSwitchLearnerBtn");
 const adminNewBroadcastBtn = document.getElementById("adminNewBroadcastBtn");
 const adminManageAssessmentsBtn = document.getElementById("adminManageAssessmentsBtn");
+const adminAddNewAsmtBtn2 = document.getElementById("adminAddNewAsmtBtn2");
 const adminExportExcelBtn = document.getElementById("adminExportExcelBtn");
 const adminExportExcelBtnText = document.getElementById("adminExportExcelBtnText");
 const adminTopExportExcelBtn = document.getElementById("adminTopExportExcelBtn");
@@ -473,6 +478,8 @@ const adminSubViewBroadcast = document.getElementById("adminSubViewBroadcast");
 const addNewQuestionBtn = document.getElementById("addNewQuestionBtn");
 const questionTrackFilter = document.getElementById("questionTrackFilter") as HTMLSelectElement | null;
 const adminQuestionSittingsContainer = document.getElementById("adminQuestionSittingsContainer");
+const questionSittingsTabsRail = document.getElementById("questionSittingsTabsRail");
+const questionActiveSittingLabel = document.getElementById("questionActiveSittingLabel");
 const questionSittingSelect = document.getElementById("questionSittingSelect") as HTMLSelectElement | null;
 const questionSearchInput = document.getElementById("questionSearchInput") as HTMLInputElement | null;
 const toggleExpandAllQuestionsBtn = document.getElementById("toggleExpandAllQuestionsBtn");
@@ -1386,14 +1393,14 @@ function updateHeaderNav() {
 
   authNavContainer.innerHTML = `
     <div class="flex items-center gap-1.5 sm:gap-2">
-      <div class="flex items-center gap-1.5 sm:gap-2 p-1 pr-2.5 rounded-full bg-slate-100 border border-slate-200">
+      <div class="flex items-center gap-1 sm:gap-2 p-1 pr-1.5 sm:pr-2.5 rounded-full bg-slate-100 border border-slate-200">
         <img src="${profile?.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-6 h-6 sm:w-7 sm:h-7 rounded-full object-cover ring-1 ring-indigo-500 shrink-0" />
         <div class="flex items-center gap-1">
-          <span class="text-xs font-semibold text-slate-800 max-w-[110px] sm:max-w-none truncate">${state.activeView === "admin" ? "Master Debrah" : (profile?.full_name || "Kwame Mensah Frimpong")}</span>
+          <span class="text-xs font-semibold text-slate-800 hidden xs:inline max-w-[75px] sm:max-w-none truncate">${state.activeView === "admin" ? "Master Debrah" : (profile?.full_name || "Kwame Mensah Frimpong")}</span>
           ${roleBadge}
         </div>
       </div>
-      <button id="headerSignOutBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer" title="Sign Out">
+      <button id="headerSignOutBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer shrink-0" title="Sign Out">
         <i class="fa-solid fa-right-from-bracket text-xs"></i>
       </button>
     </div>
@@ -1405,14 +1412,14 @@ function updateHeaderNav() {
     if (state.isAdmin) {
       adminToggleContainer.classList.remove("hidden");
       if (state.activeView === "admin") {
-        if (viewModeLabel) viewModeLabel.textContent = "Learner Portal";
-        viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
-        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600 text-xs"></i> <span>Learner Portal</span>`;
+        if (viewModeLabel) viewModeLabel.textContent = "Learner";
+        viewModeToggleBtn.className = "inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer";
+        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-graduation-cap text-indigo-600 text-xs"></i> <span class="hidden sm:inline">Learner Portal</span><span class="sm:hidden text-[11px]">Learner</span>`;
         viewModeToggleBtn.title = "Switch to Learner Portal";
       } else {
-        if (viewModeLabel) viewModeLabel.textContent = "Admin Console";
-        viewModeToggleBtn.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
-        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400 text-xs"></i> <span>Admin Console</span>`;
+        if (viewModeLabel) viewModeLabel.textContent = "Admin";
+        viewModeToggleBtn.className = "inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer";
+        viewModeToggleBtn.innerHTML = `<i class="fa-solid fa-shield-halved text-indigo-400 text-xs"></i> <span class="hidden sm:inline">Admin Console</span><span class="sm:hidden text-[11px]">Admin</span>`;
         viewModeToggleBtn.title = "Switch to Admin Console";
       }
     } else {
@@ -1578,6 +1585,109 @@ function highlightAvatarPreset(targetUrl) {
   });
 }
 
+function setOnboardingFormLockdown(isBusy) {
+  const form = document.getElementById("onboardingForm");
+  const saveBtn = document.getElementById("saveOnboardingBtn");
+  const closeBtn = document.getElementById("closeOnboardingModalBtn");
+  const avatarFile = document.getElementById("regAvatarFile");
+  const avatarPresetsContainer = document.getElementById("avatarPresets");
+  const uploadLabels = document.querySelectorAll('label[for="regAvatarFile"]');
+
+  if (form) {
+    if (isBusy) {
+      form.classList.add("form-saving-lockdown");
+    } else {
+      form.classList.remove("form-saving-lockdown");
+    }
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = isBusy;
+    if (isBusy) {
+      saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Saving Profile...`;
+    } else {
+      saveBtn.innerHTML = `<i class="fa-solid fa-check mr-2"></i> Save Profile & Enter Dashboard`;
+    }
+  }
+
+  if (closeBtn) closeBtn.disabled = isBusy;
+  if (regFullName) regFullName.disabled = isBusy;
+  if (regGender) regGender.disabled = isBusy;
+  if (regClass) regClass.disabled = isBusy;
+  if (avatarFile) avatarFile.disabled = isBusy;
+
+  // Immutability guard for Date of Birth:
+  const isDobImmutable = Boolean(state.profile?.onboarding_completed && state.profile?.date_of_birth);
+  if (regDob) {
+    regDob.disabled = isBusy || isDobImmutable;
+  }
+
+  // Disable upload labels (camera hover and upload button)
+  uploadLabels.forEach((lbl) => {
+    if (isBusy) {
+      lbl.classList.add("pointer-events-none", "opacity-40", "cursor-not-allowed");
+    } else {
+      lbl.classList.remove("pointer-events-none", "opacity-40", "cursor-not-allowed");
+    }
+  });
+
+  // Disable preset avatar picker buttons
+  if (avatarPresetsContainer) {
+    avatarPresetsContainer.querySelectorAll("button").forEach((btn) => {
+      btn.disabled = isBusy;
+      if (isBusy) {
+        btn.classList.add("pointer-events-none", "opacity-40", "cursor-not-allowed");
+      } else {
+        btn.classList.remove("pointer-events-none", "opacity-40", "cursor-not-allowed");
+      }
+    });
+  }
+}
+
+function showClassChangeWarningModal(oldClass, newClass, onConfirm, onCancel) {
+  const modal = document.getElementById("classChangeWarningModal");
+  const oldSpan = document.getElementById("classChangeOldClass");
+  const newSpan = document.getElementById("classChangeNewClass");
+  const confirmBtn = document.getElementById("confirmClassChangeBtn");
+  const cancelBtn = document.getElementById("cancelClassChangeBtn");
+
+  if (!modal) {
+    const ok = confirm(
+      `⚠️ ACADEMIC CLASS CHANGE WARNING:\n\nYou are changing your class stream from ${oldClass} to ${newClass}.\n\n` +
+      `• You may lose previously accumulated continuous assessment data, marks, and rank for ${oldClass}.\n` +
+      `• Under Ghana Education Service (GES) examination regulations, any fraudulent stream switching will be penalized severely.\n\n` +
+      `Do you confirm this change?`
+    );
+    if (ok) onConfirm();
+    else onCancel();
+    return;
+  }
+
+  if (oldSpan) oldSpan.textContent = oldClass;
+  if (newSpan) newSpan.textContent = newClass;
+
+  modal.classList.remove("hidden");
+
+  const cleanup = () => {
+    modal.classList.add("hidden");
+    confirmBtn?.removeEventListener("click", handleConfirm);
+    cancelBtn?.removeEventListener("click", handleCancel);
+  };
+
+  const handleConfirm = () => {
+    cleanup();
+    onConfirm();
+  };
+
+  const handleCancel = () => {
+    cleanup();
+    onCancel();
+  };
+
+  confirmBtn?.addEventListener("click", handleConfirm, { once: true });
+  cancelBtn?.addEventListener("click", handleCancel, { once: true });
+}
+
 async function handleOnboardingSubmit(e) {
   e.preventDefault();
 
@@ -1597,9 +1707,27 @@ async function handleOnboardingSubmit(e) {
     return;
   }
 
-  const saveBtn = document.getElementById("saveOnboardingBtn");
-  saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving Profile...`;
-  saveBtn.disabled = true;
+  // Class Change Academic Warning Check:
+  const prevClass = state.profile?.class_level;
+  if (prevClass && prevClass !== classVal && !(window as any).__confirmedClassChange) {
+    showClassChangeWarningModal(
+      prevClass,
+      classVal,
+      () => {
+        (window as any).__confirmedClassChange = true;
+        handleOnboardingSubmit(e);
+      },
+      () => {
+        regClass.value = prevClass;
+        (window as any).__confirmedClassChange = false;
+      }
+    );
+    return;
+  }
+  (window as any).__confirmedClassChange = false;
+
+  // Lock down entire form and image selectors while saving
+  setOnboardingFormLockdown(true);
 
   try {
     // Generate persistent dynamic student ID in Ghana Basic Education format: JHS{YY}-{STREAM}-{001}
@@ -1631,8 +1759,7 @@ async function handleOnboardingSubmit(e) {
     console.error("Onboarding save error:", err);
     alert("Failed to save profile. Please verify your Supabase credentials.");
   } finally {
-    saveBtn.innerHTML = `<i class="fa-solid fa-check"></i> Save Profile & Enter Dashboard`;
-    saveBtn.disabled = false;
+    setOnboardingFormLockdown(false);
   }
 }
 
@@ -1790,6 +1917,7 @@ function renderLearnerKpiSkeletons() {
 }
 
 function renderAdminKpiSkeletons() {
+  if (adminLiveUsersBadge) adminLiveUsersBadge.textContent = "0";
   if (kpiOnlineCount) kpiOnlineCount.innerHTML = `<span class="inline-block h-8 w-12 bg-slate-200 rounded animate-pulse"></span>`;
   if (kpiTotalStudents) kpiTotalStudents.innerHTML = `<span class="inline-block h-8 w-12 bg-slate-200 rounded animate-pulse"></span>`;
   if (kpiNotifsSent) kpiNotifsSent.innerHTML = `<span class="inline-block h-8 w-12 bg-slate-200 rounded animate-pulse"></span>`;
@@ -1810,6 +1938,27 @@ function renderAdminKpiSkeletons() {
         <td class="py-3.5 px-4"><div class="h-4 w-28 bg-slate-200 rounded"></div></td>
         <td class="py-3.5 px-4 text-right"><div class="inline-block h-7 w-16 bg-slate-200 rounded-xl"></div></td>
       </tr>
+    `).join("");
+  }
+  const mobileContainer = document.getElementById("adminLearnersCardsMobile");
+  if (mobileContainer) {
+    mobileContainer.innerHTML = Array(3).fill(`
+      <div class="bg-white rounded-2xl border border-slate-200/90 p-4 space-y-3 animate-pulse">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-slate-200 shrink-0"></div>
+          <div class="space-y-1.5 flex-1">
+            <div class="h-4 w-32 bg-slate-200 rounded"></div>
+            <div class="h-3 w-24 bg-slate-100 rounded"></div>
+          </div>
+        </div>
+        <div class="h-10 bg-slate-100 rounded-xl"></div>
+        <div class="grid grid-cols-4 gap-1 pt-1">
+          <div class="h-8 bg-slate-200 rounded-xl"></div>
+          <div class="h-8 bg-slate-200 rounded-xl"></div>
+          <div class="h-8 bg-slate-200 rounded-xl"></div>
+          <div class="h-8 bg-slate-200 rounded-xl"></div>
+        </div>
+      </div>
     `).join("");
   }
 }
@@ -2461,6 +2610,33 @@ function renderQuizQuestion() {
   const selectedAnswer = quiz.answers[currentQ.id];
   const optionLetters = ["A", "B", "C", "D", "E"];
 
+  function syncQuizNavigationButtons(quizObj) {
+    if (!quizObj || !quizObj.paper) return;
+    const qItem = quizObj.paper[quizObj.currentIndex];
+    const totalCount = quizObj.paper.length;
+    const isLastQ = quizObj.currentIndex === totalCount - 1;
+
+    const ans = quizObj.answers[qItem.id];
+    const hasAns = ans !== undefined && ans !== null && typeof ans === "string" && ans.trim().length > 0;
+
+    const targetBtn = isLastQ ? quizSubmitBtn : quizNextBtn;
+    const otherBtn = isLastQ ? quizNextBtn : quizSubmitBtn;
+
+    if (otherBtn) otherBtn.classList.add("hidden");
+    if (targetBtn) {
+      targetBtn.classList.remove("hidden");
+      if (hasAns) {
+        targetBtn.removeAttribute("disabled");
+        targetBtn.classList.remove("opacity-40", "cursor-not-allowed", "pointer-events-none");
+        targetBtn.classList.add("cursor-pointer");
+      } else {
+        targetBtn.setAttribute("disabled", "true");
+        targetBtn.classList.add("opacity-40", "cursor-not-allowed", "pointer-events-none");
+        targetBtn.classList.remove("cursor-pointer");
+      }
+    }
+  }
+
   if (quizOptionsList) {
     const isFillBlank = currentQ.type === "fill_blank" || !currentQ.options || currentQ.options.length === 0;
 
@@ -2483,7 +2659,7 @@ function renderQuizQuestion() {
             />
             <p class="text-[11px] text-slate-500 mt-2.5 flex items-center gap-1.5">
               <i class="fa-solid fa-circle-info text-indigo-500 shrink-0"></i>
-              <span>Ensure accurate spelling. Type your answer and click <strong>Next Question</strong> or press <strong>Enter</strong>.</span>
+              <span>Ensure accurate spelling. Type your answer to unlock the <strong>Next Question</strong> button.</span>
             </p>
           </div>
         </div>
@@ -2494,7 +2670,8 @@ function renderQuizQuestion() {
         setTimeout(() => inputEl.focus(), 60);
 
         inputEl.addEventListener("input", (e) => {
-          quiz.answers[currentQ.id] = e.target.value;
+          quiz.answers[currentQ.id] = e.target.value.trim();
+          syncQuizNavigationButtons(quiz);
         });
 
         inputEl.addEventListener("keydown", (e) => {
@@ -2503,6 +2680,7 @@ function renderQuizQuestion() {
             const val = inputEl.value.trim();
             if (!val) {
               alert("Please type your answer before proceeding.");
+              syncQuizNavigationButtons(quiz);
               return;
             }
             quiz.answers[currentQ.id] = val;
@@ -2578,6 +2756,9 @@ function renderQuizQuestion() {
               radioInner.innerHTML = isThis ? '<span class="w-1.5 h-1.5 rounded-full bg-white block"></span>' : '';
             }
           });
+
+          // Enable Next / Submit button immediately when option is chosen
+          syncQuizNavigationButtons(quiz);
         });
       });
     }
@@ -2594,14 +2775,8 @@ function renderQuizQuestion() {
     }
   }
 
-  const isLast = quiz.currentIndex === totalQuestions - 1;
-  if (isLast) {
-    quizNextBtn?.classList.add("hidden");
-    quizSubmitBtn?.classList.remove("hidden");
-  } else {
-    quizNextBtn?.classList.remove("hidden");
-    quizSubmitBtn?.classList.add("hidden");
-  }
+  // Initial sync of Next / Submit button state (disabled if not yet answered)
+  syncQuizNavigationButtons(quiz);
 
   // Reset scroll position to top so new question is fully visible
   if (quizActiveBody) {
@@ -2840,6 +3015,92 @@ function startQuizSessionTimer() {
 
   updateTimer();
   state.quizTimerInterval = setInterval(updateTimer, 1000);
+}
+
+function handleRequestCloseQuiz() {
+  const quiz = state.activeQuiz;
+  // If assessment sitting is active and results screen is not yet shown:
+  if (quiz && quizResultScreen && quizResultScreen.classList.contains("hidden")) {
+    const modal = document.getElementById("quizAbandonWarningModal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      return;
+    }
+    const ok = confirm(
+      "CRITICAL EXAMINATION ALERT:\n\nIf you close this assessment now, your test sitting will be terminated and recorded as FAILED (0.0 Marks / F9 Grade).\n\nAre you sure you want to abandon this assessment and fail?"
+    );
+    if (ok) {
+      handleConfirmAbandonQuiz();
+    }
+    return;
+  }
+  closeQuizRunner();
+}
+
+async function handleConfirmAbandonQuiz() {
+  const modal = document.getElementById("quizAbandonWarningModal");
+  if (modal) modal.classList.add("hidden");
+
+  const quiz = state.activeQuiz;
+  if (!quiz) {
+    closeQuizRunner();
+    return;
+  }
+
+  if (state.quizTimerInterval) {
+    clearInterval(state.quizTimerInterval);
+    state.quizTimerInterval = null;
+  }
+
+  const totalQuestions = quiz.paper ? quiz.paper.length : 10;
+  const maxScore = quiz.asmtMaxScore || 20;
+  const learnerId = state.profile?.id || state.user?.id || "lrn-001";
+  const existingSubs = (state.submissions || []).filter((s) => s.assessment_id === quiz.asmtId);
+  const rankNum = existingSubs.length + 1;
+
+  try {
+    await saveAssessmentSubmission({
+      assessment_id: quiz.asmtId,
+      learner_id: learnerId,
+      score: 0,
+      max_score: maxScore,
+      correct_count: 0,
+      incorrect_count: totalQuestions,
+      answers: quiz.answers || {},
+      submission_rank: rankNum,
+      teacher_remarks: `Assessment sitting terminated early by learner. Graded as FAILED (0.0/${maxScore}) with penalty applied for abandoning test sitting.`,
+    });
+
+    state.submissions = await fetchLearnerSubmissions(learnerId);
+  } catch (err) {
+    console.error("Failed to record failed assessment:", err);
+  }
+
+  // Switch to result screen showing Failed (0 Marks)
+  if (quizActiveBody) quizActiveBody.classList.add("hidden");
+  if (quizActiveFooter) quizActiveFooter.classList.add("hidden");
+  if (quizResultScreen) quizResultScreen.classList.remove("hidden");
+
+  if (quizResultScore) quizResultScore.textContent = "0.0";
+  if (quizResultMax) quizResultMax.textContent = `/ ${maxScore}`;
+  if (quizResultPct) quizResultPct.textContent = "0.0%";
+  if (quizCorrectCount) quizCorrectCount.textContent = "0";
+  if (quizIncorrectCount) quizIncorrectCount.textContent = `${totalQuestions}`;
+  if (quizResultRankText) quizResultRankText.textContent = `Turn-in Order: ${getOrdinalSuffix(rankNum)} (Terminated sitting)`;
+
+  if (quizResultGradeBadge) {
+    quizResultGradeBadge.className = "px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300";
+    quizResultGradeBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Grade: F9 (Fail / Sitting Abandoned)`;
+  }
+
+  updateKpiMetrics();
+  renderAssessmentCards();
+
+  showPushToast(
+    "Assessment Sitting Terminated",
+    "Test was closed before completion. Graded as FAILED (0 Marks / F9) and recorded on your academic profile.",
+    "error"
+  );
 }
 
 function closeQuizRunner() {
@@ -3444,7 +3705,7 @@ async function handleAddNewAssessment(e) {
   const type = newAsmtType?.value || "CAT";
   const weight = parseFloat(newAsmtWeight?.value) || 20;
   const duration = parseInt(newAsmtDuration?.value, 10) || 15;
-  const status = newAsmtStatus?.value || "AVAILABLE";
+  const status = newAsmtStatus?.value || "CLOSED";
   const unlockVal = newAsmtUnlockTime?.value;
   const unlockTime = unlockVal ? new Date(unlockVal).toISOString() : null;
   const deadlineVal = newAsmtDeadline?.value;
@@ -3477,6 +3738,7 @@ async function handleAddNewAssessment(e) {
   }
 
   addNewAssessmentForm.reset();
+  if (newAsmtStatus) newAsmtStatus.value = "CLOSED";
   if (newAsmtWeight) newAsmtWeight.value = "20";
   if (newAsmtDuration) newAsmtDuration.value = "15";
 
@@ -3646,6 +3908,9 @@ function showAdminSubview(subviewKey) {
       t.el?.classList.remove("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
       t.el?.classList.add("text-white", "bg-slate-900", "border-slate-800");
       t.view?.classList.remove("hidden");
+      try {
+        t.el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      } catch (e) {}
     } else {
       t.el?.classList.remove("text-white", "bg-slate-900", "border-slate-800");
       t.el?.classList.add("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
@@ -3775,6 +4040,7 @@ async function performAdminHotReloadCheck() {
       state.assessments = latestAsmts;
       state.notifications = latestNotes;
       state.submissions = latestSubs;
+      if (adminLiveUsersBadge) adminLiveUsersBadge.textContent = String(onlineCount);
       state.lastStatsSnapshot = {
         online: onlineCount,
         registered: registeredCount,
@@ -3869,9 +4135,10 @@ async function renderAdminOverviewStats(isHotReload = false) {
   // 1. Online Learners KPI (active heartbeat in last 90 seconds)
   const onlineCount = students.filter(isLearnerOnline).length;
 
+  if (adminLiveUsersBadge) adminLiveUsersBadge.textContent = String(onlineCount);
   if (kpiOnlineCount) kpiOnlineCount.textContent = String(onlineCount);
   if (kpiOnlineSubtext) {
-    kpiOnlineSubtext.innerHTML = `<i class="fa-solid fa-circle-check text-[10px]"></i> ${onlineCount} learner(s) active now`;
+    kpiOnlineSubtext.innerHTML = `<i class="fa-solid fa-circle-check text-[10px]"></i> ${onlineCount} active online`;
   }
 
   // 2. Registered Learners KPI
@@ -3965,27 +4232,114 @@ function renderQuestionsConfigView() {
     return true;
   });
 
-  // 4. Update Focus Sitting Dropdown
+  // 4. Ensure a valid active sitting is selected (defaults to the first matching assessment tab)
+  if (!state.questionSittingFilter || (state.questionSittingFilter !== "ALL" && !matchingAsmts.some((a) => a.id === state.questionSittingFilter))) {
+    state.questionSittingFilter = matchingAsmts[0] ? matchingAsmts[0].id : "ALL";
+  }
+
+  // 5. Render Question Sittings Tabs Rail
+  if (questionSittingsTabsRail) {
+    if (matchingAsmts.length === 0) {
+      questionSittingsTabsRail.innerHTML = `<span class="text-xs text-slate-400 py-1 px-2 italic">No question sets match the current filter.</span>`;
+    } else {
+      const activeFilter = state.questionSittingFilter;
+      const tabsHtml = matchingAsmts.map((asmt) => {
+        const pack = getAssessmentQuestionPack(asmt.id, asmt.class_level || "Basic 9A", asmt.title);
+        const qCount = pack?.questions?.length || (Array.isArray(pack) ? pack.length : 0);
+        const isSelected = activeFilter === asmt.id;
+        const isAvailable = asmt.status === "AVAILABLE";
+
+        return `
+          <button
+            type="button"
+            class="question-sitting-tab group px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+              isSelected
+                ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-500/30'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+            }"
+            data-sitting-id="${asmt.id}"
+            title="Switch to ${escapeHtml(asmt.title)}"
+          >
+            <span class="w-2 h-2 rounded-full shrink-0 ${isAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}"></span>
+            <span class="whitespace-nowrap">${escapeHtml(asmt.title)}</span>
+            <span class="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold shrink-0 ${
+              isSelected ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-200 text-slate-700'
+            }">
+              ${qCount} Qs
+            </span>
+          </button>
+        `;
+      }).join("");
+
+      const isAllSelected = activeFilter === "ALL";
+      const allTabHtml = `
+        <button
+          type="button"
+          class="question-sitting-tab px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+            isAllSelected
+              ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-800/30'
+              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+          }"
+          data-sitting-id="ALL"
+          title="View all sets stacked together"
+        >
+          <i class="fa-solid fa-layer-group text-[11px]"></i>
+          <span>All Sets (${matchingAsmts.length})</span>
+        </button>
+      `;
+
+      questionSittingsTabsRail.innerHTML = tabsHtml + allTabHtml;
+
+      questionSittingsTabsRail.querySelectorAll(".question-sitting-tab").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const sittingId = btn.getAttribute("data-sitting-id") || "ALL";
+          state.questionSittingFilter = sittingId;
+          if (questionSittingSelect) {
+            questionSittingSelect.value = sittingId;
+          }
+          renderQuestionsConfigView();
+          btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        });
+      });
+    }
+  }
+
+  // 6. Update Active Sitting Label & Focus Sitting Dropdown
+  if (questionActiveSittingLabel) {
+    if (state.questionSittingFilter === "ALL") {
+      questionActiveSittingLabel.textContent = `Showing all ${matchingAsmts.length} assessment sets`;
+    } else {
+      const activeAsmt = matchingAsmts.find((a) => a.id === state.questionSittingFilter) || matchingAsmts[0];
+      if (activeAsmt) {
+        const pack = getAssessmentQuestionPack(activeAsmt.id, activeAsmt.class_level || "Basic 9A", activeAsmt.title);
+        const qCount = pack?.questions?.length || (Array.isArray(pack) ? pack.length : 0);
+        questionActiveSittingLabel.textContent = `Active Set: ${activeAsmt.title} (${qCount} Questions)`;
+      } else {
+        questionActiveSittingLabel.textContent = "";
+      }
+    }
+  }
+
   if (questionSittingSelect) {
     const currentVal = state.questionSittingFilter || "ALL";
     const optionsHtml = [
-      `<option value="ALL">All Sittings in Selected Category (${matchingAsmts.length})</option>`,
       ...matchingAsmts.map((asmt) => {
         const pack = getAssessmentQuestionPack(asmt.id, asmt.class_level || "Basic 9A", asmt.title);
         const qCount = pack?.questions?.length || (Array.isArray(pack) ? pack.length : 0);
         const isSel = currentVal === asmt.id ? "selected" : "";
         return `<option value="${asmt.id}" ${isSel}>${escapeHtml(asmt.title)} (${qCount} Qs)</option>`;
       }),
+      `<option value="ALL" ${currentVal === "ALL" ? "selected" : ""}>All Sittings Stacked (${matchingAsmts.length})</option>`,
     ].join("");
     questionSittingSelect.innerHTML = optionsHtml;
   }
 
-  // 5. Update Expand/Collapse Toggle Button Text
+  // 7. Update Expand/Collapse Toggle Button Text
   if (toggleExpandAllQuestionsBtnText) {
     toggleExpandAllQuestionsBtnText.textContent = state.questionsCollapsedAll ? "Expand Questions" : "Collapse Questions";
   }
 
-  // 6. Handle Empty State
+  // 8. Handle Empty State
   if (matchingAsmts.length === 0) {
     adminQuestionSittingsContainer.innerHTML = `
       <div class="bg-white rounded-3xl border border-slate-200 p-12 text-center text-slate-400">
@@ -3997,14 +4351,15 @@ function renderQuestionsConfigView() {
     return;
   }
 
-  // 7. Determine which sittings to display (All vs Single selected sitting)
+  // 9. Determine which sittings to display (Single active tab vs All)
   let displayAsmts = matchingAsmts;
   if (state.questionSittingFilter && state.questionSittingFilter !== "ALL") {
     const selected = matchingAsmts.find((a) => a.id === state.questionSittingFilter);
     if (selected) {
       displayAsmts = [selected];
     } else {
-      state.questionSittingFilter = "ALL";
+      displayAsmts = matchingAsmts[0] ? [matchingAsmts[0]] : [];
+      state.questionSittingFilter = matchingAsmts[0]?.id || "ALL";
     }
   }
 
@@ -4076,26 +4431,28 @@ function renderQuestionsConfigView() {
             </p>
           </div>
 
-          <!-- Controls: Sitting Duration, On/Off, Extend Period, Add Question -->
-          <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+          <!-- Controls: Sitting Duration, On/Off, Extend Period, Add Question (Mobile-Optimized Grid & Flex) -->
+          <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 w-full lg:w-auto mt-3 lg:mt-0">
             <!-- Sitting Duration Controller -->
-            <div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
-              <span class="text-slate-400 text-xs"><i class="fa-solid fa-stopwatch text-indigo-500"></i></span>
-              <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Sitting:</label>
-              <input
-                type="number"
-                min="5"
-                max="180"
-                step="5"
-                value="${duration}"
-                class="asmt-duration-input w-14 bg-slate-50 border border-slate-200 rounded-lg py-0.5 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
-                data-asmt-id="${asmt.id}"
-                title="Duration for one sitting in minutes"
-              />
-              <span class="text-[11px] font-semibold text-slate-500">min</span>
+            <div class="col-span-2 sm:col-span-1 flex items-center justify-between sm:justify-start gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-400 text-xs"><i class="fa-solid fa-stopwatch text-indigo-500"></i></span>
+                <label class="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Sitting:</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="180"
+                  step="5"
+                  value="${duration}"
+                  class="asmt-duration-input w-14 bg-slate-50 border border-slate-200 rounded-lg py-0.5 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+                  data-asmt-id="${asmt.id}"
+                  title="Duration for one sitting in minutes"
+                />
+                <span class="text-[11px] font-semibold text-slate-500">min</span>
+              </div>
               <button
                 type="button"
-                class="save-duration-btn ml-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+                class="save-duration-btn ml-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
                 data-asmt-id="${asmt.id}"
                 title="Save sitting duration"
               >
@@ -4106,7 +4463,7 @@ function renderQuestionsConfigView() {
             <!-- Active / Inactive Toggle (Turn Off / On) -->
             <button
               type="button"
-              class="toggle-status-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer shadow-2xs ${
+              class="toggle-status-btn inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer shadow-2xs ${
                 isActive
                   ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border-rose-200'
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200'
@@ -4116,26 +4473,26 @@ function renderQuestionsConfigView() {
               title="${isActive ? 'Turn off assessment (Learners will not be able to start)' : 'Turn on assessment (Make available to learners)'}"
             >
               <i class="fa-solid ${isActive ? 'fa-toggle-on text-rose-600' : 'fa-toggle-off text-emerald-600'}"></i>
-              <span>${isActive ? 'Turn Off (Deactivate)' : 'Turn On (Activate)'}</span>
+              <span>${isActive ? 'Turn Off' : 'Turn On'}</span>
             </button>
 
             <!-- Extend Period Button -->
             <button
               type="button"
-              class="open-extend-modal-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 shadow-2xs transition cursor-pointer"
+              class="open-extend-modal-btn inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 shadow-2xs transition cursor-pointer"
               data-asmt-id="${asmt.id}"
               data-asmt-title="${escapeHtml(asmt.title)}"
               data-due-date="${asmt.deadline || asmt.due_date || ''}"
               title="Extend deadline period for this assessment"
             >
               <i class="fa-solid fa-clock-rotate-left text-amber-600"></i>
-              <span>Extend Period</span>
+              <span>Extend</span>
             </button>
 
             <!-- Add Question to this specific sitting -->
             <button
               type="button"
-              class="add-question-to-asmt-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition cursor-pointer"
+              class="add-question-to-asmt-btn col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition cursor-pointer"
               data-asmt-id="${asmt.id}"
             >
               <i class="fa-solid fa-plus text-indigo-400"></i>
@@ -4144,17 +4501,17 @@ function renderQuestionsConfigView() {
           </div>
         </div>
 
-        <!-- Quick Question Jump Navigation Bar -->
+        <!-- Quick Question Jump Navigation Bar (Horizontal Touch Rail) -->
         ${questions.length > 0 ? `
-          <div class="px-5 sm:px-6 py-2.5 bg-indigo-50/40 border-b border-slate-200/80 flex items-center justify-between gap-2 flex-wrap">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <span class="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1">
-                <i class="fa-solid fa-crosshairs text-indigo-500"></i> Jump to Question:
+          <div class="px-3.5 sm:px-6 py-2.5 bg-indigo-50/40 border-b border-slate-200/80 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar touch-pan-x">
+            <div class="flex items-center gap-1.5 shrink-0">
+              <span class="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1 shrink-0">
+                <i class="fa-solid fa-crosshairs text-indigo-500"></i> Jump:
               </span>
               ${questions.map((q, idx) => `
                 <button
                   type="button"
-                  class="q-jump-btn px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-600 hover:text-white border border-indigo-100 text-slate-700 transition cursor-pointer shadow-2xs"
+                  class="q-jump-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-indigo-600 hover:text-white border border-indigo-100 text-slate-700 transition cursor-pointer shadow-2xs shrink-0"
                   data-target-qid="q-card-${asmt.id}-${q.id}"
                   title="Scroll directly to Question ${idx + 1}"
                 >
@@ -4162,14 +4519,14 @@ function renderQuestionsConfigView() {
                 </button>
               `).join("")}
             </div>
-            <div class="text-[11px] text-slate-500 font-medium">
+            <div class="text-[11px] text-slate-500 font-medium shrink-0 hidden sm:block">
               Showing <strong class="text-slate-800">${questions.length}</strong> configured items
             </div>
           </div>
         ` : ''}
 
         <!-- Questions List Body -->
-        <div class="p-5 sm:p-6 space-y-3.5">
+        <div class="p-3.5 sm:p-6 space-y-3">
           ${questions.length === 0 ? `
             <div class="p-8 text-center text-slate-400 border border-dashed border-slate-200 rounded-2xl">
               <i class="fa-solid fa-folder-open text-2xl mb-1 block"></i>
@@ -4182,46 +4539,48 @@ function renderQuestionsConfigView() {
 
             if (isQCollapsed) {
               return `
-                <div class="p-3.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50/80 shadow-2xs hover:border-indigo-200 transition-all flex items-center justify-between gap-3 cursor-pointer group" id="q-card-${asmt.id}-${q.id}">
-                  <div class="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
-                      Q${qIdx + 1}
-                    </span>
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">${escapeHtml(q.topic || asmt.subject || "Computing")}</span>
-                    <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">${q.points || 2} Marks</span>
-                    <span class="text-xs font-semibold text-slate-800 truncate select-text">
-                      ${escapeHtml(q.prompt)}
-                    </span>
+                <div class="p-3 sm:p-3.5 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50/80 shadow-2xs hover:border-indigo-200 transition-all cursor-pointer group space-y-1.5" id="q-card-${asmt.id}-${q.id}">
+                  <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        Q${qIdx + 1}
+                      </span>
+                      <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider truncate">${escapeHtml(q.topic || asmt.subject || "Computing")}</span>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">${q.points || 2} M</span>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        class="edit-question-btn p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+                        data-asmt-id="${asmt.id}"
+                        data-q-id="${q.id}"
+                        title="Edit question"
+                      >
+                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="delete-question-btn p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
+                        data-asmt-id="${asmt.id}"
+                        data-q-id="${q.id}"
+                        title="Delete question"
+                      >
+                        <i class="fa-solid fa-trash text-xs"></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="toggle-q-expand-btn px-2 py-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer inline-flex items-center gap-1"
+                        data-asmt-id="${asmt.id}"
+                        data-q-id="${q.id}"
+                        title="Expand question details"
+                      >
+                        <span>Options</span>
+                        <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                      </button>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      class="edit-question-btn p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
-                      data-asmt-id="${asmt.id}"
-                      data-q-id="${q.id}"
-                      title="Edit question"
-                    >
-                      <i class="fa-solid fa-pen-to-square text-xs"></i>
-                    </button>
-                    <button
-                      type="button"
-                      class="delete-question-btn p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition cursor-pointer"
-                      data-asmt-id="${asmt.id}"
-                      data-q-id="${q.id}"
-                      title="Delete question"
-                    >
-                      <i class="fa-solid fa-trash text-xs"></i>
-                    </button>
-                    <button
-                      type="button"
-                      class="toggle-q-expand-btn px-2.5 py-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer inline-flex items-center gap-1"
-                      data-asmt-id="${asmt.id}"
-                      data-q-id="${q.id}"
-                      title="Expand question details"
-                    >
-                      <span>Options</span>
-                      <i class="fa-solid fa-chevron-down text-[10px]"></i>
-                    </button>
+                  <div class="text-xs font-semibold text-slate-800 line-clamp-2 select-text leading-snug pl-0.5">
+                    ${escapeHtml(q.prompt)}
                   </div>
                 </div>
               `;
@@ -4465,11 +4824,17 @@ function renderAdminAssessmentConfigTable2() {
     }
   }
 
+  const mobileCardsContainer = document.getElementById("adminAsmtCardsMobile");
+
   if (asmts.length === 0) {
     adminAsmtTableBody2.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No assessments found.</td></tr>`;
+    if (mobileCardsContainer) {
+      mobileCardsContainer.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">No assessments found.</div>`;
+    }
     return;
   }
 
+  // Desktop Table Rows
   adminAsmtTableBody2.innerHTML = asmts.map((asmt) => {
     const isActive = asmt.status === "AVAILABLE";
     const duration = asmt.time_limit_minutes || 15;
@@ -4480,12 +4845,12 @@ function renderAdminAssessmentConfigTable2() {
         <td class="py-3 px-3">
           <div class="font-bold text-slate-900">${escapeHtml(asmt.title)}</div>
           <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
-            <span class="text-[11px] text-slate-500">${escapeHtml(asmt.subject || "Computing")}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+            <span class="text-[11px] text-slate-500 whitespace-nowrap">${escapeHtml(asmt.subject || "Computing")}</span>
           </div>
         </td>
         <td class="py-3 px-2">
-          <span class="font-semibold text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
+          <span class="font-semibold text-slate-700 whitespace-nowrap">${escapeHtml(asmt.assessment_type || "CAT")}</span>
         </td>
         <td class="py-3 px-2">
           <div class="flex items-center gap-1">
@@ -4495,7 +4860,7 @@ function renderAdminAssessmentConfigTable2() {
               max="180"
               step="5"
               value="${duration}"
-              class="asmt-duration-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              class="asmt-duration-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               data-asmt-id="${asmt.id}"
             />
             <span class="text-slate-400 font-semibold">m</span>
@@ -4515,7 +4880,7 @@ function renderAdminAssessmentConfigTable2() {
               min="1"
               max="100"
               value="${parseFloat(asmt.weight) || 20}"
-              class="asmt-weight-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500"
+              class="asmt-weight-input2 w-14 bg-slate-50 border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
               data-asmt-id="${asmt.id}"
             />
             <span class="text-slate-400 font-semibold">%</span>
@@ -4528,11 +4893,11 @@ function renderAdminAssessmentConfigTable2() {
             </button>
           </div>
         </td>
-        <td class="py-3 px-2 font-mono font-bold text-slate-700">${asmt.max_score || 20}</td>
+        <td class="py-3 px-2 font-mono font-bold text-slate-700 whitespace-nowrap">${asmt.max_score || 20}</td>
         <td class="py-3 px-3">
           <div class="flex flex-col gap-1">
             <div class="flex items-center gap-1.5">
-              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
                 isActive
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   : 'bg-slate-100 text-slate-600 border border-slate-200'
@@ -4541,7 +4906,7 @@ function renderAdminAssessmentConfigTable2() {
               </span>
               <button
                 type="button"
-                class="toggle-status-btn2 text-[10px] font-bold px-2 py-0.5 rounded border ${
+                class="toggle-status-btn2 text-[10px] font-bold px-2 py-0.5 rounded border whitespace-nowrap ${
                   isActive
                     ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
                     : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -4552,7 +4917,7 @@ function renderAdminAssessmentConfigTable2() {
                 ${isActive ? 'Turn Off' : 'Turn On'}
               </button>
             </div>
-            <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500 whitespace-nowrap">
               <span>Due: ${dueDateStr}</span>
               <button
                 type="button"
@@ -4566,7 +4931,7 @@ function renderAdminAssessmentConfigTable2() {
           </div>
         </td>
         <td class="py-3 px-3 text-right">
-          <div class="flex items-center justify-end gap-1.5">
+          <div class="flex items-center justify-end gap-1.5 whitespace-nowrap">
             <button
               type="button"
               class="asmt-nav-questions-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
@@ -4589,92 +4954,230 @@ function renderAdminAssessmentConfigTable2() {
     `;
   }).join("");
 
+  // Mobile Assessment Cards (Touch-Optimized for Handhelds)
+  if (mobileCardsContainer) {
+    mobileCardsContainer.innerHTML = asmts.map((asmt) => {
+      const isActive = asmt.status === "AVAILABLE";
+      const duration = asmt.time_limit_minutes || 15;
+      const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
+
+      return `
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 space-y-3.5" data-asmt-row2="${asmt.id}">
+          <!-- Top: Title, Badges, Status & Toggle -->
+          <div class="flex items-start justify-between gap-2.5">
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-sm text-slate-900 leading-snug">${escapeHtml(asmt.title)}</div>
+              <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
+                <span class="text-[11px] text-slate-400">• ${asmt.max_score || 20} Marks</span>
+              </div>
+            </div>
+            <!-- Status Badge & Quick Toggle -->
+            <div class="flex flex-col items-end gap-1 shrink-0">
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                isActive
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-slate-100 text-slate-600 border border-slate-200'
+              }">
+                <i class="fa-solid ${isActive ? 'fa-circle-check text-emerald-600' : 'fa-lock text-slate-400'}"></i> ${isActive ? 'Active' : 'Closed'}
+              </span>
+              <button
+                type="button"
+                class="toggle-status-btn2 text-[10px] font-bold px-2.5 py-1 rounded-lg border shadow-2xs ${
+                  isActive
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                } cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                data-current="${asmt.status}"
+              >
+                ${isActive ? 'Turn Off' : 'Turn On'}
+              </button>
+            </div>
+          </div>
+
+          <!-- Duration & Weight Calibration Row -->
+          <div class="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/70 text-xs">
+            <!-- Duration Input -->
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Duration</label>
+              <div class="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="5"
+                  max="180"
+                  step="5"
+                  value="${duration}"
+                  class="asmt-duration-input2 w-14 bg-white border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  data-asmt-id="${asmt.id}"
+                />
+                <span class="text-slate-400 font-semibold text-[11px]">min</span>
+                <button
+                  type="button"
+                  class="save-duration-btn2 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer"
+                  data-asmt-id="${asmt.id}"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+
+            <!-- Weight Input -->
+            <div>
+              <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Term Weight</label>
+              <div class="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value="${parseFloat(asmt.weight) || 20}"
+                  class="asmt-weight-input2 w-14 bg-white border border-slate-200 rounded-lg py-1 px-1.5 text-xs font-bold text-slate-800 text-center focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  data-asmt-id="${asmt.id}"
+                />
+                <span class="text-slate-400 font-semibold text-[11px]">%</span>
+                <button
+                  type="button"
+                  class="save-weight-btn2 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer"
+                  data-asmt-id="${asmt.id}"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom: Due Date & Action Buttons -->
+          <div class="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+            <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+              <span>Due: ${dueDateStr}</span>
+              <button
+                type="button"
+                class="open-extend-modal-btn2 text-amber-600 hover:text-amber-800 font-bold cursor-pointer text-[11px]"
+                data-asmt-id="${asmt.id}"
+                title="Extend Deadline"
+              >
+                <i class="fa-solid fa-clock-rotate-left"></i> Extend
+              </button>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                class="asmt-nav-questions-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="Configure questions for this assessment"
+              >
+                <i class="fa-solid fa-list-check"></i> Questions
+              </button>
+              <button
+                type="button"
+                class="asmt-open-key-btn px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 cursor-pointer"
+                data-asmt-id="${asmt.id}"
+                title="View marking scheme"
+              >
+                <i class="fa-solid fa-key"></i> Key
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
   attachAdminAsmtTable2Handlers();
 }
 
 function attachAdminAsmtTable2Handlers() {
-  const tbody = adminAsmtTableBody2;
-  if (!tbody) return;
+  const containers = [
+    adminAsmtTableBody2,
+    document.getElementById("adminAsmtCardsMobile"),
+  ].filter(Boolean);
 
-  // Save Duration
-  tbody.querySelectorAll(".save-duration-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
-      const val = parseInt(row?.querySelector(".asmt-duration-input2")?.value, 10) || 15;
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      updateAssessmentDuration(asmtId, val);
-      await updateAssessment(asmtId, { time_limit_minutes: val });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.time_limit_minutes = val;
-      btn.disabled = false;
-      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
-      setTimeout(() => {
-        btn.textContent = "Save";
-      }, 2000);
+  containers.forEach((container) => {
+    // Save Duration
+    container.querySelectorAll(".save-duration-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const row = btn.closest("[data-asmt-row2]");
+        const val = parseInt(row?.querySelector(".asmt-duration-input2")?.value, 10) || 15;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        updateAssessmentDuration(asmtId, val);
+        await updateAssessment(asmtId, { time_limit_minutes: val });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.time_limit_minutes = val;
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 2000);
+      });
     });
-  });
 
-  // Save Weight
-  tbody.querySelectorAll(".save-weight-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const row = tbody.querySelector(`[data-asmt-row2="${asmtId}"]`);
-      const val = parseFloat(row?.querySelector(".asmt-weight-input2")?.value) || 20;
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      await updateAssessment(asmtId, { weight: val });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.weight = val;
-      btn.disabled = false;
-      btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
-      setTimeout(() => {
-        btn.textContent = "Save";
-      }, 2000);
-      renderAdminAssessmentConfigTable2();
+    // Save Weight
+    container.querySelectorAll(".save-weight-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const row = btn.closest("[data-asmt-row2]");
+        const val = parseFloat(row?.querySelector(".asmt-weight-input2")?.value) || 20;
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        await updateAssessment(asmtId, { weight: val });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.weight = val;
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 2000);
+        renderAdminAssessmentConfigTable2();
+      });
     });
-  });
 
-  // Toggle Status
-  tbody.querySelectorAll(".toggle-status-btn2").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      const current = btn.getAttribute("data-current");
-      const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
-      btn.disabled = true;
-      btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
-      await updateAssessment(asmtId, { status: nextStatus });
-      const asmt = (state.assessments || []).find((a) => a.id === asmtId);
-      if (asmt) asmt.status = nextStatus;
-      if (nextStatus === "AVAILABLE" && asmtId) {
-        notifyAssessmentActivated(asmtId);
-      }
-      renderAdminAssessmentConfigTable2();
-      renderAssessmentCards();
+    // Toggle Status
+    container.querySelectorAll(".toggle-status-btn2").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        const current = btn.getAttribute("data-current");
+        const nextStatus = current === "AVAILABLE" ? "CLOSED" : "AVAILABLE";
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`;
+        await updateAssessment(asmtId, { status: nextStatus });
+        const asmt = (state.assessments || []).find((a) => a.id === asmtId);
+        if (asmt) asmt.status = nextStatus;
+        if (nextStatus === "AVAILABLE" && asmtId) {
+          notifyAssessmentActivated(asmtId);
+        }
+        renderAdminAssessmentConfigTable2();
+        renderAssessmentCards();
+      });
     });
-  });
 
-  // Extend Period
-  tbody.querySelectorAll(".open-extend-modal-btn2").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      openExtendPeriodModal(asmtId);
+    // Extend Period
+    container.querySelectorAll(".open-extend-modal-btn2").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        openExtendPeriodModal(asmtId);
+      });
     });
-  });
 
-  // Nav to questions
-  tbody.querySelectorAll(".asmt-nav-questions-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      navigateTo("/admin/questions");
+    // Nav to questions
+    container.querySelectorAll(".asmt-nav-questions-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        if (asmtId) {
+          state.questionSittingFilter = asmtId;
+        }
+        navigateTo("/admin/questions");
+      });
     });
-  });
 
-  // Open key
-  tbody.querySelectorAll(".asmt-open-key-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const asmtId = btn.getAttribute("data-asmt-id");
-      openAnswerKeyModal(asmtId);
+    // Open key
+    container.querySelectorAll(".asmt-open-key-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const asmtId = btn.getAttribute("data-asmt-id");
+        openAnswerKeyModal(asmtId);
+      });
     });
   });
 }
@@ -5503,47 +6006,69 @@ function getAdminLearnersPageSize(): number {
 function renderAdminLearnersTable() {
   if (!adminLearnersTableBody) return;
   const paginationContainer = document.getElementById("adminLearnersPaginationContainer");
+  const mobileContainer = document.getElementById("adminLearnersCardsMobile");
 
   if (!state.allLearners || state.allLearners.length === 0) {
-    adminLearnersTableBody.innerHTML = `
-      <tr>
-        <td colspan="5" class="py-12 text-center text-slate-400">
-          <i class="fa-solid fa-users text-3xl mb-2 text-slate-300 block"></i>
-          <p class="font-bold text-slate-700 text-sm">No Registered Learners Found</p>
-          <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-            Live database mode is active. When learners sign in with their authorized Google Accounts, their registered profiles and assessment submissions will automatically appear here in real-time.
-          </p>
-        </td>
-      </tr>
+    const emptyHtml = `
+      <div class="py-10 text-center text-slate-400">
+        <i class="fa-solid fa-users text-3xl mb-2 text-slate-300 block"></i>
+        <p class="font-bold text-slate-700 text-sm">No Registered Learners Found</p>
+        <p class="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+          Live database mode is active. When learners sign in with their authorized Google Accounts or are enrolled via <strong>+ Enroll User</strong>, their registered profiles will appear here in real-time.
+        </p>
+        <p class="text-[11px] text-amber-600/90 bg-amber-50 border border-amber-200/70 rounded-lg px-3 py-1.5 mt-3 max-w-md mx-auto">
+          <i class="fa-solid fa-circle-info mr-1"></i> If you already created learners directly in Supabase, ensure you have executed <code>fix_rls_policies.sql</code> in your Supabase SQL Editor so PostgreSQL permissions permit client access.
+        </p>
+      </div>
     `;
+    adminLearnersTableBody.innerHTML = `<tr><td colspan="5">${emptyHtml}</td></tr>`;
+    if (mobileContainer) mobileContainer.innerHTML = emptyHtml;
     if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
 
   const filterVal = adminClassFilter?.value || "ALL";
+  const searchQuery = (state.learnerSearchQuery || "").trim().toLowerCase();
 
   let filtered = state.allLearners.filter((l) => {
-    if (filterVal === "ONLINE") return isLearnerOnline(l);
-    if (filterVal === "STAFF") return (l.role === "teacher" || l.role === "admin" || (l.email && l.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()));
-    if (filterVal !== "ALL") return l.class_level === filterVal;
+    if (filterVal === "ONLINE" && !isLearnerOnline(l)) return false;
+    if (filterVal === "STAFF" && !(l.role === "teacher" || l.role === "admin" || (l.email && l.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()))) return false;
+    if (filterVal !== "ALL" && filterVal !== "ONLINE" && filterVal !== "STAFF" && l.class_level !== filterVal) return false;
+    if (searchQuery) {
+      const matchName = (l.full_name || "").toLowerCase().includes(searchQuery);
+      const matchId = (l.student_id || "").toLowerCase().includes(searchQuery);
+      const matchEmail = (l.email || "").toLowerCase().includes(searchQuery);
+      const matchClass = (l.class_level || "").toLowerCase().includes(searchQuery);
+      if (!matchName && !matchId && !matchEmail && !matchClass) return false;
+    }
     return true;
   });
 
   if (filtered.length === 0) {
+    const emptyMsg = searchQuery
+      ? `No learners found matching "${escapeHtml(searchQuery)}" in ${escapeHtml(filterVal)}.`
+      : `No learners found matching the selected class filter (${escapeHtml(filterVal)}).`;
     adminLearnersTableBody.innerHTML = `
       <tr>
         <td colspan="5" class="py-8 text-center text-slate-400">
           <i class="fa-solid fa-users-slash text-2xl mb-1 block"></i>
-          No learners found matching the selected class filter (${escapeHtml(filterVal)}).
+          ${emptyMsg}
         </td>
       </tr>
     `;
+    if (mobileContainer) {
+      mobileContainer.innerHTML = `
+        <div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">
+          <i class="fa-solid fa-users-slash text-2xl mb-2 text-slate-300 block"></i>
+          <p class="font-bold text-slate-700 text-sm">${emptyMsg}</p>
+        </div>
+      `;
+    }
     if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
 
   // Calculate Responsive Pagination
-  // "on lg to xl we have 5 on row but 2xl we have 10 on row"
   const pageSize = getAdminLearnersPageSize();
   const totalItems = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -5561,21 +6086,22 @@ function renderAdminLearnersTable() {
   const endIndex = Math.min(startIndex + pageSize, totalItems);
   const pageItems = filtered.slice(startIndex, endIndex);
 
+  // 1. Desktop Table Rows (hidden on mobile via wrapper class)
   adminLearnersTableBody.innerHTML = pageItems.map((learner) => {
     const isOnline = isLearnerOnline(learner);
     const presenceBadge = isOnline
-      ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+      ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online Now
          </span>`
-      : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+      : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">
            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Offline (${formatTimeAgo(learner.last_seen)})
          </span>`;
 
     const subCount = learner.submissions?.length || 0;
     const lastScore = subCount > 0 ? learner.submissions[0].score : null;
     const academicPill = subCount > 0
-      ? `<span class="font-bold text-slate-800">${subCount} Task(s) Submitted</span> <span class="text-xs text-slate-400 block">Latest: ${lastScore}/20 marks</span>`
-      : `<span class="text-slate-400 italic">No submissions yet</span>`;
+      ? `<span class="font-bold text-slate-800 whitespace-nowrap">${subCount} Task(s) Submitted</span> <span class="text-xs text-slate-400 block whitespace-nowrap">Latest: ${lastScore}/20 marks</span>`
+      : `<span class="text-slate-400 italic whitespace-nowrap">No submissions yet</span>`;
 
     const roleBadge = learner.role === "admin"
       ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
@@ -5595,9 +6121,9 @@ function renderAdminLearnersTable() {
               <div class="font-bold text-slate-900 flex items-center gap-2">
                 <span>${escapeHtml(learner.full_name)}</span>
                 ${roleBadge}
-                ${isBirthdayToday(learner.date_of_birth) ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 border border-pink-200 animate-pulse"><i class="fa-solid fa-cake-candles text-pink-500"></i> Birthday Today!</span>` : ""}
+                ${isBirthdayToday(learner.date_of_birth) ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 border border-pink-200 animate-pulse whitespace-nowrap"><i class="fa-solid fa-cake-candles text-pink-500"></i> Birthday Today!</span>` : ""}
               </div>
-              <div class="flex items-center gap-2 mt-0.5">
+              <div class="flex items-center gap-2 mt-0.5 whitespace-nowrap">
                 <span class="font-mono text-[11px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">${escapeHtml(learner.student_id || generateStudentId(learner.class_level, 1))}</span>
                 ${learner.date_of_birth ? `<span class="text-[11px] text-slate-500 font-medium">• Age: ${calculateAge(learner.date_of_birth) != null ? calculateAge(learner.date_of_birth) + ' yrs' : 'N/A'}</span> <span class="text-[10px] text-slate-400">(${formatDateOnly(learner.date_of_birth)})</span>` : ""}
               </div>
@@ -5605,12 +6131,12 @@ function renderAdminLearnersTable() {
             </div>
           </div>
         </td>
-        <td class="py-3.5 px-4">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+        <td class="py-3.5 px-4 whitespace-nowrap">
+          <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap">
             ${learner.class_level || "Basic 9A"}
           </span>
         </td>
-        <td class="py-3.5 px-4">${presenceBadge}</td>
+        <td class="py-3.5 px-4 whitespace-nowrap">${presenceBadge}</td>
         <td class="py-3.5 px-4">${academicPill}</td>
         <td class="py-3.5 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
@@ -5659,6 +6185,122 @@ function renderAdminLearnersTable() {
       </tr>
     `;
   }).join("");
+
+  // 2. Mobile Cards (Touch-Optimized for Handhelds, sm:hidden)
+  if (mobileContainer) {
+    mobileContainer.innerHTML = pageItems.map((learner) => {
+      const isOnline = isLearnerOnline(learner);
+      const presenceBadge = isOnline
+        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Online
+           </span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+             <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> ${formatTimeAgo(learner.last_seen)}
+           </span>`;
+
+      const subCount = learner.submissions?.length || 0;
+      const lastScore = subCount > 0 ? learner.submissions[0].score : null;
+      const roleBadge = learner.role === "admin"
+        ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
+        : (learner.role === "teacher"
+            ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 uppercase tracking-wider">Teacher</span>`
+            : "");
+
+      const birthdayBadge = isBirthdayToday(learner.date_of_birth)
+        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 border border-pink-200 animate-pulse"><i class="fa-solid fa-cake-candles text-pink-500"></i> Birthday</span>`
+        : "";
+
+      return `
+        <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3.5 space-y-3 hover:border-slate-300 transition-all">
+          <div class="flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="relative shrink-0">
+                <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100 shadow-2xs" />
+                <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-bold text-slate-900 text-sm leading-tight truncate">${escapeHtml(learner.full_name)}</span>
+                  ${roleBadge}
+                  ${birthdayBadge}
+                </div>
+                <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                  <span class="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">${escapeHtml(learner.student_id || generateStudentId(learner.class_level, 1))}</span>
+                  <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(learner.class_level || "Basic 9A")}</span>
+                </div>
+              </div>
+            </div>
+            <div class="shrink-0 text-right">
+              ${presenceBadge}
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 p-2 bg-slate-50/80 rounded-xl border border-slate-100 text-xs">
+            <div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Tasks</span>
+              <span class="font-bold text-slate-800 text-[11px]">${subCount > 0 ? `${subCount} Submitted` : 'No submissions'}</span>
+              ${lastScore != null ? `<span class="text-[10px] text-slate-400 block">Latest: ${lastScore}/20 marks</span>` : ''}
+            </div>
+            <div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Age &amp; Birth</span>
+              <span class="font-bold text-slate-700 text-[11px]">${learner.date_of_birth ? `${calculateAge(learner.date_of_birth) != null ? calculateAge(learner.date_of_birth) + ' yrs' : 'N/A'}` : 'DOB Unregistered'}</span>
+              <span class="text-[10px] text-slate-400 truncate block">${escapeHtml(learner.email || 'student@ghana-edu.gov.gh')}</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-1.5 pt-1 border-t border-slate-100">
+            <button
+              type="button"
+              class="admin-chat-student-btn py-2 px-1.5 rounded-xl text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+              data-student-id="${learner.id}"
+              title="Start 1-on-1 Chat"
+            >
+              <i class="fa-solid fa-comments text-xs"></i>
+              <span class="text-[10px]">Chat</span>
+            </button>
+            <button
+              type="button"
+              class="admin-record-student-mark-btn py-2 px-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+              data-student-id="${learner.id}"
+              title="Record Assessment Mark"
+            >
+              <i class="fa-solid fa-pen-to-square text-xs"></i>
+              <span class="text-[10px]">Mark</span>
+            </button>
+            <button
+              type="button"
+              class="admin-retake-student-btn py-2 px-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+              data-student-id="${learner.id}"
+              title="Authorize Retake"
+            >
+              <i class="fa-solid fa-rotate-right text-xs text-amber-600"></i>
+              <span class="text-[10px]">Retake</span>
+            </button>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="admin-edit-student-btn flex-1 py-2 px-1 rounded-xl text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+                data-student-id="${learner.id}"
+                title="Edit Profile"
+              >
+                <i class="fa-solid fa-user-pen text-xs"></i>
+                <span class="text-[10px]">Edit</span>
+              </button>
+              <button
+                type="button"
+                class="admin-delete-student-btn w-8 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 transition cursor-pointer flex items-center justify-center active:scale-95 shrink-0"
+                data-student-id="${learner.id}"
+                data-student-name="${escapeHtml(learner.full_name)}"
+                title="Delete Learner Record"
+              >
+                <i class="fa-solid fa-trash-can text-xs"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
 
   // Attach Retake button handlers
   document.querySelectorAll(".admin-retake-student-btn").forEach((btn) => {
@@ -12569,7 +13211,7 @@ function attachEventListeners() {
 
   questionTrackFilter?.addEventListener("change", (e: any) => {
     state.questionTrackFilter = e.target.value;
-    state.questionSittingFilter = "ALL";
+    state.questionSittingFilter = "";
     renderQuestionsConfigView();
   });
 
@@ -12596,7 +13238,7 @@ function attachEventListeners() {
 
       const cat = btn.getAttribute("data-category") || "ALL";
       state.questionCatFilter = cat;
-      state.questionSittingFilter = "ALL";
+      state.questionSittingFilter = "";
       renderQuestionsConfigView();
     });
   });
@@ -12628,8 +13270,11 @@ function attachEventListeners() {
   printAnswerKeyBtn2?.addEventListener("click", () => window.print());
 
   adminNewBroadcastBtn?.addEventListener("click", () => {
-    document.getElementById("broadcastComposerSection")?.scrollIntoView({ behavior: "smooth" });
-    notifTitleInput?.focus();
+    navigateTo("/admin/broadcast");
+    setTimeout(() => {
+      document.getElementById("broadcastComposerSection")?.scrollIntoView({ behavior: "smooth" });
+      notifTitleInput?.focus();
+    }, 150);
   });
 
   // Notification Bell Toggle & Actions
@@ -12688,6 +13333,14 @@ function attachEventListeners() {
     if (state.activeView === "admin") {
       renderAdminLearnersTable();
     }
+  });
+  adminLearnerSearchInput?.addEventListener("input", (e: any) => {
+    state.learnerSearchQuery = e.target.value;
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  adminAddNewAsmtBtn2?.addEventListener("click", () => {
+    openAdminAssessmentManager();
   });
   adminExportExcelBtn?.addEventListener("click", handleExcelExport);
   adminTopExportExcelBtn?.addEventListener("click", handleExcelExport);
@@ -12815,6 +13468,23 @@ function attachEventListeners() {
   // Onboarding Form & Avatar Upload
   initAvatarUploadHandler();
   onboardingForm?.addEventListener("submit", handleOnboardingSubmit);
+  regClass?.addEventListener("change", () => {
+    const prevClass = state.profile?.class_level;
+    const newClass = regClass.value;
+    if (prevClass && prevClass !== newClass) {
+      showClassChangeWarningModal(
+        prevClass,
+        newClass,
+        () => {
+          (window as any).__confirmedClassChange = true;
+        },
+        () => {
+          regClass.value = prevClass;
+          (window as any).__confirmedClassChange = false;
+        }
+      );
+    }
+  });
   closeOnboardingModalBtn?.addEventListener("click", () => onboardingModal.classList.add("hidden"));
 
   // Status Filter Tabs
@@ -12840,11 +13510,26 @@ function attachEventListeners() {
   closeScoreModalBtn2?.addEventListener("click", () => scoreDetailsModal.classList.add("hidden"));
 
   // Quiz Runner Listeners
-  closeQuizRunnerBtn?.addEventListener("click", closeQuizRunner);
+  closeQuizRunnerBtn?.addEventListener("click", handleRequestCloseQuiz);
   quizPrevBtn?.addEventListener("click", handleQuizPrev);
   quizNextBtn?.addEventListener("click", handleQuizNext);
   quizSubmitBtn?.addEventListener("click", handleQuizSubmit);
   quizDoneBtn?.addEventListener("click", closeQuizRunner);
+
+  // Critical Abandon Warning Modal Actions
+  document.getElementById("continueQuizBtn")?.addEventListener("click", () => {
+    document.getElementById("quizAbandonWarningModal")?.classList.add("hidden");
+  });
+  document.getElementById("confirmAbandonQuizBtn")?.addEventListener("click", handleConfirmAbandonQuiz);
+
+  // Browser BeforeUnload Guard for Active Tests
+  window.addEventListener("beforeunload", (e) => {
+    if (state.activeQuiz && quizResultScreen && quizResultScreen.classList.contains("hidden")) {
+      e.preventDefault();
+      e.returnValue = "Exiting will terminate your test sitting and submit a score of 0 (FAILED).";
+      return e.returnValue;
+    }
+  });
 
   // Admin Assessment & Term Weighting Config Listeners
   adminManageAssessmentsBtn?.addEventListener("click", openAdminAssessmentManager);

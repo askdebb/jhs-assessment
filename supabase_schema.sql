@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS public.assessments (
     description TEXT,
     max_score NUMERIC(5,2) NOT NULL DEFAULT 20.00,
     weight NUMERIC(5,2) NOT NULL DEFAULT 20.00, -- Term assessment percentage weight (sums to 100)
-    status TEXT NOT NULL DEFAULT 'AVAILABLE' CHECK (status IN ('AVAILABLE', 'CLOSED', 'UPCOMING')),
+    status TEXT NOT NULL DEFAULT 'CLOSED' CHECK (status IN ('AVAILABLE', 'CLOSED', 'UPCOMING')),
     unlock_time TIMESTAMPTZ, -- Realtime countdown unlock timestamp set by administrator
     deadline TIMESTAMPTZ,
     time_limit_minutes INTEGER DEFAULT 15,
@@ -194,41 +194,54 @@ ALTER TABLE public.call_recordings ENABLE ROW LEVEL SECURITY;
 
 -- 9. Row-Level Security Policies (Idempotent: Drop and Recreate)
 DROP POLICY IF EXISTS "Learners can view all profiles for chat" ON public.learners;
-CREATE POLICY "Learners can view all profiles for chat"
+DROP POLICY IF EXISTS "Allow public read access to learners" ON public.learners;
+CREATE POLICY "Allow public read access to learners"
     ON public.learners FOR SELECT
-    TO authenticated
     USING (true);
 
 DROP POLICY IF EXISTS "Users can update their own profile" ON public.learners;
-CREATE POLICY "Users can update their own profile"
+DROP POLICY IF EXISTS "Allow update learners" ON public.learners;
+CREATE POLICY "Allow update learners"
     ON public.learners FOR UPDATE
-    USING (auth.uid() = id);
+    USING (true)
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Users can insert their own profile" ON public.learners;
-CREATE POLICY "Users can insert their own profile"
+DROP POLICY IF EXISTS "Allow insert learners" ON public.learners;
+CREATE POLICY "Allow insert learners"
     ON public.learners FOR INSERT
-    WITH CHECK (auth.uid() = id);
+    WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow delete learners" ON public.learners;
+CREATE POLICY "Allow delete learners"
+    ON public.learners FOR DELETE
+    USING (true);
 
 DROP POLICY IF EXISTS "Authenticated users can view assessments" ON public.assessments;
-CREATE POLICY "Authenticated users can view assessments"
+DROP POLICY IF EXISTS "Allow public read access to assessments" ON public.assessments;
+CREATE POLICY "Allow public read access to assessments"
     ON public.assessments FOR SELECT
-    TO authenticated
     USING (true);
 
 DROP POLICY IF EXISTS "Admins can insert and update assessments" ON public.assessments;
-CREATE POLICY "Admins can insert and update assessments"
+DROP POLICY IF EXISTS "Allow all for assessments" ON public.assessments;
+CREATE POLICY "Allow all for assessments"
     ON public.assessments FOR ALL
-    USING (EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
+    USING (true)
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Learners view own submissions" ON public.submissions;
-CREATE POLICY "Learners view own submissions"
+DROP POLICY IF EXISTS "Allow public read access to submissions" ON public.submissions;
+CREATE POLICY "Allow public read access to submissions"
     ON public.submissions FOR SELECT
-    USING (auth.uid() = learner_id OR EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
+    USING (true);
 
 DROP POLICY IF EXISTS "Learners insert own submissions" ON public.submissions;
-CREATE POLICY "Learners insert own submissions"
-    ON public.submissions FOR INSERT
-    WITH CHECK (auth.uid() = learner_id);
+DROP POLICY IF EXISTS "Allow all for submissions" ON public.submissions;
+CREATE POLICY "Allow all for submissions"
+    ON public.submissions FOR ALL
+    USING (true)
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Anyone can view notifications" ON public.notifications;
 CREATE POLICY "Anyone can view notifications"

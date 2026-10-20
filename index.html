@@ -56,15 +56,15 @@
       <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-2">
         
         <!-- Brand Group (Guarded against crushing) -->
-        <a href="/" id="brandLogoLink" class="flex items-center gap-2 sm:gap-2.5 shrink min-w-0 cursor-pointer no-underline">
+        <a href="/" id="brandLogoLink" class="flex items-center gap-1.5 sm:gap-2.5 shrink min-w-0 cursor-pointer no-underline">
           <div class="w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
             <i class="fa-solid fa-graduation-cap text-xs sm:text-sm"></i>
           </div>
-          <div class="min-w-0 truncate">
-            <div class="font-bold text-sm sm:text-base text-slate-900 tracking-tight flex items-center gap-1 leading-none truncate">
-              <span>JHS Assessment</span> <span class="text-indigo-600 hidden xs:inline">Portal</span>
+          <div class="min-w-0">
+            <div class="font-bold text-xs xs:text-sm sm:text-base text-slate-900 tracking-tight flex items-center gap-1 leading-none">
+              <span class="whitespace-nowrap">JHS Assessment</span> <span class="text-indigo-600 hidden xs:inline">Portal</span>
             </div>
-            <p class="text-[10px] text-slate-500 font-medium mt-0.5 hidden sm:block">Ghana Basic Education Standard (B7 – B9)</p>
+            <p class="text-[10px] text-slate-500 font-medium mt-0.5 hidden sm:block truncate">Ghana Basic Education Standard (B7 – B9)</p>
           </div>
         </a>
 
@@ -122,11 +122,12 @@
           <div id="adminToggleContainer" class="hidden shrink-0">
             <button
               id="viewModeToggleBtn"
-              class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+              class="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-all cursor-pointer whitespace-nowrap"
               title="Switch Console View"
             >
               <i class="fa-solid fa-shield-halved text-[11px] text-indigo-400"></i>
-              <span id="viewModeLabel">Admin Console</span>
+              <span id="viewModeLabel" class="hidden xs:inline">Admin Console</span>
+              <span class="xs:hidden text-[11px]">Admin</span>
             </button>
           </div>
 
@@ -867,19 +868,19 @@
 
           <div class="flex flex-col gap-3.5 pt-1">
             <!-- Top Meta Line: Status Pills & View Mode Switcher -->
-            <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white shadow-2xs">
+            <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+              <div class="flex items-center gap-1.5 flex-wrap min-w-0">
+                <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white shadow-2xs shrink-0">
                   <i class="fa-solid fa-shield-halved text-indigo-400 text-[10px]"></i> Admin Console
                 </span>
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span id="adminLiveUsersBadge">3</span> Online
+                  <span id="adminLiveUsersBadge">0</span> Online
                 </span>
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
                   <i class="fa-solid fa-laptop-code text-indigo-500 text-[10px]"></i> Computing (B7–B9)
                 </span>
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
+                <span class="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
                   <i class="fa-solid fa-user-check text-amber-600 text-[10px]"></i> computing.b9@gmail.com
                 </span>
               </div>
@@ -888,9 +889,11 @@
               <button
                 id="adminSwitchLearnerBtn"
                 class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-slate-900 border border-slate-200/90 transition-all cursor-pointer shadow-2xs shrink-0"
+                title="Switch to Learner Portal"
               >
                 <i class="fa-solid fa-arrow-right-from-bracket text-slate-400 text-xs"></i>
-                <span>Learner View</span>
+                <span class="hidden xs:inline">Learner View</span>
+                <span class="xs:hidden text-[11px]">Learner</span>
               </button>
             </div>
 
@@ -905,11 +908,11 @@
                 </p>
               </div>
 
-              <!-- Executive Action Toolbar (Compact) -->
-              <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+              <!-- Executive Action Toolbar: Primary Quick Actions on Mobile, Full Toolbar on Desktop -->
+              <div class="flex items-center gap-1.5 shrink-0 w-full lg:w-auto">
                 <button
                   id="adminQuestionsNavBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
+                  class="hidden lg:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
                   title="Configure questions and test items"
                 >
                   <i class="fa-solid fa-list-check text-xs"></i>
@@ -918,7 +921,7 @@
 
                 <button
                   id="adminViewAnswerKeysBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer"
+                  class="hidden lg:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer"
                   title="Inspect Official NaCCA Answers and Marking Schemes"
                 >
                   <i class="fa-solid fa-key text-amber-500 text-xs"></i>
@@ -927,7 +930,7 @@
 
                 <button
                   id="adminManageAssessmentsBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer"
+                  class="hidden lg:inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition-all cursor-pointer"
                   title="Configure assessment weights and sitting durations"
                 >
                   <i class="fa-solid fa-scale-balanced text-indigo-600 text-xs"></i>
@@ -936,7 +939,7 @@
 
                 <button
                   id="adminTopExportExcelBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer"
+                  class="flex-1 lg:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer"
                   title="Download Continuous Assessment Broadsheet in Excel (BECE 2026 Grading)"
                 >
                   <i class="fa-solid fa-file-excel text-xs"></i>
@@ -945,7 +948,7 @@
 
                 <button
                   id="adminNewBroadcastBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-all cursor-pointer"
+                  class="flex-1 lg:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-all cursor-pointer"
                   title="Send announcement to students"
                 >
                   <i class="fa-solid fa-bullhorn text-indigo-400 text-xs"></i>
@@ -956,9 +959,9 @@
           </div>
         </div>
 
-        <!-- Admin Sub-Navigation Tabs Bar (Compact) -->
-        <div class="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-1">
-          <div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-xs font-semibold select-none">
+        <!-- Admin Sub-Navigation Tabs Bar (Responsive Touch Rail) -->
+        <div class="touch-rail-scroll-mask relative bg-white rounded-xl border border-slate-200/90 shadow-2xs p-1">
+          <div id="adminTabsScrollContainer" class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 px-0.5 text-xs font-semibold select-none touch-pan-x">
             <button
               id="adminTabOverview"
               class="admin-nav-tab px-3 py-1.5 rounded-lg text-white bg-slate-900 border border-slate-800 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
@@ -976,7 +979,8 @@
               title="Question Bank & Test Sittings"
             >
               <i class="fa-solid fa-list-check text-indigo-500 text-xs"></i>
-              <span>Questions &amp; Sittings</span>
+              <span class="hidden sm:inline">Questions &amp; Sittings</span>
+              <span class="sm:hidden">Questions</span>
             </button>
 
             <button
@@ -986,7 +990,8 @@
               title="Assessments, Durations & Weight Calibration"
             >
               <i class="fa-solid fa-scale-balanced text-indigo-500 text-xs"></i>
-              <span>Weights &amp; Durations</span>
+              <span class="hidden sm:inline">Weights &amp; Durations</span>
+              <span class="sm:hidden">Weights</span>
             </button>
 
             <button
@@ -996,7 +1001,8 @@
               title="Marking Scheme & Verified Answer Keys"
             >
               <i class="fa-solid fa-key text-amber-500 text-xs"></i>
-              <span>Marking Scheme &amp; Keys</span>
+              <span class="hidden sm:inline">Marking Scheme &amp; Keys</span>
+              <span class="sm:hidden">Answer Keys</span>
             </button>
 
             <button
@@ -1006,7 +1012,8 @@
               title="Announcements & Student Notifications"
             >
               <i class="fa-solid fa-bullhorn text-indigo-400 text-xs"></i>
-              <span>Announcements</span>
+              <span class="hidden sm:inline">Announcements</span>
+              <span class="sm:hidden">Broadcast</span>
             </button>
 
             <button
@@ -1016,7 +1023,8 @@
               title="Call Recordings & Google Drive Cloud Backup (computing.b9@gmail.com)"
             >
               <i class="fa-brands fa-google-drive text-emerald-500 text-xs"></i>
-              <span>Call Recordings &amp; Drive</span>
+              <span class="hidden sm:inline">Call Recordings &amp; Drive</span>
+              <span class="sm:hidden">Drive Calls</span>
             </button>
           </div>
         </div>
@@ -1071,7 +1079,7 @@
                   <span class="text-xs font-semibold text-slate-400">Students</span>
                 </div>
               </div>
-              <div class="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div class="mt-2.5 pt-2 border-t border-slate-100 flex flex-col xs:flex-row xs:items-center justify-between gap-1 xs:gap-2">
                 <span id="kpiOnlineSubtext" class="text-[10px] sm:text-[11px] text-emerald-600 font-semibold flex items-center gap-1 truncate">
                   <i class="fa-solid fa-circle-check text-[10px]"></i> Realtime presence active
                 </span>
@@ -1079,7 +1087,7 @@
                   type="button"
                   id="kpiOnlineActionBtn"
                   onclick="window.openActiveLearnersModal && window.openActiveLearnersModal(); event.stopPropagation();"
-                  class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                  class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-200 transition-colors flex items-center justify-center gap-1 cursor-pointer shrink-0 w-fit"
                   title="Open active learners roster"
                 >
                   <span>View Roster</span>
@@ -1168,79 +1176,99 @@
                 </p>
               </div>
 
-              <!-- Actions & Filter Controls -->
-              <div class="flex flex-wrap items-center gap-2">
-                <div class="flex items-center gap-1.5">
-                  <label for="adminClassFilter" class="text-xs font-semibold text-slate-500">Class:</label>
-                  <select
-                    id="adminClassFilter"
-                    class="bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                  >
-                    <option value="ALL">All Users &amp; Classes</option>
-                    <option value="Basic 9A">Basic 9A</option>
-                    <option value="Basic 9B">Basic 9B</option>
-                    <option value="Basic 8A">Basic 8A</option>
-                    <option value="Basic 8B">Basic 8B</option>
-                    <option value="Basic 7A">Basic 7A</option>
-                    <option value="Basic 7B">Basic 7B</option>
-                    <option value="STAFF">Staff &amp; Teachers Only</option>
-                    <option value="ONLINE">Online Users Only</option>
-                  </select>
+              <!-- Actions & Filter Controls (Mobile First Responsive Architecture) -->
+              <div class="flex flex-col gap-3 w-full">
+                <!-- Search & Class Filter Row -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full">
+                  <!-- Instant Learner Search Input -->
+                  <div class="relative flex-1 w-full">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
+                      <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input
+                      type="text"
+                      id="adminLearnerSearchInput"
+                      placeholder="Search student by name, student ID, email..."
+                      class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 sm:py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
+                    />
+                  </div>
+
+                  <!-- Class Filter -->
+                  <div class="flex items-center gap-2 shrink-0">
+                    <label for="adminClassFilter" class="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Class:</label>
+                    <select
+                      id="adminClassFilter"
+                      class="w-full sm:w-auto bg-slate-50 sm:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-2 sm:py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="ALL">All Users &amp; Classes</option>
+                      <option value="Basic 9A">Basic 9A</option>
+                      <option value="Basic 9B">Basic 9B</option>
+                      <option value="Basic 8A">Basic 8A</option>
+                      <option value="Basic 8B">Basic 8B</option>
+                      <option value="Basic 7A">Basic 7A</option>
+                      <option value="Basic 7B">Basic 7B</option>
+                      <option value="STAFF">Staff &amp; Teachers Only</option>
+                      <option value="ONLINE">Online Users Only</option>
+                    </select>
+                  </div>
                 </div>
 
-                <!-- Create / Enroll User Button -->
-                <button
-                  id="adminEnrollStudentBtn"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
-                  title="Enroll or create a learner, teacher, or admin account"
-                >
-                  <i class="fa-solid fa-user-plus text-xs"></i>
-                  <span>Create / Enroll User</span>
-                </button>
+                <!-- Action Buttons: 2-column grid on mobile, flex on desktop -->
+                <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto sm:self-end">
+                  <!-- Create / Enroll User Button -->
+                  <button
+                    id="adminEnrollStudentBtn"
+                    type="button"
+                    class="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
+                    title="Enroll or create a learner, teacher, or admin account"
+                  >
+                    <i class="fa-solid fa-user-plus text-xs"></i>
+                    <span>+ Enroll User</span>
+                  </button>
 
-                <!-- Record Marks Button -->
-                <button
-                  id="adminRecordMarksBtn"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-all cursor-pointer"
-                  title="Record or update real assessment marks"
-                >
-                  <i class="fa-solid fa-pen-to-square text-xs text-indigo-600"></i>
-                  <span>Record Marks</span>
-                </button>
+                  <!-- Record Marks Button -->
+                  <button
+                    id="adminRecordMarksBtn"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-all cursor-pointer"
+                    title="Record or update real assessment marks"
+                  >
+                    <i class="fa-solid fa-pen-to-square text-xs text-indigo-600"></i>
+                    <span>Record Marks</span>
+                  </button>
 
-                <!-- Export Excel Broadsheet Button -->
-                <button
-                  id="adminExportExcelBtn"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer"
-                  title="Download All User Continuous Assessment Broadsheet in Excel with BECE 2026 Stanine Grades and Class Ranks"
-                >
-                  <i class="fa-solid fa-file-excel text-xs"></i>
-                  <span id="adminExportExcelBtnText">Download Excel</span>
-                </button>
+                  <!-- Export Excel Broadsheet Button -->
+                  <button
+                    id="adminExportExcelBtn"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer"
+                    title="Download All User Continuous Assessment Broadsheet in Excel with BECE 2026 Stanine Grades and Class Ranks"
+                  >
+                    <i class="fa-solid fa-file-excel text-xs"></i>
+                    <span id="adminExportExcelBtnText">Download Excel</span>
+                  </button>
 
-                <!-- Purge Cooked / Test Data Button -->
-                <button
-                  id="adminPurgeTestDataBtn"
-                  type="button"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 shadow-2xs transition-all cursor-pointer"
-                  title="Purge all cooked mock data, demo students, and test submissions to start clean testing with real users"
-                >
-                  <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
-                  <span id="adminPurgeTestDataBtnText">Clear All Test Data</span>
-                </button>
+                  <!-- Purge Cooked / Test Data Button -->
+                  <button
+                    id="adminPurgeTestDataBtn"
+                    type="button"
+                    class="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 shadow-2xs transition-all cursor-pointer"
+                    title="Purge all cooked mock data, demo students, and test submissions to start clean testing with real users"
+                  >
+                    <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
+                    <span id="adminPurgeTestDataBtnText">Clear All Test Data</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            <!-- Responsive Mobile Hint -->
-            <div class="text-[11px] text-slate-400 sm:hidden mb-2 flex items-center gap-1.5">
-              <i class="fa-solid fa-arrows-left-right text-indigo-500"></i> Scroll table horizontally to view all learner details
+            <!-- Mobile Learner Cards (Touch-Friendly Card View for Mobile Screens) -->
+            <div id="adminLearnersCardsMobile" class="sm:hidden space-y-3">
+              <!-- Populated dynamically via JS -->
             </div>
 
-            <!-- Students Table with min-width guard -->
-            <div class="overflow-x-auto no-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0">
+            <!-- Desktop Students Table with min-width guard (Hidden on Mobile) -->
+            <div class="hidden sm:block overflow-x-auto no-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0">
               <table class="min-w-[700px] w-full text-left border-collapse">
                 <thead>
                   <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -1311,7 +1339,7 @@
                     All Items <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-300 font-extrabold" id="catCountAll">6</span>
                   </button>
                   <button class="question-cat-filter px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer font-semibold" data-category="CAT">
-                    CAT (Continuous Assessment) <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-extrabold" id="catCountCAT">3</span>
+                    CAT <span class="hidden sm:inline">(Continuous Assessment)</span> <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-extrabold" id="catCountCAT">3</span>
                   </button>
                   <button class="question-cat-filter px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer font-semibold" data-category="QUIZ">
                     Quiz <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-700 font-extrabold" id="catCountQuiz">1</span>
@@ -1340,11 +1368,11 @@
 
               <!-- Row 2: Secondary Precision Filters (Track, Focus Sitting, Search) -->
               <div class="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
-                <div class="flex flex-wrap items-center gap-3">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
                   <!-- Track Filter -->
-                  <div class="flex items-center gap-1.5 text-xs font-semibold">
-                    <label for="questionTrackFilter" class="text-slate-500 text-[11px] uppercase tracking-wider font-bold">Track:</label>
-                    <select id="questionTrackFilter" class="bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer">
+                  <div class="flex items-center justify-between sm:justify-start gap-1.5 text-xs font-semibold w-full sm:w-auto">
+                    <label for="questionTrackFilter" class="text-slate-500 text-[11px] uppercase tracking-wider font-bold shrink-0">Track:</label>
+                    <select id="questionTrackFilter" class="bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2 sm:py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer w-full sm:w-auto">
                       <option value="ALL">All Tracks (9A &amp; 9B)</option>
                       <option value="Basic 9A">Basic 9A Only</option>
                       <option value="Basic 9B">Basic 9B Only</option>
@@ -1352,11 +1380,11 @@
                   </div>
 
                   <!-- Focus Sitting Dropdown -->
-                  <div class="flex items-center gap-1.5 text-xs font-semibold">
-                    <label for="questionSittingSelect" class="text-slate-500 text-[11px] uppercase tracking-wider font-bold flex items-center gap-1">
+                  <div class="flex items-center justify-between sm:justify-start gap-1.5 text-xs font-semibold w-full sm:w-auto">
+                    <label for="questionSittingSelect" class="text-slate-500 text-[11px] uppercase tracking-wider font-bold flex items-center gap-1 shrink-0">
                       <i class="fa-solid fa-crosshairs text-indigo-500"></i> Focus Sitting:
                     </label>
-                    <select id="questionSittingSelect" class="bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer max-w-xs">
+                    <select id="questionSittingSelect" class="bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-2 sm:py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer w-full sm:w-auto sm:max-w-xs">
                       <option value="ALL">All Sittings in Selected Category</option>
                     </select>
                   </div>
@@ -1371,10 +1399,27 @@
                     type="text"
                     id="questionSearchInput"
                     placeholder="Search questions or keywords..."
-                    class="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
+                    class="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 sm:py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Question Sittings Segmented Tabs Rail (Switch between sets without scrolling) -->
+          <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3 sm:p-4">
+            <div class="flex items-center justify-between gap-3 mb-2.5">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                <span class="text-xs font-bold text-slate-800 uppercase tracking-wider">Assessment Question Sets:</span>
+              </div>
+              <span id="questionActiveSittingLabel" class="text-xs text-indigo-600 font-semibold truncate hidden sm:inline-block"></span>
+            </div>
+            <div
+              id="questionSittingsTabsRail"
+              class="flex items-center gap-2 overflow-x-auto no-scrollbar touch-pan-x pb-1"
+            >
+              <!-- Dynamically populated assessment set tabs via JS -->
             </div>
           </div>
 
@@ -1403,6 +1448,15 @@
 
               <div class="flex items-center gap-2 shrink-0">
                 <button
+                  id="adminAddNewAsmtBtn2"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-sm transition cursor-pointer"
+                  title="Create or configure new assessment pack"
+                >
+                  <i class="fa-solid fa-plus text-indigo-400"></i>
+                  <span>Add Assessment</span>
+                </button>
+                <button
                   id="adminAutoBalanceBtn2"
                   type="button"
                   class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer"
@@ -1426,13 +1480,13 @@
               </div>
             </div>
 
-            <!-- Responsive Hint -->
-            <div class="text-[11px] text-slate-400 sm:hidden mb-2 flex items-center gap-1.5">
-              <i class="fa-solid fa-arrows-left-right text-indigo-500"></i> Scroll table horizontally to view and edit sitting durations and statuses
+            <!-- Mobile Assessment Cards Container (Touch-friendly alternative to wide table on mobile) -->
+            <div id="adminAsmtCardsMobile" class="sm:hidden space-y-3.5">
+              <!-- Populated dynamically via JS -->
             </div>
 
-            <!-- Assessments Table -->
-            <div class="overflow-x-auto no-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0">
+            <!-- Assessments Table (Desktop / Tablet view) -->
+            <div class="hidden sm:block overflow-x-auto no-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0">
               <table class="min-w-[850px] w-full text-left border-collapse text-xs">
                 <thead>
                   <tr class="border-b border-slate-200 font-bold text-slate-400 uppercase tracking-wider text-[11px]">
@@ -1595,59 +1649,62 @@
         <div id="adminSubViewRecordings" class="hidden space-y-6">
           <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
             <!-- Header Bar -->
-            <div class="p-6 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-emerald-50 via-indigo-50 to-emerald-50">
-              <div class="flex items-center gap-3.5">
-                <div class="w-11 h-11 rounded-2xl bg-white text-emerald-600 flex items-center justify-center text-xl shadow-xs border border-emerald-100">
+            <div class="p-4 sm:p-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-emerald-50 via-indigo-50 to-emerald-50">
+              <div class="flex items-start sm:items-center gap-3">
+                <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white text-emerald-600 flex items-center justify-center text-lg sm:text-xl shadow-xs border border-emerald-100 shrink-0 mt-0.5 sm:mt-0">
                   <i class="fa-brands fa-google-drive text-emerald-600"></i>
                 </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-lg text-slate-900">Voice &amp; Video Call Recordings</h3>
-                    <span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-bold text-base sm:text-lg text-slate-900 leading-snug">Voice &amp; Video Call Recordings</h3>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 shrink-0">
                       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Auto-Recorded Behind The Scene
                     </span>
                   </div>
-                  <p class="text-xs text-slate-500 mt-0.5">
+                  <p class="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed">
                     All learner and teacher calls are automatically archived and saved in Google Drive:
-                    <strong class="text-slate-800">computing.b9@gmail.com</strong> &nbsp;•&nbsp; Folder: <code class="px-1.5 py-0.5 rounded bg-white text-[11px] font-mono text-indigo-700 border border-slate-200">Ghana_JHS_Computing_Call_Recordings</code>
+                    <strong class="text-slate-800">computing.b9@gmail.com</strong> &nbsp;•&nbsp; Folder: <code class="px-1.5 py-0.5 rounded bg-white text-[10px] sm:text-[11px] font-mono text-indigo-700 border border-slate-200">Ghana_JHS_Computing_Call_Recordings</code>
                   </p>
                 </div>
               </div>
 
-              <!-- Top Actions: Refresh, Connect Webhook & Open Drive -->
-              <div class="flex items-center gap-2">
+              <!-- Top Actions: Refresh, Connect Webhook & Open Drive (Responsive Grid on Mobile) -->
+              <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full md:w-auto">
                 <button
                   type="button"
                   id="adminRefreshRecordingsBtn"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
                   title="Refresh Call Recordings List"
                 >
-                  <i class="fa-solid fa-arrows-rotate"></i> Refresh
+                  <i class="fa-solid fa-arrows-rotate"></i>
+                  <span>Refresh</span>
                 </button>
                 <button
                   type="button"
                   id="adminOpenDriveConfigModalBtn"
-                  class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition cursor-pointer"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition cursor-pointer text-center"
                   title="Connect Google Drive Webhook"
                 >
                   <i class="fa-solid fa-cloud-arrow-up"></i>
-                  <span>Drive Webhook Settings</span>
+                  <span class="hidden xs:inline">Drive Webhook</span>
+                  <span class="xs:hidden">Webhook</span>
                 </button>
                 <a
                   href="https://drive.google.com/drive/u/0/search?q=owner:computing.b9@gmail.com%20Ghana_JHS_Computing_Call_Recordings"
                   target="_blank"
                   rel="noopener noreferrer"
                   id="adminOpenGoogleDriveBtn"
-                  class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition cursor-pointer"
+                  class="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition cursor-pointer text-center"
                   title="Open destination folder in Google Drive"
                 >
-                  <i class="fa-brands fa-google-drive"></i> Open Google Drive
+                  <i class="fa-brands fa-google-drive"></i>
+                  <span>Open Google Drive</span>
                 </a>
               </div>
             </div>
 
             <!-- Stats Bar -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 border-b border-slate-200 text-xs">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 p-3.5 sm:p-4 bg-slate-50 border-b border-slate-200 text-xs">
               <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Recorded Calls</p>
                 <p id="statTotalRecordings" class="text-base font-extrabold text-slate-900 mt-0.5">0</p>
@@ -1664,24 +1721,29 @@
               </div>
               <div class="bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
                 <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audio / Video Formats</p>
-                <p class="text-xs font-bold text-slate-700 mt-1">Opus (48kHz) &bull; VP9 (1080p)</p>
+                <p class="text-xs font-bold text-slate-700 mt-1">Opus &bull; VP9</p>
               </div>
             </div>
 
-            <!-- Controls: Filter & Search -->
-            <div class="p-4 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-              <div class="flex items-center gap-2">
-                <select id="recordingsTypeFilter" class="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer">
+            <!-- Controls: Filter & Search (Responsive stack on mobile) -->
+            <div class="p-3.5 sm:p-4 bg-white border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div class="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto">
+                <select id="recordingsTypeFilter" class="w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-xl py-2 sm:py-1.5 px-3 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs">
                   <option value="ALL">All Call Types (Voice &amp; Video)</option>
                   <option value="voice">Voice Calls Only</option>
                   <option value="video">Video Calls Only</option>
                 </select>
-                <input
-                  type="text"
-                  id="recordingsSearchInput"
-                  placeholder="Search student or teacher name..."
-                  class="bg-slate-50 border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
-                />
+                <div class="relative w-full sm:w-64">
+                  <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                  </span>
+                  <input
+                    type="text"
+                    id="recordingsSearchInput"
+                    placeholder="Search student or teacher name..."
+                    class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 sm:py-1.5 pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs"
+                  />
+                </div>
               </div>
               <div class="text-[11px] text-slate-400 font-medium">
                 Recordings are captured in high fidelity and saved automatically upon call termination.
@@ -2400,7 +2462,7 @@
             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span id="conferenceRoomTitleDisplay">Basic 9 Computing Group Conference</span>
             <span class="text-white/40">•</span>
-            <span id="conferenceActiveCountDisplay" class="font-mono text-white text-[11px]">3 Online</span>
+            <span id="conferenceActiveCountDisplay" class="font-mono text-white text-[11px]">0 Online</span>
           </div>
 
           <!-- Dynamic Multi-Participant Grid -->
@@ -3253,6 +3315,117 @@
     </div>
 
     <!-- ================================================================= -->
+    <!-- MODAL 4B: CRITICAL TEST ABANDONMENT WARNING MODAL                 -->
+    <!-- ================================================================= -->
+    <div id="quizAbandonWarningModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[70] flex items-center justify-center p-3 sm:p-4 hidden animate-in fade-in duration-200">
+      <div class="bg-white rounded-3xl border border-rose-200 shadow-2xl max-w-md w-full p-5 sm:p-6 text-center relative overflow-hidden">
+        <div class="h-1.5 w-full bg-gradient-to-r from-rose-500 via-rose-600 to-amber-500 absolute top-0 left-0"></div>
+        <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center text-2xl sm:text-3xl mx-auto mb-3.5 shadow-inner ring-4 ring-rose-100/60 mt-1">
+          <i class="fa-solid fa-triangle-exclamation animate-pulse"></i>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200 mb-2">
+          <i class="fa-solid fa-skull-crossbones text-rose-600"></i> Critical Exam Notice
+        </span>
+        <h3 class="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+          Abandon Assessment Sitting?
+        </h3>
+        <div class="mt-3 p-3.5 sm:p-4 rounded-2xl bg-rose-50/90 border border-rose-200 text-left text-xs text-rose-950 space-y-2 leading-relaxed">
+          <div class="font-bold flex items-center gap-1.5 text-rose-900">
+            <i class="fa-solid fa-circle-exclamation text-rose-600 text-sm shrink-0"></i>
+            <span>CLOSING WILL RESULT IN AN AUTOMATIC FAIL (0 MARKS)</span>
+          </div>
+          <p class="text-rose-900/90">
+            If you close or exit this assessment window now, your sitting will be <strong>immediately terminated and recorded as FAILED with 0.0 Marks (F9 Grade)</strong>.
+          </p>
+          <p class="text-[11px] text-rose-800">
+            • You will lose your sitting attempt.<br/>
+            • 0 marks will be permanently locked onto your Continuous Assessment register.<br/>
+            • Retakes require formal teacher and administrator clearance.
+          </p>
+        </div>
+        <div class="mt-5 flex flex-col sm:flex-row items-center gap-2.5">
+          <button
+            id="continueQuizBtn"
+            type="button"
+            class="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <i class="fa-solid fa-play text-xs"></i>
+            <span>Continue Test</span>
+          </button>
+          <button
+            id="confirmAbandonQuizBtn"
+            type="button"
+            class="w-full sm:flex-1 py-2.5 sm:py-3 px-4 rounded-xl text-xs sm:text-sm font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/25 transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <i class="fa-solid fa-door-open text-xs"></i>
+            <span>Exit &amp; Fail Test</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- MODAL 4C: ACADEMIC CLASS CHANGE INTEGRITY WARNING MODAL           -->
+    <!-- ================================================================= -->
+    <div id="classChangeWarningModal" class="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[75] flex items-center justify-center p-3 sm:p-4 hidden animate-in fade-in duration-200">
+      <div class="bg-white rounded-3xl border border-amber-200 shadow-2xl max-w-lg w-full p-5 sm:p-7 text-left relative overflow-hidden">
+        <div class="h-1.5 w-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 absolute top-0 left-0"></div>
+        <div class="flex items-start gap-3.5 mb-4 mt-1">
+          <div class="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shrink-0 ring-4 ring-amber-50">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-200 mb-1">
+              <i class="fa-solid fa-scale-balanced text-amber-700"></i> Academic Integrity Alert
+            </span>
+            <h3 class="text-base sm:text-lg font-bold text-slate-900 tracking-tight">
+              Class Stream Change Warning
+            </h3>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Switching from <strong id="classChangeOldClass" class="text-slate-800">Basic 9A</strong> to <strong id="classChangeNewClass" class="text-indigo-600">Basic 9B</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-2.5 p-4 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs text-amber-950 leading-relaxed">
+          <div class="font-bold flex items-center gap-1.5 text-amber-900">
+            <i class="fa-solid fa-circle-exclamation text-amber-600"></i>
+            <span>PLEASE READ CAREFULLY BEFORE CONFIRMING:</span>
+          </div>
+          <ul class="space-y-1.5 text-[11px] text-amber-900 list-disc list-inside">
+            <li>
+              <strong>Data Loss Risk:</strong> You may <strong>lose previously accumulated Continuous Assessment (CAT) marks, project scores, and term rankings</strong> earned under your previous class.
+            </li>
+            <li>
+              <strong>Curriculum Lane Calibration:</strong> Assessment tasks and question packs are strictly calibrated per class stream (Basic 7, 8, 9A, 9B).
+            </li>
+            <li>
+              <strong>Severe Malpractice Penalty:</strong> Under Ghana Education Service (GES) examination regulations, any learner found engaging in unauthorized class switching, impersonation, or fraudulent manipulation <strong>will be penalized severely</strong>, including automatic score disqualification and disciplinary referral.
+            </li>
+          </ul>
+        </div>
+
+        <div class="mt-5 flex flex-col sm:flex-row items-center justify-end gap-2.5">
+          <button
+            id="cancelClassChangeBtn"
+            type="button"
+            class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+          >
+            Cancel &amp; Keep Current Class
+          </button>
+          <button
+            id="confirmClassChangeBtn"
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-600/25 transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <i class="fa-solid fa-circle-check"></i>
+            <span>I Understand &amp; Confirm Change</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
     <!-- MODAL 5: ADMIN ASSESSMENT & TERM WEIGHTING CONFIGURATION          -->
     <!-- ================================================================= -->
     <div id="adminAssessmentConfigModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden overflow-y-auto">
@@ -3430,10 +3603,11 @@
                   id="newAsmtStatus"
                   class="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <option value="AVAILABLE">Available (Unlocked Now)</option>
+                  <option value="CLOSED" selected>Inactive / Closed (Default — Activated manually by Admin)</option>
+                  <option value="AVAILABLE">Active / Available (Unlocked Now)</option>
                   <option value="UPCOMING">Upcoming (Scheduled Unlock)</option>
-                  <option value="CLOSED">Closed (Locked)</option>
                 </select>
+                <p class="text-[10px] text-slate-400 mt-1">Tests remain inactive by default until explicitly turned ON by the administrator.</p>
               </div>
 
               <div>
@@ -3803,10 +3977,10 @@
     <!-- =============================================================== -->
     <div
       id="enrollStudentModal"
-      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden"
     >
-      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in fade-in zoom-in duration-200">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               <i class="fa-solid fa-user-plus"></i>
@@ -3816,12 +3990,12 @@
               <p class="text-xs text-slate-500">Enroll a learner, teacher, or admin into the live database</p>
             </div>
           </div>
-          <button id="closeEnrollModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+          <button id="closeEnrollModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer p-1">
             <i class="fa-solid fa-xmark text-base"></i>
           </button>
         </div>
 
-        <form id="enrollStudentForm" class="p-5 space-y-3.5">
+        <form id="enrollStudentForm" class="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           <div>
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Full Name *</label>
             <input
@@ -3942,10 +4116,10 @@
     <!-- =============================================================== -->
     <div
       id="editLearnerModal"
-      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden"
     >
-      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in fade-in zoom-in duration-200">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               <i class="fa-solid fa-user-pen"></i>
@@ -3955,12 +4129,12 @@
               <p class="text-xs text-slate-500">Update user record, role, class level, presence and DOB</p>
             </div>
           </div>
-          <button id="closeEditLearnerModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+          <button id="closeEditLearnerModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer p-1">
             <i class="fa-solid fa-xmark text-base"></i>
           </button>
         </div>
 
-        <form id="editLearnerForm" class="p-5 space-y-3.5">
+        <form id="editLearnerForm" class="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           <input type="hidden" id="editLearnerId" />
 
           <div>
@@ -4200,10 +4374,10 @@
     <!-- =============================================================== -->
     <div
       id="recordScoreModal"
-      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden"
     >
-      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh] animate-in fade-in zoom-in duration-200">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               <i class="fa-solid fa-pen-to-square"></i>
@@ -4213,12 +4387,12 @@
               <p class="text-xs text-slate-500">Record genuine test marks to database and broadsheet</p>
             </div>
           </div>
-          <button id="closeRecordScoreModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer">
+          <button id="closeRecordScoreModalBtn" class="text-slate-400 hover:text-slate-700 transition cursor-pointer p-1">
             <i class="fa-solid fa-xmark text-base"></i>
           </button>
         </div>
 
-        <form id="recordScoreForm" class="p-5 space-y-3.5">
+        <form id="recordScoreForm" class="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1">
           <div>
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Select Learner *</label>
             <select
@@ -4302,10 +4476,10 @@
     <!-- =============================================================== -->
     <div
       id="adminGrantRetakeModal"
-      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden animate-in fade-in duration-200"
+      class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 hidden animate-in fade-in duration-200"
     >
-      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden">
-        <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-amber-50/70">
+      <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[88vh]">
+        <div class="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-amber-50/70 shrink-0">
           <div class="flex items-center gap-2.5">
             <div class="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center font-bold text-sm shadow-xs">
               <i class="fa-solid fa-rotate-right"></i>
@@ -4320,7 +4494,7 @@
           </button>
         </div>
 
-        <form id="adminGrantRetakeForm" class="p-5 space-y-4">
+        <form id="adminGrantRetakeForm" class="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
           <input type="hidden" id="retakeStudentId" />
 
           <!-- Target Student Pill -->

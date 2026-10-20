@@ -303,18 +303,45 @@ export async function fetchAllLearners() {
     return isMockDataCleared() ? [] : getFallbackAllLearners();
   }
 
-  const { data, error } = await supabase
-    .from("learners")
-    .select("*, submissions(id, score, max_score, status, assessment_id, submitted_at)")
-    .order("created_at", { ascending: false });
+  let learnersData = null;
+  let fetchError = null;
 
-  if (error) {
-    console.warn("Supabase fetchAllLearners error:", error);
+  try {
+    const res = await supabase
+      .from("learners")
+      .select("*, submissions(id, score, max_score, status, assessment_id, submitted_at)")
+      .order("created_at", { ascending: false });
+    learnersData = res.data;
+    fetchError = res.error;
+  } catch (err) {
+    fetchError = err;
+  }
+
+  // Fallback: If relational submissions join fails (e.g. PostgREST schema cache or RLS on submissions),
+  // query learners directly without join so learners in the database are not lost
+  if (fetchError || !learnersData) {
+    console.warn("Supabase fetchAllLearners joined query notice, retrying with direct select:", fetchError);
+    try {
+      const fallbackRes = await supabase
+        .from("learners")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!fallbackRes.error && fallbackRes.data) {
+        learnersData = fallbackRes.data.map((l) => ({ ...l, submissions: [] }));
+        fetchError = null;
+      }
+    } catch (fbErr) {
+      console.warn("Fallback select also failed:", fbErr);
+    }
+  }
+
+  if (fetchError) {
+    console.warn("Supabase fetchAllLearners error:", fetchError);
     return [];
   }
 
   // Pure real database records only; never fallback to cooked fake students
-  const learners = (data && data.length > 0) ? data : [];
+  const learners = (learnersData && learnersData.length > 0) ? learnersData : [];
   const now = Date.now();
 
   // Auto-reconcile stale online status (e.g. closed browser without clean beforeunload)
@@ -1075,12 +1102,15 @@ export async function updateAssessment(asmtId, updates) {
 
 export async function createAssessment(asmtPayload) {
   const localAsmts = getFallbackAssessments();
+  const initialStatus = asmtPayload.status || "CLOSED";
   const newAsmt = {
     id: "asmt-" + Date.now(),
     weight: 20.00,
-    status: "AVAILABLE",
-    deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+    status: initialStatus,
+    deadline: asmtPayload.deadline || null,
+    unlock_time: asmtPayload.unlock_time || null,
     ...asmtPayload,
+    status: initialStatus,
   };
   localAsmts.push(newAsmt);
   localStorage.setItem("jhs_local_assessments", JSON.stringify(localAsmts));
@@ -1090,7 +1120,10 @@ export async function createAssessment(asmtPayload) {
     try {
       const { data, error } = await supabase
         .from("assessments")
-        .insert(asmtPayload)
+        .insert({
+          ...asmtPayload,
+          status: initialStatus,
+        })
         .select()
         .single();
       if (!error && data) return data;
@@ -1774,7 +1807,7 @@ export function getFallbackAssessments() {
       weight: 50.00,
       status: "CLOSED",
       unlock_time: null,
-      deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+      deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
     },
@@ -1789,7 +1822,7 @@ export function getFallbackAssessments() {
       weight: 50.00,
       status: "CLOSED",
       unlock_time: null,
-      deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+      deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
     },
@@ -1804,7 +1837,7 @@ export function getFallbackAssessments() {
       weight: 50.00,
       status: "CLOSED",
       unlock_time: null,
-      deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+      deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
     },
@@ -1819,7 +1852,7 @@ export function getFallbackAssessments() {
       weight: 50.00,
       status: "CLOSED",
       unlock_time: null,
-      deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+      deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
     }
