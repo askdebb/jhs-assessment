@@ -3912,15 +3912,15 @@ function showAdminSubview(subviewKey) {
 
   tabs.forEach((t) => {
     if (t.key === subviewKey) {
-      t.el?.classList.remove("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
-      t.el?.classList.add("text-white", "bg-slate-900", "border-slate-800");
+      t.el?.classList.remove("text-slate-600", "hover:text-slate-900", "hover:bg-white/80", "hover:bg-slate-100");
+      t.el?.classList.add("text-white", "bg-slate-900", "shadow-2xs");
       t.view?.classList.remove("hidden");
       try {
         t.el?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       } catch (e) {}
     } else {
-      t.el?.classList.remove("text-white", "bg-slate-900", "border-slate-800");
-      t.el?.classList.add("text-slate-600", "hover:text-slate-900", "hover:bg-slate-100");
+      t.el?.classList.remove("text-white", "bg-slate-900", "shadow-2xs", "border-slate-800");
+      t.el?.classList.add("text-slate-600", "hover:text-slate-900", "hover:bg-white/80");
       t.view?.classList.add("hidden");
     }
   });
