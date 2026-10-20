@@ -4028,7 +4028,7 @@ async function notifyAssessmentActivated(asmtId) {
         </div>
         <p>Please log into your learner portal immediately to complete this assessment before the deadline.</p>
       `,
-      actionUrl: "http://localhost:5176/learner",
+      actionUrl: window.location.origin + "/learner",
       actionText: "Open Portal & Start CAT",
       senderName: "Master Debrah (Admin)",
       senderEmail: PRIMARY_ADMIN_EMAIL,
@@ -4161,7 +4161,7 @@ async function handleGrantRetakeSubmit(e) {
             </div>
             <p>Log in to your learner portal to begin your re-take sitting. Your new attempt will be recorded upon submission.</p>
           `,
-          actionUrl: "http://localhost:5176/learner",
+          actionUrl: window.location.origin + "/learner",
           actionText: "Open Portal & Retake CAT",
           senderName: "Master Debrah (Admin)",
           senderEmail: PRIMARY_ADMIN_EMAIL,
@@ -4214,7 +4214,7 @@ function openEmailPreviewModal(emailData) {
   const senderEmail = escapeHtml(emailData.senderEmail || PRIMARY_ADMIN_EMAIL);
   const time = emailData.timestamp ? new Date(emailData.timestamp).toLocaleString() : (/* @__PURE__ */ new Date()).toLocaleString();
   const bodyHtml = emailData.bodyHtml || `<p>${escapeHtml(emailData.message || emailData.previewText || "")}</p>`;
-  const actionUrl = emailData.actionUrl || "http://localhost:5176/learner";
+  const actionUrl = emailData.actionUrl || (window.location.origin + "/learner");
   const actionText = escapeHtml(emailData.actionText || "Open Assessment Portal");
   container.innerHTML = `
     <!-- Email Envelope Meta -->
@@ -5723,7 +5723,7 @@ function renderNotifications() {
           senderName: "Master Debrah (Admin)",
           senderEmail: PRIMARY_ADMIN_EMAIL,
           bodyHtml: `<p>${escapeHtml(notifMsg)}</p>`,
-          actionUrl: "http://localhost:5176/learner",
+          actionUrl: window.location.origin + "/learner",
           actionText: "Open Assessment Portal"
         });
       }

@@ -961,7 +961,7 @@ export async function dispatchEmailNotification({
   heading,
   previewText,
   bodyHtml,
-  actionUrl = "http://localhost:5176/learner",
+  actionUrl = (typeof window !== "undefined" && window.location?.origin ? window.location.origin + "/learner" : "https://jhs-chi.vercel.app/learner"),
   actionText = "Open Assessment Portal",
   senderName = "Master Debrah (Admin)",
   senderEmail = "computing.b9@gmail.com",
