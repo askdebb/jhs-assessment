@@ -65,6 +65,7 @@ import {
   getGoogleDriveWebhookUrl,
   deleteRecordingBlobFromVault,
   deleteCallRecording,
+  deleteBulkCallRecordings,
   grantSubmissionRetake,
   dispatchEmailNotification,
   triggerWebPushNotification,
@@ -179,6 +180,7 @@ const state = {
   collapsedQuestionKeys: new Set<string>(),
   allLearners: [],
   learnerSearchQuery: "",
+  selectedRecordingIds: new Set<string>(),
   adminLearnersCurrentPage: 1,
   adminLearnersCustomPageSize: null as number | null,
   notifications: [],
@@ -806,6 +808,11 @@ const driveWebhookStatusTitle = document.getElementById("driveWebhookStatusTitle
 const driveWebhookStatusText = document.getElementById("driveWebhookStatusText");
 const driveBackupHealthStat = document.getElementById("driveBackupHealthStat");
 const backupHealthCard = document.getElementById("backupHealthCard");
+const recordingsBulkActionBar = document.getElementById("recordingsBulkActionBar");
+const bulkSelectedCount = document.getElementById("bulkSelectedCount");
+const bulkDeleteBtnCount = document.getElementById("bulkDeleteBtnCount");
+const bulkDeleteRecordingsBtn = document.getElementById("bulkDeleteRecordingsBtn") as HTMLButtonElement | null;
+const bulkDeselectAllBtn = document.getElementById("bulkDeselectAllBtn");
 
 // Chat Media & Audio State
 let currentAttachment = null;
@@ -12313,10 +12320,30 @@ async function renderAdminCallRecordings() {
     return true;
   });
 
+  // Prune any selected IDs that no longer exist
+  const existingIds = new Set(recordings.map((r: any) => r.id));
+  for (const id of Array.from(state.selectedRecordingIds)) {
+    if (!existingIds.has(id)) {
+      state.selectedRecordingIds.delete(id);
+    }
+  }
+
   if (statTotalRecordings) {
     statTotalRecordings.textContent = String(recordings.length);
   }
   updateDriveBackupHealthUI();
+
+  // Update Bulk Action Bar
+  const selectedCount = state.selectedRecordingIds.size;
+  if (recordingsBulkActionBar) {
+    if (selectedCount > 0) {
+      recordingsBulkActionBar.classList.remove("hidden");
+      if (bulkSelectedCount) bulkSelectedCount.textContent = String(selectedCount);
+      if (bulkDeleteBtnCount) bulkDeleteBtnCount.textContent = String(selectedCount);
+    } else {
+      recordingsBulkActionBar.classList.add("hidden");
+    }
+  }
 
   if (filtered.length === 0) {
     adminRecordingsContainer.innerHTML = `
@@ -12334,29 +12361,18 @@ async function renderAdminCallRecordings() {
   }
 
   const isDriveConfigured = !!localStorage.getItem("jhs_gdrive_webhook_url");
+  const allFilteredSelected = filtered.length > 0 && filtered.every((r: any) => state.selectedRecordingIds.has(r.id));
 
-  let html = `
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs">
-        <thead>
-          <tr class="border-b border-slate-200 text-slate-400 font-bold uppercase text-[10px] tracking-wider bg-slate-50/50">
-            <th class="py-3 px-3">Dedicated User Folder</th>
-            <th class="py-3 px-3">Call Type</th>
-            <th class="py-3 px-3">File Label</th>
-            <th class="py-3 px-3">Duration &amp; Size</th>
-            <th class="py-3 px-3">Date &amp; Time</th>
-            <th class="py-3 px-3">Google Drive Status</th>
-            <th class="py-3 px-3 text-right">Actions</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-slate-100">
-  `;
+  // 1. Desktop Table Rows
+  let tableRowsHtml = "";
+  // 2. Mobile Cards
+  let mobileCardsHtml = "";
 
   filtered.forEach((rec: any) => {
     const isVideo = rec.call_type === "video";
     const typeBadge = isVideo
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200"><i class="fa-solid fa-video text-[9px]"></i> 1080p Video</span>`
-      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-phone text-[9px]"></i> HD Voice</span>`;
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0"><i class="fa-solid fa-video text-[9px]"></i> 1080p Video</span>`
+      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"><i class="fa-solid fa-phone text-[9px]"></i> HD Voice</span>`;
 
     const userFolderUrl = rec.user_folder_url || `https://drive.google.com/drive/u/0/search?q=owner:${GOOGLE_DRIVE_TARGET_EMAIL}%20${encodeURIComponent(rec.user_folder || "Ghana_JHS_Computing_Call_Recordings")}`;
     const driveFileUrl = rec.drive_web_link || userFolderUrl;
@@ -12365,17 +12381,28 @@ async function renderAdminCallRecordings() {
 
     const isSynced = rec.drive_sync_status === "synced";
     const driveBadge = isSynced
-      ? `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Archived in computing.b9@gmail.com Drive">
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0" title="Archived in computing.b9@gmail.com Drive">
           <i class="fa-brands fa-google-drive text-[10px]"></i>
-          <span>Synced to Drive</span>
+          <span>Synced</span>
         </span>`
-      : `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Stored in Local Vault. Ready for Google Drive sync.">
+      : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0" title="Stored in Local Vault. Ready for Google Drive sync.">
           <i class="fa-solid fa-hard-drive text-[10px]"></i>
           <span>Local Vault</span>
         </span>`;
 
-    html += `
-      <tr class="hover:bg-slate-50/80 transition group">
+    const isSelected = state.selectedRecordingIds.has(rec.id);
+
+    // Desktop Table Row
+    tableRowsHtml += `
+      <tr class="transition group ${isSelected ? 'bg-indigo-50/70 border-indigo-200' : 'hover:bg-slate-50/80'}" data-recording-row="${rec.id}">
+        <td class="py-3 px-3 text-center">
+          <input
+            type="checkbox"
+            class="recording-row-checkbox w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+            data-id="${rec.id}"
+            ${isSelected ? 'checked' : ''}
+          />
+        </td>
         <td class="py-3 px-3">
           <div class="flex items-center gap-2">
             <div class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs shrink-0 font-bold">
@@ -12456,15 +12483,159 @@ async function renderAdminCallRecordings() {
         </td>
       </tr>
     `;
+
+    // Mobile Card
+    mobileCardsHtml += `
+      <div class="p-3.5 sm:p-4 rounded-2xl border transition-all duration-150 ${isSelected ? 'border-indigo-400 bg-indigo-50/40 ring-2 ring-indigo-300/40 shadow-xs' : 'border-slate-200/90 bg-white hover:border-slate-300 shadow-2xs'}" data-recording-card="${rec.id}">
+        <div class="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+          <label class="flex items-center gap-2.5 cursor-pointer min-w-0">
+            <input
+              type="checkbox"
+              class="recording-row-checkbox w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer shrink-0"
+              data-id="${rec.id}"
+              ${isSelected ? 'checked' : ''}
+            />
+            <span class="text-xs font-bold text-slate-900 truncate">${rec.caller_name || 'Caller'} &bull; ${rec.recipient_name || 'Recipient'}</span>
+          </label>
+          <div class="flex items-center gap-1.5 shrink-0">
+            ${typeBadge}
+            ${driveBadge}
+          </div>
+        </div>
+
+        <div class="py-2.5 space-y-1.5">
+          <div class="flex items-center gap-2">
+            <div class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-[11px] shrink-0 font-bold">
+              <i class="fa-solid fa-folder"></i>
+            </div>
+            <a href="${userFolderUrl}" target="_blank" rel="noopener noreferrer" class="font-bold text-xs text-slate-800 hover:text-emerald-600 truncate flex items-center gap-1" title="Open Google Drive folder">
+              <span class="truncate">${rec.user_folder || `${rec.caller_name} (Basic 9)`}</span>
+              <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-slate-400"></i>
+            </a>
+          </div>
+
+          <div class="text-[10px] font-mono text-slate-500 truncate bg-slate-50 px-2 py-1 rounded-lg border border-slate-100" title="${rec.file_name}">
+            <i class="fa-regular fa-file-audio mr-1 text-slate-400"></i>${rec.file_name}
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-slate-500 pt-2 border-t border-slate-100">
+          <span class="font-semibold text-slate-700 flex items-center gap-1">
+            <i class="fa-solid fa-stopwatch text-indigo-400 text-[10px]"></i>
+            ${formattedDuration} <span class="text-slate-400 font-normal">(${rec.file_size || '1.2 MB'})</span>
+          </span>
+          <span class="text-slate-400 flex items-center gap-1">
+            <i class="fa-regular fa-clock text-[10px]"></i> ${dateStr}
+          </span>
+        </div>
+
+        <div class="mt-3 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            data-id="${rec.id}"
+            class="play-recording-btn py-1.5 px-2 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition cursor-pointer flex items-center justify-center gap-1.5 border border-indigo-100"
+          >
+            <i class="fa-solid fa-play text-[10px]"></i> Play
+          </button>
+          <button
+            type="button"
+            data-id="${rec.id}"
+            class="download-recording-btn py-1.5 px-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 transition cursor-pointer flex items-center justify-center gap-1.5 border border-slate-200"
+          >
+            <i class="fa-solid fa-download text-[10px]"></i> Save
+          </button>
+          <button
+            type="button"
+            data-id="${rec.id}"
+            class="delete-recording-btn py-1.5 px-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 transition cursor-pointer flex items-center justify-center gap-1.5 border border-rose-200"
+          >
+            <i class="fa-solid fa-trash-can text-[10px]"></i> Delete
+          </button>
+        </div>
+      </div>
+    `;
   });
 
-  html += `
+  const html = `
+    <!-- Desktop Tabular Layout (Hidden on Mobile) -->
+    <div class="hidden md:block overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead>
+          <tr class="border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider bg-slate-50/70">
+            <th class="py-3.5 px-3 w-10 text-center">
+              <input
+                type="checkbox"
+                id="selectAllRecordingsCheckbox"
+                class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+                title="Select or deselect all recordings"
+                ${allFilteredSelected ? 'checked' : ''}
+              />
+            </th>
+            <th class="py-3.5 px-3">Dedicated User Folder</th>
+            <th class="py-3.5 px-3">Call Type</th>
+            <th class="py-3.5 px-3">File Label</th>
+            <th class="py-3.5 px-3">Duration &amp; Size</th>
+            <th class="py-3.5 px-3">Date &amp; Time</th>
+            <th class="py-3.5 px-3">Google Drive Status</th>
+            <th class="py-3.5 px-3 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          ${tableRowsHtml}
         </tbody>
       </table>
+    </div>
+
+    <!-- Mobile Cards Layout (Hidden on Desktop) -->
+    <div class="md:hidden space-y-3">
+      <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-2 text-xs">
+        <label class="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+          <input
+            type="checkbox"
+            id="selectAllRecordingsCheckboxMobile"
+            class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+            ${allFilteredSelected ? 'checked' : ''}
+          />
+          <span>Select All (${filtered.length})</span>
+        </label>
+        <span class="text-[11px] text-indigo-600 font-bold">${selectedCount} selected</span>
+      </div>
+
+      ${mobileCardsHtml}
     </div>
   `;
 
   adminRecordingsContainer.innerHTML = html;
+
+  // Bind Select All Checkboxes
+  const selectAllCbDesktop = document.getElementById("selectAllRecordingsCheckbox") as HTMLInputElement | null;
+  const selectAllCbMobile = document.getElementById("selectAllRecordingsCheckboxMobile") as HTMLInputElement | null;
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      filtered.forEach((r: any) => state.selectedRecordingIds.add(r.id));
+    } else {
+      state.selectedRecordingIds.clear();
+    }
+    renderAdminCallRecordings();
+  };
+
+  selectAllCbDesktop?.addEventListener("change", (e: any) => toggleSelectAll(e.target.checked));
+  selectAllCbMobile?.addEventListener("change", (e: any) => toggleSelectAll(e.target.checked));
+
+  // Bind Individual Row & Card Checkboxes
+  adminRecordingsContainer.querySelectorAll(".recording-row-checkbox").forEach((cb: any) => {
+    cb.addEventListener("change", () => {
+      const recId = cb.getAttribute("data-id");
+      if (!recId) return;
+      if (cb.checked) {
+        state.selectedRecordingIds.add(recId);
+      } else {
+        state.selectedRecordingIds.delete(recId);
+      }
+      renderAdminCallRecordings();
+    });
+  });
 
   // Bind Play buttons
   adminRecordingsContainer.querySelectorAll(".play-recording-btn").forEach((btn) => {
@@ -12484,7 +12655,7 @@ async function renderAdminCallRecordings() {
     });
   });
 
-  // Bind Admin Delete buttons (Admin only)
+  // Bind Admin Delete buttons (Single delete)
   adminRecordingsContainer.querySelectorAll(".delete-recording-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const recId = btn.getAttribute("data-id");
@@ -12499,6 +12670,7 @@ async function renderAdminCallRecordings() {
       const userRole = state.isAdmin ? "admin" : (state.profile?.role || "learner");
       const res = await deleteCallRecording(rec.id, userRole);
       if (res && res.success) {
+        state.selectedRecordingIds.delete(rec.id);
         renderAdminCallRecordings();
       } else {
         alert(res?.error || "Failed to delete call recording.");
@@ -12550,11 +12722,44 @@ async function renderAdminCallRecordings() {
           (btn as HTMLButtonElement).disabled = false;
         }
       } catch (err) {
+        alert("Upload error: " + (err as any).message);
         btn.innerHTML = origHtml;
         (btn as HTMLButtonElement).disabled = false;
       }
     });
   });
+}
+
+async function handleBulkDeleteRecordings() {
+  const count = state.selectedRecordingIds.size;
+  if (count === 0) return;
+
+  const confirmed = confirm(
+    `Delete ${count} Selected Call Recording(s)?\n\nThis will permanently delete ${count} call recording files and their cloud references from the database.\n\nThis action cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  if (bulkDeleteRecordingsBtn) {
+    bulkDeleteRecordingsBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Deleting (${count})...`;
+    bulkDeleteRecordingsBtn.disabled = true;
+  }
+
+  const userRole = state.isAdmin ? "admin" : (state.profile?.role || "learner");
+  const idsToDelete = Array.from(state.selectedRecordingIds);
+  const res = await deleteBulkCallRecordings(idsToDelete, userRole);
+
+  state.selectedRecordingIds.clear();
+
+  if (bulkDeleteRecordingsBtn) {
+    bulkDeleteRecordingsBtn.innerHTML = `<i class="fa-solid fa-trash-can text-rose-200 text-[11px]"></i> Delete Selected`;
+    bulkDeleteRecordingsBtn.disabled = false;
+  }
+
+  if (res && res.success) {
+    await renderAdminCallRecordings();
+  } else {
+    alert(res?.error || "Failed to delete selected call recordings.");
+  }
 }
 
 function updateDriveBackupHealthUI() {
@@ -13433,8 +13638,19 @@ function attachEventListeners() {
   });
   closeRecordingSavedToastBtn?.addEventListener("click", () => callRecordingSavedToast?.classList.add("hidden"));
   adminRefreshRecordingsBtn?.addEventListener("click", renderAdminCallRecordings);
-  recordingsTypeFilter?.addEventListener("change", renderAdminCallRecordings);
-  recordingsSearchInput?.addEventListener("input", renderAdminCallRecordings);
+  recordingsTypeFilter?.addEventListener("change", () => {
+    state.selectedRecordingIds.clear();
+    renderAdminCallRecordings();
+  });
+  recordingsSearchInput?.addEventListener("input", () => {
+    state.selectedRecordingIds.clear();
+    renderAdminCallRecordings();
+  });
+  bulkDeleteRecordingsBtn?.addEventListener("click", handleBulkDeleteRecordings);
+  bulkDeselectAllBtn?.addEventListener("click", () => {
+    state.selectedRecordingIds.clear();
+    renderAdminCallRecordings();
+  });
 
   // Google Drive Cloud Webhook Settings Listeners
   adminOpenDriveConfigModalBtn?.addEventListener("click", openDriveWebhookModal);

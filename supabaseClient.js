@@ -2382,3 +2382,40 @@ export async function deleteCallRecording(id, userRole) {
 
   return { success: true };
 }
+
+export async function deleteBulkCallRecordings(ids, userRole) {
+  if (!ids || ids.length === 0) return { success: true, count: 0 };
+  if (userRole !== "admin" && userRole !== "teacher") {
+    return { success: false, error: "Unauthorized. Only administrators can delete recordings." };
+  }
+
+  const idSet = new Set(ids);
+
+  // 1. Remove from local browser cache
+  try {
+    const raw = localStorage.getItem("jhs_call_recordings_index");
+    if (raw) {
+      const list = JSON.parse(raw);
+      const filtered = list.filter((r) => !idSet.has(r.id));
+      localStorage.setItem("jhs_call_recordings_index", JSON.stringify(filtered));
+    }
+  } catch (e) {}
+
+  // 2. Purge vault blobs in parallel
+  await Promise.all(ids.map((id) => deleteRecordingBlobFromVault(id)));
+
+  // 3. Remove references from Supabase in bulk
+  const supabase = getAdminSupabase() || getSupabase();
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("call_recordings").delete().in("id", ids);
+      if (error) {
+        console.warn("Supabase bulk call_recordings delete error:", error);
+      }
+    } catch (err) {
+      console.warn("Supabase bulk delete exception:", err);
+    }
+  }
+
+  return { success: true, count: ids.length };
+}
