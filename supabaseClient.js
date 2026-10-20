@@ -71,7 +71,9 @@ export async function signInWithGoogle() {
     throw new Error("SUPABASE_ANON_KEY_MISSING");
   }
 
-  const redirectUrl = window.location.origin + window.location.pathname;
+  // Ensure clean, deterministic redirect target to prevent Supabase or Vercel route mismatches
+  const targetPath = window.location.pathname.startsWith("/admin") ? "/admin" : "/learner";
+  const redirectUrl = `${window.location.origin}${targetPath}`;
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
