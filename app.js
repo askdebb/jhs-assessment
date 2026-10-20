@@ -1110,6 +1110,7 @@ async function handleSignOut() {
   state.profile = null;
   state.isAdmin = false;
   state.activeView = "learner";
+  updateActiveTestBanner();
   renderAuthLanding();
 }
 function toggleViewMode() {
@@ -10261,6 +10262,7 @@ function calculateRemainingTime(deadlineVal) {
 }
 
 function tickActiveTestCountdowns() {
+  if (!state.user) return;
   const countdownEls = document.querySelectorAll("[data-countdown-asmt]");
   if (countdownEls.length === 0) return;
 
@@ -10286,6 +10288,13 @@ function updateActiveTestBanner() {
   const content = document.getElementById("topAnnouncementContent");
   if (!bar || !content) return;
 
+  // When logged out, the notice at the top must always be off
+  if (!state.user) {
+    bar.classList.add("hidden");
+    content.innerHTML = "";
+    return;
+  }
+
   if (state.activeView === "admin") {
     const isAuthorizedAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
     if (!isAuthorizedAdmin) {
@@ -10295,10 +10304,14 @@ function updateActiveTestBanner() {
     }
   }
 
+  const userClass = state.isAdmin ? null : (state.profile?.class_level || null);
   const allAsmts = state.assessments || [];
   const activeTests = allAsmts.filter((a) => {
     if (a.status !== "AVAILABLE") return false;
     if (a.unlock_time && new Date(a.unlock_time).getTime() > Date.now()) return false;
+    if (userClass && a.class_level && a.class_level !== "ALL" && a.class_level !== userClass) {
+      return false;
+    }
     return true;
   });
 
