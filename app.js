@@ -1574,23 +1574,57 @@ function updateKpiMetrics() {
   if (dashOverallRankText) {
     dashOverallRankText.textContent = `${overallOrdinal} of ${totalStudents} in ${learnerClass}`;
   }
+  // Filter assessments strictly for this learner's class & Computing subject
+  const myClassAssessments = state.assessments.filter((a) => {
+    if (a.subject && a.subject !== "Computing") return false;
+    const titleLower = (a.title || "").toLowerCase();
+    if (titleLower.includes("creative") || titleLower.includes("art") || titleLower.includes("math")) return false;
+    if (a.class_level === "Basic 9A" && learnerClass !== "Basic 9A") return false;
+    if (a.class_level === "Basic 9B" && learnerClass !== "Basic 9B") return false;
+    return true;
+  });
+
+  // Completed Count
   dashCompletedCount.textContent = state.submissions.length;
-  dashTotalTests.textContent = `/ ${state.assessments.length} Tasks`;
-  if (dashCompletedProgressBar && state.assessments.length > 0) {
-    const pct = Math.round(state.submissions.length / state.assessments.length * 100);
+  dashTotalTests.textContent = `/ ${myClassAssessments.length} Tasks`;
+  if (dashCompletedProgressBar && myClassAssessments.length > 0) {
+    const pct = Math.min(100, Math.round(state.submissions.length / myClassAssessments.length * 100));
     dashCompletedProgressBar.style.width = `${pct}%`;
   }
-  const openCount = state.assessments.filter((a) => {
+
+  // Available / Open Tasks Count (only unlocked items for student's class)
+  const openCount = myClassAssessments.filter((a) => {
     const isScheduled = a.unlock_time && new Date(a.unlock_time) > /* @__PURE__ */ new Date();
-    return a.status === "AVAILABLE" && !isScheduled;
+    const isExpired = a.deadline && new Date(a.deadline) < /* @__PURE__ */ new Date();
+    return a.status === "AVAILABLE" && !isScheduled && !isExpired;
   }).length;
   dashAvailableCount.textContent = openCount;
+  const availBar = document.getElementById("dashAvailableProgressBar");
+  if (availBar && myClassAssessments.length > 0) {
+    const availPct = Math.min(100, Math.round(openCount / myClassAssessments.length * 100));
+    availBar.style.width = `${availPct}%`;
+  }
+
+  // Last Test Done
+  const lastTestPct = document.getElementById("dashLastTestPct");
+  const lastTestFeedbackPrompt = document.getElementById("dashLastTestFeedbackPrompt");
+
   if (state.submissions.length > 0) {
     const lastSub = state.submissions[0];
     const asmt = lastSub.assessments || {};
     dashLastTestTitle.textContent = asmt.title || "Recent Assessment";
     dashLastTestScore.textContent = `${lastSub.score} / ${lastSub.max_score || 20}`;
     dashLastTestDate.textContent = formatDateTime(lastSub.submitted_at);
+
+    if (lastTestPct && lastSub.max_score) {
+      const pct = Math.round((parseFloat(lastSub.score) / parseFloat(lastSub.max_score)) * 100);
+      lastTestPct.textContent = `(${pct}%)`;
+      lastTestPct.classList.remove("hidden");
+    }
+    if (lastTestFeedbackPrompt) {
+      lastTestFeedbackPrompt.innerHTML = "Feedback &rarr;";
+    }
+
     const rankNum = lastSub.submission_rank || 1;
     const ordinalRank = getOrdinalSuffix(rankNum);
     if (dashLastTestRank) {
@@ -1601,15 +1635,25 @@ function updateKpiMetrics() {
     lastTestCard.onclick = () => openScoreDetailsModal(lastSub);
   } else {
     dashLastTestTitle.textContent = "No Tests Submitted Yet";
-    dashLastTestScore.textContent = "0 / 0";
+    dashLastTestScore.textContent = "-- / --";
     dashLastTestDate.textContent = "Pending";
+    if (lastTestPct) lastTestPct.classList.add("hidden");
+    if (lastTestFeedbackPrompt) {
+      lastTestFeedbackPrompt.innerHTML = "Explore CATs &rarr;";
+    }
     if (dashLastTestRank) dashLastTestRank.classList.add("hidden");
     dashLastTestRemarks.textContent = "Take an available CAT below to record your first score.";
     lastTestCard.onclick = null;
   }
-  countAll.textContent = state.assessments.length;
+
+  // Update Hub Filter Counts strictly scoped to student's class
+  countAll.textContent = myClassAssessments.length;
   countAvailable.textContent = openCount;
-  countClosed.textContent = state.assessments.filter((a) => a.status === "CLOSED" || a.unlock_time && new Date(a.unlock_time) > /* @__PURE__ */ new Date()).length;
+  countClosed.textContent = myClassAssessments.filter((a) => {
+    const isScheduled = a.unlock_time && new Date(a.unlock_time) > /* @__PURE__ */ new Date();
+    const isExpired = a.deadline && new Date(a.deadline) < /* @__PURE__ */ new Date();
+    return a.status === "CLOSED" || isScheduled || isExpired;
+  }).length;
   countGraded.textContent = graded.length;
   renderAiMilestoneQuestBanner();
 }
@@ -1792,42 +1836,63 @@ function renderAssessmentCards() {
 
           ${countdownBox}
 
-          <!-- Details Grid -->
-          <div class="space-y-1 py-2 border-y border-slate-100 text-xs text-slate-600 mb-3">
-            <div class="flex justify-between">
-              <span class="text-slate-400">Duration:</span>
-              <span class="font-bold text-slate-800"><i class="fa-regular fa-clock text-indigo-500 mr-1"></i>${duration} mins</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-400">Class Track:</span>
-              <span class="font-semibold text-slate-700">${asmt.class_level || "Basic 9"}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-400">Term Weight:</span>
-              <span class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">${asmt.weight ? parseFloat(asmt.weight) : 20}%</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-slate-400">Max Score:</span>
-              <span class="font-semibold text-slate-700">${asmt.max_score} marks</span>
-            </div>
-            ${hasScore ? `
-              <div class="flex justify-between">
-                <span class="text-slate-400">Turned In:</span>
-                <span class="font-semibold text-slate-700">${formatDateTime(sub.submitted_at)}</span>
+          <!-- Metrics 2x2 Chip Grid (High-Density Mobile & Desktop) -->
+          <div class="grid grid-cols-2 gap-2 py-2.5 my-3 border-y border-slate-100 text-[11px]">
+            <div class="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50/80 border border-slate-100/90">
+              <div class="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <i class="fa-regular fa-clock text-[10px]"></i>
               </div>
-              <div class="flex justify-between items-center">
-                <span class="text-slate-400">Class Task Position:</span>
-                <span class="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                  <i class="fa-solid fa-list-ol text-amber-600"></i> ${cardOrdinal} of ${cardClassTotal} in ${learnerClass}
-                </span>
+              <div class="min-w-0">
+                <span class="text-[9.5px] uppercase font-bold text-slate-400 block leading-tight">Duration</span>
+                <span class="font-bold text-slate-800 text-[11px] truncate block">${duration} mins</span>
               </div>
-            ` : `
-              <div class="flex justify-between">
-                <span class="text-slate-400">Validity Deadline:</span>
-                <span class="font-semibold ${isExpired ? "text-rose-600 font-bold" : "text-slate-700"}">${formatDeadline(asmt.deadline)}</span>
+            </div>
+
+            <div class="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50/80 border border-slate-100/90">
+              <div class="w-6 h-6 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-bullseye text-[10px]"></i>
               </div>
-            `}
+              <div class="min-w-0">
+                <span class="text-[9.5px] uppercase font-bold text-slate-400 block leading-tight">Max Score</span>
+                <span class="font-bold text-slate-800 text-[11px] truncate block">${asmt.max_score} marks</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50/80 border border-slate-100/90">
+              <div class="w-6 h-6 rounded-md bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-scale-balanced text-[10px]"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="text-[9.5px] uppercase font-bold text-slate-400 block leading-tight">Weight</span>
+                <span class="font-bold text-purple-700 text-[11px] truncate block">${asmt.weight ? parseFloat(asmt.weight) : 20}%</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 p-1.5 rounded-lg bg-slate-50/80 border border-slate-100/90">
+              <div class="w-6 h-6 rounded-md ${isExpired ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'} flex items-center justify-center shrink-0">
+                <i class="fa-regular fa-calendar-check text-[10px]"></i>
+              </div>
+              <div class="min-w-0">
+                <span class="text-[9.5px] uppercase font-bold text-slate-400 block leading-tight">Deadline</span>
+                <span class="font-bold ${isExpired ? 'text-rose-600 font-extrabold' : 'text-slate-700'} text-[11px] truncate block">${formatDeadline(asmt.deadline)}</span>
+              </div>
+            </div>
           </div>
+
+          ${
+            hasScore
+              ? `
+            <div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50/80 border border-amber-200/80 mb-3 text-[11px]">
+              <span class="text-amber-800 font-medium flex items-center gap-1.5">
+                <i class="fa-solid fa-medal text-amber-500"></i> Class Position:
+              </span>
+              <span class="font-bold text-amber-900 bg-white px-2 py-0.5 rounded-md border border-amber-200 shadow-2xs">
+                ${cardOrdinal} of ${cardClassTotal} in ${learnerClass}
+              </span>
+            </div>
+          `
+              : ""
+          }
 
           ${hasScore ? `
               <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-emerald-800 mb-4">
@@ -10337,7 +10402,7 @@ function updateActiveTestBanner() {
         </span>
         <span class="font-medium text-slate-200 truncate cursor-pointer hover:text-white transition-colors" onclick="window.navigateToAssessment('${asmt.id}')" title="Click to view ${escapeHtml(asmt.title)}">
           <strong class="text-white">${escapeHtml(asmt.title)}</strong>
-          <span class="text-indigo-300 font-semibold">(${escapeHtml(asmt.class_level || "Basic 9")})</span>
+          ${(!asmt.title.toLowerCase().includes((asmt.class_level || "Basic 9").toLowerCase())) ? `<span class="text-indigo-300 font-semibold">(${escapeHtml(asmt.class_level || "Basic 9")})</span>` : ''}
           <span class="text-slate-300 hidden sm:inline">is now open for submission.</span>
         </span>
         <div class="inline-flex items-center gap-1.5 bg-slate-800 ${isExpired ? 'text-rose-400 border-rose-800/60' : 'text-amber-300 border-slate-700'} font-mono text-[11px] px-2.5 py-0.5 rounded-md border font-semibold shrink-0 cursor-pointer shadow-2xs" data-countdown-asmt="${asmt.id}" data-deadline="${escapeHtml(deadlineVal)}" onclick="window.navigateToAssessment('${asmt.id}')">
@@ -10361,7 +10426,7 @@ function updateActiveTestBanner() {
             <div class="active-test-marquee-item group" onclick="window.navigateToAssessment('${asmt.id}')" title="Click to view ${escapeHtml(asmt.title)}">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               <span class="font-bold text-slate-100 group-hover:text-indigo-300 transition-colors">${escapeHtml(asmt.title)}</span>
-              <span class="text-indigo-300 font-semibold text-[10.5px]">(${escapeHtml(asmt.class_level || "Basic 9")})</span>
+              ${(!asmt.title.toLowerCase().includes((asmt.class_level || "Basic 9").toLowerCase())) ? `<span class="text-indigo-300 font-semibold text-[10.5px]">(${escapeHtml(asmt.class_level || "Basic 9")})</span>` : ''}
               <span class="text-slate-300">is open</span>
               <span class="inline-flex items-center gap-1 bg-slate-800 ${isExpired ? 'text-rose-400 border-rose-800/60' : 'text-amber-300 border-slate-700'} font-mono text-[10.5px] px-2 py-0.5 rounded border font-semibold" data-countdown-asmt="${asmt.id}" data-deadline="${escapeHtml(deadlineVal)}">
                 <i class="fa-regular fa-clock ${isExpired ? 'text-rose-400' : 'text-amber-400'} text-[10px]"></i>
@@ -10442,9 +10507,13 @@ function rotateQuote() {
   }
 }
 function getClassTotalStudents(classLevel) {
-  if (!classLevel) return 45;
+  if (!classLevel) return 1;
   const trimmed = classLevel.trim();
-  return CLASS_REGISTRY_SIZES[trimmed] || 45;
+  if (state.allLearners && state.allLearners.length > 0) {
+    const realClassPeers = state.allLearners.filter((l) => (l.class_level || "Basic 9A").trim() === trimmed);
+    if (realClassPeers.length > 0) return realClassPeers.length;
+  }
+  return CLASS_REGISTRY_SIZES[trimmed] || 1;
 }
 function getOrdinalSuffix(i) {
   const j = i % 10;
