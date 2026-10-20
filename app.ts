@@ -172,6 +172,7 @@ const state = {
   // Admin & Communication State
   isAdmin: false,
   activeView: "learner", // 'learner' | 'admin'
+  asmtStreamFilter: "Basic 9A", // active stream filter for /admin/assessments weights & tests
   questionCatFilter: "ALL",
   questionTrackFilter: "ALL",
   questionSittingFilter: "",
@@ -498,6 +499,11 @@ const adminWeightStatusBadge2 = document.getElementById("adminWeightStatusBadge2
 const adminTotalWeightVal2 = document.getElementById("adminTotalWeightVal2");
 const adminWeightProgressBar2 = document.getElementById("adminWeightProgressBar2");
 const adminAsmtTableBody2 = document.getElementById("adminAsmtTableBody2");
+const adminAsmtStreamTabs = document.getElementById("adminAsmtStreamTabs");
+const adminAsmtStreamInfo = document.getElementById("adminAsmtStreamInfo");
+const adminAsmtStreamInfoText = document.getElementById("adminAsmtStreamInfoText");
+const adminStreamWeightLabel = document.getElementById("adminStreamWeightLabel");
+const adminAsmtCardsMobile = document.getElementById("adminAsmtCardsMobile");
 
 // Embedded Marking Scheme & Answer Keys Elements
 const printAnswerKeyBtn2 = document.getElementById("printAnswerKeyBtn2");
@@ -3856,6 +3862,11 @@ async function handleRoute() {
     if (path.includes("/admin/questions")) {
       showAdminSubview("questions");
     } else if (path.includes("/admin/assessments")) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const streamParam = urlParams.get("class") || urlParams.get("stream");
+      if (streamParam) {
+        state.asmtStreamFilter = streamParam;
+      }
       showAdminSubview("assessments");
     } else if (path.includes("/admin/marking-scheme")) {
       showAdminSubview("marking-scheme");
@@ -4806,9 +4817,85 @@ function attachQuestionsConfigHandlers() {
 function renderAdminAssessmentConfigTable2() {
   if (!adminAsmtTableBody2) return;
 
-  const asmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
-  const trackAsmts = asmts.filter((a) => a.class_level !== "Basic 9B");
-  const totalWeight = trackAsmts.reduce((sum, a) => sum + (parseFloat(a.weight) || 20), 0);
+  const allAsmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
+
+  // Dynamically discover all distinct class streams, guaranteeing default JHS streams exist
+  const distinctStreams = Array.from(
+    new Set(
+      allAsmts
+        .map((a) => (a.class_level || "").trim())
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const streamSet = new Set(["Basic 9A", "Basic 9B", ...distinctStreams]);
+  const availableStreams = Array.from(streamSet).sort();
+
+  // Validate or set current stream filter
+  if (!state.asmtStreamFilter || !availableStreams.some((s) => s.toLowerCase() === state.asmtStreamFilter.toLowerCase())) {
+    state.asmtStreamFilter = availableStreams[0] || "Basic 9A";
+  }
+  const activeStream = state.asmtStreamFilter;
+
+  // Render stream filter tabs
+  if (adminAsmtStreamTabs) {
+    adminAsmtStreamTabs.innerHTML = availableStreams
+      .map((streamName) => {
+        const isSelected = streamName.toLowerCase() === activeStream.toLowerCase();
+        const count = allAsmts.filter(
+          (a) => (a.class_level || "Basic 9A").trim().toLowerCase() === streamName.toLowerCase()
+        ).length;
+
+        return `
+          <button
+            type="button"
+            class="asmt-stream-tab-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer ${
+              isSelected
+                ? "bg-slate-900 text-white shadow-2xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-white/80"
+            }"
+            data-stream="${escapeHtml(streamName)}"
+          >
+            <i class="fa-solid fa-graduation-cap ${isSelected ? "text-indigo-400" : "text-slate-400"} text-[11px] pointer-events-none"></i>
+            <span class="pointer-events-none">${escapeHtml(streamName)}</span>
+            <span class="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] ${
+              isSelected ? "bg-slate-800 text-indigo-200 border border-slate-700" : "bg-slate-200/80 text-slate-600"
+            } font-mono pointer-events-none">${count}</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    adminAsmtStreamTabs.querySelectorAll<HTMLButtonElement>(".asmt-stream-tab-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const selected = btn.getAttribute("data-stream");
+        if (selected && selected !== state.asmtStreamFilter) {
+          state.asmtStreamFilter = selected;
+          const newUrl = `/admin/assessments?class=${encodeURIComponent(selected)}`;
+          window.history.replaceState({}, "", newUrl);
+          renderAdminAssessmentConfigTable2();
+        }
+      });
+    });
+  }
+
+  // Update isolated stream header labels
+  if (adminStreamWeightLabel) {
+    adminStreamWeightLabel.textContent = activeStream;
+  }
+  if (adminAsmtStreamInfoText) {
+    const streamCount = allAsmts.filter(
+      (a) => (a.class_level || "Basic 9A").trim().toLowerCase() === activeStream.toLowerCase()
+    ).length;
+    adminAsmtStreamInfoText.textContent = `Strictly tracking ${activeStream} (${streamCount} test${streamCount === 1 ? "" : "s"})`;
+  }
+
+  // Filter assessments solely for the active stream
+  const streamAsmts = allAsmts.filter(
+    (a) => (a.class_level || "Basic 9A").trim().toLowerCase() === activeStream.toLowerCase()
+  );
+
+  const totalWeight = streamAsmts.reduce((sum, a) => sum + (parseFloat(a.weight) || 0), 0);
 
   if (adminTotalWeightVal2) adminTotalWeightVal2.textContent = `${totalWeight.toFixed(2)}%`;
   if (adminWeightProgressBar2) {
@@ -4833,16 +4920,16 @@ function renderAdminAssessmentConfigTable2() {
 
   const mobileCardsContainer = document.getElementById("adminAsmtCardsMobile");
 
-  if (asmts.length === 0) {
-    adminAsmtTableBody2.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No assessments found.</td></tr>`;
+  if (streamAsmts.length === 0) {
+    adminAsmtTableBody2.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400">No assessments found for ${escapeHtml(activeStream)}.</td></tr>`;
     if (mobileCardsContainer) {
-      mobileCardsContainer.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">No assessments found.</div>`;
+      mobileCardsContainer.innerHTML = `<div class="p-8 text-center text-slate-400 bg-white rounded-2xl border border-slate-200">No assessments found for ${escapeHtml(activeStream)}.</div>`;
     }
     return;
   }
 
-  // Desktop Table Rows
-  adminAsmtTableBody2.innerHTML = asmts.map((asmt) => {
+  // Desktop Table Rows (Strictly active stream)
+  adminAsmtTableBody2.innerHTML = streamAsmts.map((asmt) => {
     const isActive = asmt.status === "AVAILABLE";
     const duration = asmt.time_limit_minutes || 15;
     const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
@@ -4852,7 +4939,7 @@ function renderAdminAssessmentConfigTable2() {
         <td class="py-3 px-3">
           <div class="font-bold text-slate-900">${escapeHtml(asmt.title)}</div>
           <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 whitespace-nowrap">${escapeHtml(asmt.class_level || "Basic 9A")}</span>
             <span class="text-[11px] text-slate-500 whitespace-nowrap">${escapeHtml(asmt.subject || "Computing")}</span>
           </div>
         </td>
@@ -4961,9 +5048,9 @@ function renderAdminAssessmentConfigTable2() {
     `;
   }).join("");
 
-  // Mobile Assessment Cards (Touch-Optimized for Handhelds)
+  // Mobile Assessment Cards (Strictly active stream)
   if (mobileCardsContainer) {
-    mobileCardsContainer.innerHTML = asmts.map((asmt) => {
+    mobileCardsContainer.innerHTML = streamAsmts.map((asmt) => {
       const isActive = asmt.status === "AVAILABLE";
       const duration = asmt.time_limit_minutes || 15;
       const dueDateStr = asmt.deadline || asmt.due_date ? formatDateOnly(asmt.deadline || asmt.due_date) : "Open-ended";
@@ -4975,7 +5062,7 @@ function renderAdminAssessmentConfigTable2() {
             <div class="min-w-0 flex-1">
               <div class="font-bold text-sm text-slate-900 leading-snug">${escapeHtml(asmt.title)}</div>
               <div class="flex flex-wrap items-center gap-1.5 mt-1">
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9")}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">${escapeHtml(asmt.class_level || "Basic 9A")}</span>
                 <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${escapeHtml(asmt.assessment_type || "CAT")}</span>
                 <span class="text-[11px] text-slate-400">• ${asmt.max_score || 20} Marks</span>
               </div>
@@ -5101,6 +5188,40 @@ function attachAdminAsmtTable2Handlers() {
   ].filter(Boolean);
 
   containers.forEach((container) => {
+    // Live update total weight when typing in weight inputs
+    container.querySelectorAll(".asmt-weight-input2").forEach((inp) => {
+      inp.addEventListener("input", () => {
+        let liveTotal = 0;
+        const rows = container.querySelectorAll("[data-asmt-row2]");
+        rows.forEach((r) => {
+          const wInp = r.querySelector(".asmt-weight-input2") as HTMLInputElement;
+          if (wInp) {
+            liveTotal += parseFloat(wInp.value) || 0;
+          }
+        });
+        if (adminTotalWeightVal2) adminTotalWeightVal2.textContent = `${liveTotal.toFixed(2)}%`;
+        if (adminWeightProgressBar2) {
+          const clamped = Math.min(100, Math.round(liveTotal));
+          adminWeightProgressBar2.style.width = `${clamped}%`;
+          adminWeightProgressBar2.className =
+            Math.round(liveTotal) === 100
+              ? "h-full bg-emerald-500 rounded-full transition-all duration-300"
+              : "h-full bg-amber-500 rounded-full transition-all duration-300";
+        }
+        if (adminWeightStatusBadge2) {
+          if (Math.round(liveTotal) === 100) {
+            adminWeightStatusBadge2.className =
+              "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300";
+            adminWeightStatusBadge2.innerHTML = `<i class="fa-solid fa-circle-check"></i> Balanced (100.00%)`;
+          } else {
+            adminWeightStatusBadge2.className =
+              "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300";
+            adminWeightStatusBadge2.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Calibrate (${liveTotal.toFixed(1)}% / 100%)`;
+          }
+        }
+      });
+    });
+
     // Save Duration
     container.querySelectorAll(".save-duration-btn2").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -5190,11 +5311,14 @@ function attachAdminAsmtTable2Handlers() {
 }
 
 async function autoBalanceAssessmentWeights2() {
-  const asmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
-  if (asmts.length === 0) return;
+  const allAsmts = (state.assessments || []).filter((a) => a.subject !== "Mathematics");
+  if (allAsmts.length === 0) return;
 
-  const trackAsmts = asmts.filter((a) => a.class_level !== "Basic 9B");
-  const count = trackAsmts.length;
+  const activeStream = (state.asmtStreamFilter || "Basic 9A").trim();
+  const streamAsmts = allAsmts.filter(
+    (a) => (a.class_level || "Basic 9A").trim().toLowerCase() === activeStream.toLowerCase()
+  );
+  const count = streamAsmts.length;
   if (count === 0) return;
 
   const baseWeight = Math.floor(100 / count);
@@ -5202,21 +5326,14 @@ async function autoBalanceAssessmentWeights2() {
 
   if (adminAutoBalanceBtn2) {
     adminAutoBalanceBtn2.disabled = true;
-    adminAutoBalanceBtn2.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Balancing...`;
+    adminAutoBalanceBtn2.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Balancing ${escapeHtml(activeStream)}...`;
   }
 
   for (let i = 0; i < count; i++) {
-    const asmt = trackAsmts[i];
+    const asmt = streamAsmts[i];
     const newWeight = i === 0 ? baseWeight + remainder : baseWeight;
     await updateAssessment(asmt.id, { weight: newWeight });
     asmt.weight = newWeight;
-
-    const baseTitle = asmt.title.replace(" (Basic 9A)", "").replace(" 9A", "");
-    const parallel9B = asmts.find((a) => a.class_level === "Basic 9B" && a.title.includes(baseTitle));
-    if (parallel9B) {
-      await updateAssessment(parallel9B.id, { weight: newWeight });
-      parallel9B.weight = newWeight;
-    }
   }
 
   renderAdminAssessmentConfigTable2();
@@ -13397,7 +13514,10 @@ function attachEventListeners() {
   // Admin Navigation Sub-Tabs Listeners
   adminTabOverview?.addEventListener("click", () => navigateTo("/admin"));
   adminTabQuestions?.addEventListener("click", () => navigateTo("/admin/questions"));
-  adminTabAssessments?.addEventListener("click", () => navigateTo("/admin/assessments"));
+  adminTabAssessments?.addEventListener("click", () => {
+    const stream = state.asmtStreamFilter || "Basic 9A";
+    navigateTo(`/admin/assessments?class=${encodeURIComponent(stream)}`);
+  });
   adminTabMarkingScheme?.addEventListener("click", () => navigateTo("/admin/marking-scheme"));
   adminTabBroadcast?.addEventListener("click", () => navigateTo("/admin/broadcast"));
   adminTabRecordings?.addEventListener("click", () => navigateTo("/admin/recordings"));

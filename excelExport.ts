@@ -135,6 +135,11 @@ export function calculateBroadsheetData(
       if (asmtId && processedAsmtIds.has(asmtId)) return;
       if (asmtId) processedAsmtIds.add(asmtId);
 
+      // Strictly isolate assessment scoring by class stream (e.g. 9A only for 9A, 9B only for 9B)
+      if (asmt?.class_level && learner.class_level && asmt.class_level.trim().toLowerCase() !== learner.class_level.trim().toLowerCase()) {
+        return;
+      }
+
       const asmtType = (asmt?.assessment_type || "").toUpperCase();
       const asmtTitle = (asmt?.title || "").toLowerCase();
       const score = Number(sub.score) || 0;
