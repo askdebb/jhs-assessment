@@ -54,6 +54,8 @@ export interface Assessment {
   status: "AVAILABLE" | "CLOSED";
   unlock_time?: string | null;
   deadline_time?: string | null;
+  deadline?: string | null;
+  due_date?: string | null;
   duration_minutes?: number;
   is_live_countdown?: boolean;
   pass_mark?: number;

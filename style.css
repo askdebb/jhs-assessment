@@ -679,3 +679,51 @@ html.google-signing-in #authLoaderSection {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* ========================================================================== */
+/* Active Test Announcement Bar & Continuous Marquee Ticker                   */
+/* ========================================================================== */
+@keyframes activeTestMarquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.active-test-marquee-container {
+  display: flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+.active-test-marquee-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  will-change: transform;
+  animation: activeTestMarquee 30s linear infinite;
+}
+
+.active-test-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.active-test-marquee-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.active-test-marquee-item:hover {
+  opacity: 0.9;
+}

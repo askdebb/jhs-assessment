@@ -43,26 +43,13 @@
   </head>
   <body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
 
-    <!-- Top Announcement Bar (Clean, Fixed-Width, Perfectly Aligned) -->
-    <div id="topAnnouncementBar" class="bg-slate-900 text-white text-[11px] sm:text-xs py-1.5 px-3 sm:px-4 border-b border-slate-800 z-50">
-      <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-            ACTIVE TEST
-          </span>
-          <span class="font-medium text-slate-200">
-            Computing CAT 1 for Basic 9 is now open for submission.
-          </span>
-          <div class="inline-flex items-center gap-1 bg-slate-800 text-amber-300 font-mono text-[11px] px-2 py-0.5 rounded-md border border-slate-700 font-semibold" id="bannerDeadline">
-            <i class="fa-regular fa-clock text-amber-400 text-xs"></i> Calculating countdown...
-          </div>
-        </div>
-        <div class="text-[11px] text-slate-400 hidden md:block">
-          Official NaCCA / GES Assessment Standards
-        </div>
+    <!-- Top Announcement Bar (Dynamic Active Test & Live Countdown Marquee) -->
+    <div id="topAnnouncementBar" class="hidden bg-slate-900 text-white text-[11px] sm:text-xs py-1.5 px-3 sm:px-4 border-b border-slate-800 z-50 transition-all duration-300">
+      <div id="topAnnouncementContent" class="max-w-7xl mx-auto flex items-center justify-between gap-3 overflow-hidden min-h-[24px]">
+        <!-- Rendered dynamically by updateActiveTestBanner() -->
       </div>
     </div>
+
 
     <!-- Main Navigation Bar -->
     <header id="mainHeader" class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-xs">
@@ -293,11 +280,11 @@
               </div>
             </div>
 
-            <!-- Single Google Sign In CTA Button (No Demo Buttons) -->
+            <!-- Single Google Sign In CTA Button -->
             <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mb-8">
               <button
                 id="googleSignInBtn"
-                class="w-full sm:w-auto min-w-[220px] inline-flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-white text-slate-800 border border-slate-300 shadow-xs hover:shadow-sm hover:bg-slate-50 transition-all cursor-pointer"
+                class="w-full sm:w-auto min-w-[220px] inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl text-xs sm:text-sm font-semibold bg-white text-slate-800 border border-slate-300 shadow-xs hover:shadow-sm hover:bg-slate-50 transition-all cursor-pointer"
               >
                 <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -305,21 +292,7 @@
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                 </svg>
-                <span>Continue with Google (Gmail)</span>
-              </button>
-            </div>
-
-            <!-- Quick Testing Profiles for Instant Evaluation -->
-            <div class="flex flex-wrap items-center justify-center gap-2 mb-8">
-              <span class="text-[11px] text-slate-400 font-medium">Quick Switch:</span>
-              <button id="quickLogin9ABtn" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition cursor-pointer flex items-center gap-1.5">
-                <i class="fa-solid fa-graduation-cap text-indigo-600"></i> Basic 9A Learner
-              </button>
-              <button id="quickLogin9BBtn" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition cursor-pointer flex items-center gap-1.5">
-                <i class="fa-solid fa-graduation-cap text-amber-600"></i> Basic 9B Learner
-              </button>
-              <button id="quickLoginAdminBtn" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200 transition cursor-pointer flex items-center gap-1.5">
-                <i class="fa-solid fa-shield-halved text-slate-600"></i> Admin Console
+                <span id="googleSignInBtnText">Sign in with Google</span>
               </button>
             </div>
 
@@ -1247,6 +1220,17 @@
                 >
                   <i class="fa-solid fa-file-excel text-xs"></i>
                   <span id="adminExportExcelBtnText">Download Excel</span>
+                </button>
+
+                <!-- Purge Cooked / Test Data Button -->
+                <button
+                  id="adminPurgeTestDataBtn"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 shadow-2xs transition-all cursor-pointer"
+                  title="Purge all cooked mock data, demo students, and test submissions to start clean testing with real users"
+                >
+                  <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
+                  <span id="adminPurgeTestDataBtnText">Clear All Test Data</span>
                 </button>
               </div>
             </div>

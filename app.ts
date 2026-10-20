@@ -37,6 +37,7 @@ import {
   calculateAge,
   isBirthdayToday,
   clearAllMockData,
+  purgeAllTestDataFromDatabase,
   isMockDataCleared,
   restoreMockData,
   onAuthChange,
@@ -320,6 +321,7 @@ const adminExportExcelBtnText = document.getElementById("adminExportExcelBtnText
 const adminTopExportExcelBtn = document.getElementById("adminTopExportExcelBtn");
 const adminEnrollStudentBtn = document.getElementById("adminEnrollStudentBtn");
 const adminRecordMarksBtn = document.getElementById("adminRecordMarksBtn");
+const adminPurgeTestDataBtn = document.getElementById("adminPurgeTestDataBtn");
 
 // Enroll Student Modal Elements
 const enrollStudentModal = document.getElementById("enrollStudentModal");
@@ -890,6 +892,7 @@ async function startApplication() {
 (window as any).showAuthLoaderSigningIn = showAuthLoaderSigningIn;
 (window as any).showAuthLoaderSuccess = showAuthLoaderSuccess;
 (window as any).hideAuthLoader = hideAuthLoader;
+(window as any).handleClearMockData = handleClearMockData;
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => startApplication());
@@ -1112,7 +1115,7 @@ function showOAuthErrorBanner(error, code, description) {
 
 function renderAuthLanding() {
   hideAuthLoader();
-  document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+  updateActiveTestBanner();
   document.getElementById("mainHeader")?.classList.remove("hidden");
   document.getElementById("mainFooter")?.classList.remove("hidden");
 
@@ -1181,7 +1184,7 @@ async function handleGoogleSignIn() {
           <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
           <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
         </svg>
-        <span>Continue with Google (Gmail)</span>
+        <span id="googleSignInBtnText">Sign in with Google</span>
       `;
     }
     if (gatekeeperBtn) {
@@ -2015,6 +2018,7 @@ function renderAiMilestoneQuestBanner() {
 // Assessment Grid & Filter Rendering
 // ------------------------------------------------------------------------------
 function renderAssessmentCards() {
+  updateActiveTestBanner();
   const { assessments, submissions, filterStatus, filterSubject } = state;
   const learnerClass = state.profile?.class_level || "Basic 9A";
 
@@ -3494,7 +3498,7 @@ async function handleRoute() {
     }
 
     // Authorized Admin
-    document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+    updateActiveTestBanner();
     document.getElementById("mainHeader")?.classList.remove("hidden");
     document.getElementById("mainFooter")?.classList.remove("hidden");
 
@@ -3561,7 +3565,7 @@ async function handleRoute() {
     return;
   }
 
-  document.getElementById("topAnnouncementBar")?.classList.remove("hidden");
+  updateActiveTestBanner();
   document.getElementById("mainHeader")?.classList.remove("hidden");
   document.getElementById("mainFooter")?.classList.remove("hidden");
 
@@ -4860,9 +4864,7 @@ async function notifyAssessmentActivated(asmtId: string) {
   }
 
   // 2. Identify target learners for email dispatch
-  const learners = (state.allLearners && state.allLearners.length > 0)
-    ? state.allLearners
-    : (window as any).getFallbackAllLearners ? (window as any).getFallbackAllLearners() : [];
+  const learners = state.allLearners || [];
 
   const targetLearners = learners.filter((l: any) => {
     if (targetClass !== "ALL" && l.class_level && l.class_level !== targetClass) return false;
@@ -6626,41 +6628,53 @@ async function handleExcelExport() {
 }
 
 // ------------------------------------------------------------------------------
-// Clear Mock Data & Start Testing Live Data Handler
+// Clear Cooked / Mock Data & Start Pure Real User Testing Handler
 // ------------------------------------------------------------------------------
 async function handleClearMockData() {
   const confirmed = confirm(
-    "CLEAR MOCK DATA CONFIRMATION:\n\nAre you sure you want to clear all mock demonstration data and browser storage?\n\nThis will remove demo students, mock submissions, and fallback sessions so the portal loads and records pure live data from your Supabase backend."
+    "PURGE ALL TEST & COOKED DATA:\n\nAre you sure you want to permanently clear all fake students, cooked submissions, test chat logs, and browser demo storage?\n\nThis will purge all mock data from your Supabase database and local storage so the portal is 100% clean for testing real users."
   );
   if (!confirmed) return;
 
-  clearAllMockData();
-  state.user = null;
-  state.profile = null;
-  state.allLearners = [];
-  state.submissions = [];
-  state.assessments = [];
-
-  if (adminLearnersTableBody) {
-    adminLearnersTableBody.innerHTML = `
-      <tr>
-        <td colspan="5" class="py-12 text-center text-slate-400">
-          <i class="fa-solid fa-circle-notch fa-spin text-2xl mb-2 text-indigo-500 block"></i>
-          <span class="font-bold text-slate-700">Connecting to live Supabase database...</span>
-        </td>
-      </tr>
-    `;
+  const btn = adminPurgeTestDataBtn as HTMLButtonElement | null;
+  const originalHtml = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-xs"></i> Purging Data...`;
   }
 
-  await checkAuthSession();
+  try {
+    // 1. Purge Supabase backend tables and clear local storage keys
+    await purgeAllTestDataFromDatabase();
+    clearAllMockData();
 
-  if (state.activeView === "admin") {
+    state.allLearners = [];
+    state.submissions = [];
+    state.notifications = [];
+    state.readNotificationIds.clear();
+
+    // 2. Fetch fresh real learners (pure empty database state)
     state.allLearners = await fetchAllLearners();
+    state.submissions = await fetchAllSubmissions();
+    state.notifications = await fetchNotifications();
+
     renderAdminLearnersTable();
     renderAdminOverviewStats();
-  }
+    updateKpiMetrics();
+    renderNotifications();
 
-  alert("Mock data cleared successfully!\n\nThe portal is now testing with pure live data from your Supabase database.");
+    alert(
+      "All test and cooked data successfully cleared!\n\n• Fake learners and test scores removed\n• Submissions table cleaned\n• Chat messages & recordings purged\n• Notifications & read alerts wiped\n• Local demo cache wiped\n\nThe portal is now 100% clean and ready for real users."
+    );
+  } catch (err: any) {
+    console.error("Purge error:", err);
+    alert("Could not complete full purge: " + (err?.message || "Unknown error"));
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml || `<i class="fa-solid fa-trash-can text-xs text-rose-600"></i> <span>Clear All Test Data</span>`;
+    }
+  }
 }
 
 // ------------------------------------------------------------------------------
@@ -12149,31 +12163,192 @@ function handleSaveConfig() {
 }
 
 // ------------------------------------------------------------------------------
-// Helpers, Timers & Quotes
+// Active Test Announcement Bar & Real-time Dynamic Countdown Marquee
 // ------------------------------------------------------------------------------
-function initCountdownTimer() {
-  function updateCountdown() {
-    const deadline = new Date(Date.now() + 4 * 86400000 + 5 * 3600000);
-    const now = new Date();
-    const diff = deadline - now;
+function calculateRemainingTime(deadlineVal: string | null | undefined): string {
+  if (!deadlineVal) return "Open (No deadline)";
+  const deadlineMs = new Date(deadlineVal).getTime();
+  if (isNaN(deadlineMs)) return "Open (No deadline)";
+  const diff = deadlineMs - Date.now();
 
-    if (diff <= 0) {
-      if (bannerDeadline) bannerDeadline.textContent = "EXPIRED";
-      return;
+  if (diff <= 0) {
+    return "EXPIRED";
+  }
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m ${seconds}s left`;
+  }
+  return `${hours}h ${minutes}m ${seconds}s left`;
+}
+
+function tickActiveTestCountdowns() {
+  const countdownEls = document.querySelectorAll("[data-countdown-asmt]");
+  if (countdownEls.length === 0) return;
+
+  countdownEls.forEach((el) => {
+    const deadlineVal = el.getAttribute("data-deadline");
+    const textEl = el.querySelector(".countdown-text") || el;
+    const timeStr = calculateRemainingTime(deadlineVal);
+    if (textEl.textContent !== timeStr) {
+      textEl.textContent = timeStr;
     }
+    if (timeStr === "EXPIRED") {
+      el.classList.add("text-rose-400", "border-rose-800/60");
+      el.classList.remove("text-amber-300", "border-slate-700");
+    } else {
+      el.classList.remove("text-rose-400", "border-rose-800/60");
+      el.classList.add("text-amber-300", "border-slate-700");
+    }
+  });
+}
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+function updateActiveTestBanner() {
+  const bar = document.getElementById("topAnnouncementBar");
+  const content = document.getElementById("topAnnouncementContent");
+  if (!bar || !content) return;
 
-    if (bannerDeadline) {
-      bannerDeadline.innerHTML = `<i class="fa-regular fa-clock text-amber-400"></i> ${days}d ${hours}h ${minutes}m ${seconds}s left`;
+  // If in admin view and unauthorized gatekeeper is active, keep hidden
+  if (state.activeView === "admin") {
+    const isAuthorizedAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    if (!isAuthorizedAdmin) {
+      bar.classList.add("hidden");
+      content.innerHTML = "";
+      return;
     }
   }
 
-  updateCountdown();
-  state.countdownInterval = setInterval(updateCountdown, 1000);
+  // Active tests have status AVAILABLE and are already unlocked
+  const allAsmts = state.assessments || [];
+  const activeTests = allAsmts.filter((a) => {
+    if (a.status !== "AVAILABLE") return false;
+    if (a.unlock_time && new Date(a.unlock_time).getTime() > Date.now()) return false;
+    return true;
+  });
+
+  // When 0 tests are active, hide the top bar completely
+  if (activeTests.length === 0) {
+    bar.classList.add("hidden");
+    content.innerHTML = "";
+    return;
+  }
+
+  // Make banner visible
+  bar.classList.remove("hidden");
+
+  // CASE 1: Exactly ONE test active
+  if (activeTests.length === 1) {
+    const asmt = activeTests[0];
+    const deadlineVal = asmt.deadline || asmt.due_date || "";
+    const remainingText = calculateRemainingTime(deadlineVal);
+    const isExpired = remainingText === "EXPIRED";
+
+    content.innerHTML = `
+      <div class="flex items-center gap-2 sm:gap-2.5 flex-wrap min-w-0 flex-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          ACTIVE TEST
+        </span>
+        <span class="font-medium text-slate-200 truncate cursor-pointer hover:text-white transition-colors" onclick="window.navigateToAssessment('${asmt.id}')" title="Click to view ${escapeHtml(asmt.title)}">
+          <strong class="text-white">${escapeHtml(asmt.title)}</strong>
+          <span class="text-indigo-300 font-semibold">(${escapeHtml(asmt.class_level || "Basic 9")})</span>
+          <span class="text-slate-300 hidden sm:inline">is now open for submission.</span>
+        </span>
+        <div class="inline-flex items-center gap-1.5 bg-slate-800 ${isExpired ? 'text-rose-400 border-rose-800/60' : 'text-amber-300 border-slate-700'} font-mono text-[11px] px-2.5 py-0.5 rounded-md border font-semibold shrink-0 cursor-pointer shadow-2xs" data-countdown-asmt="${asmt.id}" data-deadline="${escapeHtml(deadlineVal)}" onclick="window.navigateToAssessment('${asmt.id}')">
+          <i class="fa-regular fa-clock ${isExpired ? 'text-rose-400' : 'text-amber-400'} text-xs"></i>
+          <span class="countdown-text">${remainingText}</span>
+        </div>
+      </div>
+      <div class="text-[11px] text-slate-400 hidden md:flex items-center gap-1.5 shrink-0">
+        <i class="fa-solid fa-certificate text-emerald-400 text-xs"></i>
+        <span>Official NaCCA / GES Assessment Standards</span>
+      </div>
+    `;
+  } else {
+    // CASE 2: MORE THAN ONE test active -> Continuous Smooth Marquee in exact order with countdowns
+    const renderItemsHtml = (tests: any[]) =>
+      tests
+        .map((asmt) => {
+          const deadlineVal = asmt.deadline || asmt.due_date || "";
+          const remainingText = calculateRemainingTime(deadlineVal);
+          const isExpired = remainingText === "EXPIRED";
+          return `
+            <div class="active-test-marquee-item group" onclick="window.navigateToAssessment('${asmt.id}')" title="Click to view ${escapeHtml(asmt.title)}">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="font-bold text-slate-100 group-hover:text-indigo-300 transition-colors">${escapeHtml(asmt.title)}</span>
+              <span class="text-indigo-300 font-semibold text-[10.5px]">(${escapeHtml(asmt.class_level || "Basic 9")})</span>
+              <span class="text-slate-300">is open</span>
+              <span class="inline-flex items-center gap-1 bg-slate-800 ${isExpired ? 'text-rose-400 border-rose-800/60' : 'text-amber-300 border-slate-700'} font-mono text-[10.5px] px-2 py-0.5 rounded border font-semibold" data-countdown-asmt="${asmt.id}" data-deadline="${escapeHtml(deadlineVal)}">
+                <i class="fa-regular fa-clock ${isExpired ? 'text-rose-400' : 'text-amber-400'} text-[10px]"></i>
+                <span class="countdown-text">${remainingText}</span>
+              </span>
+              <span class="text-slate-600 font-bold ml-2">✦</span>
+            </div>
+          `;
+        })
+        .join("");
+
+    const singleCycleHtml = renderItemsHtml(activeTests);
+    const scrollSpeedSeconds = Math.max(22, activeTests.length * 11);
+
+    content.innerHTML = `
+      <div class="flex items-center gap-2 shrink-0 z-10 bg-slate-900 pr-2">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          ACTIVE TESTS (${activeTests.length})
+        </span>
+      </div>
+      <div class="active-test-marquee-container flex-1">
+        <div class="active-test-marquee-track" style="animation-duration: ${scrollSpeedSeconds}s">
+          ${singleCycleHtml}
+          ${singleCycleHtml}
+        </div>
+      </div>
+      <div class="text-[11px] text-slate-400 hidden lg:flex items-center gap-1.5 shrink-0 z-10 bg-slate-900 pl-2">
+        <i class="fa-solid fa-certificate text-emerald-400 text-xs"></i>
+        <span>Official NaCCA / GES Assessment Standards</span>
+      </div>
+    `;
+  }
+
+  tickActiveTestCountdowns();
+}
+
+(window as any).navigateToAssessment = (asmtId: string) => {
+  if (state.activeView === "admin") {
+    showAdminSubview("assessments");
+    const row = document.querySelector(`[data-asmt-id="${asmtId}"]`);
+    if (row) {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("bg-indigo-50/50");
+      setTimeout(() => row.classList.remove("bg-indigo-50/50"), 2000);
+    }
+  } else {
+    const cardBtn = document.querySelector(`.start-quiz-btn[data-asmt-id="${asmtId}"]`) as HTMLElement;
+    if (cardBtn) {
+      cardBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+      cardBtn.classList.add("ring-4", "ring-indigo-400");
+      setTimeout(() => cardBtn.classList.remove("ring-4", "ring-indigo-400"), 2000);
+    } else {
+      const grid = document.getElementById("assessmentGrid");
+      grid?.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+};
+(window as any).updateActiveTestBanner = updateActiveTestBanner;
+
+function initCountdownTimer() {
+  if (state.countdownInterval) {
+    clearInterval(state.countdownInterval);
+  }
+  updateActiveTestBanner();
+  state.countdownInterval = setInterval(() => {
+    tickActiveTestCountdowns();
+  }, 1000);
 }
 
 function initQuotes() {
@@ -12258,11 +12433,6 @@ function attachEventListeners() {
   // Sign In / Out
   googleSignInBtn?.addEventListener("click", handleGoogleSignIn);
   headerSignInBtn?.addEventListener("click", handleGoogleSignIn);
-  demoModeBtn?.addEventListener("click", startDemoMode);
-  demoAdminBtn?.addEventListener("click", startAdminDemoMode);
-  document.getElementById("quickLogin9ABtn")?.addEventListener("click", startDemoMode);
-  document.getElementById("quickLogin9BBtn")?.addEventListener("click", startDemoMode9B);
-  document.getElementById("quickLoginAdminBtn")?.addEventListener("click", startAdminDemoMode);
   signOutBtn?.addEventListener("click", handleSignOut);
 
   // Auth Error Banner Actions
@@ -12450,6 +12620,7 @@ function attachEventListeners() {
   });
   adminExportExcelBtn?.addEventListener("click", handleExcelExport);
   adminTopExportExcelBtn?.addEventListener("click", handleExcelExport);
+  adminPurgeTestDataBtn?.addEventListener("click", handleClearMockData);
 
   // Floating Chat Widget Handlers
   openChatBtn?.addEventListener("click", () => toggleChatWindow());

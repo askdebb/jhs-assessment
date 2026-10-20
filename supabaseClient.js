@@ -234,6 +234,7 @@ export function clearAllMockData() {
   localStorage.removeItem("jhs_local_submissions");
   localStorage.removeItem("jhs_local_chats");
   localStorage.removeItem("jhs_local_notifications");
+  localStorage.removeItem("jhs_read_notifications");
   localStorage.removeItem("jhs_all_learners");
   localStorage.removeItem("jhs_view_mode");
   localStorage.setItem("jhs_clear_mock_data", "true");
@@ -241,6 +242,54 @@ export function clearAllMockData() {
 
 export function restoreMockData() {
   localStorage.removeItem("jhs_clear_mock_data");
+}
+
+export async function purgeAllTestDataFromDatabase() {
+  const supabase = getAdminSupabase() || getSupabase();
+  const results = {
+    submissionsPurged: false,
+    chatsPurged: false,
+    recordingsPurged: false,
+    notificationsPurged: false,
+    learnersPurged: false,
+  };
+
+  if (supabase) {
+    try {
+      await supabase.from("submissions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      results.submissionsPurged = true;
+    } catch (e) {
+      console.warn("Purge submissions error:", e);
+    }
+    try {
+      await supabase.from("chat_messages").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      results.chatsPurged = true;
+    } catch (e) {
+      console.warn("Purge chats error:", e);
+    }
+    try {
+      await supabase.from("call_recordings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      results.recordingsPurged = true;
+    } catch (e) {
+      console.warn("Purge recordings error:", e);
+    }
+    try {
+      await supabase.from("notification_reads").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      results.notificationsPurged = true;
+    } catch (e) {
+      console.warn("Purge notifications error:", e);
+    }
+    try {
+      await supabase.from("learners").delete().eq("role", "learner");
+      results.learnersPurged = true;
+    } catch (e) {
+      console.warn("Purge learners error:", e);
+    }
+  }
+
+  clearAllMockData();
+  return results;
 }
 
 // -------------------------------------------------------------
@@ -259,12 +308,11 @@ export async function fetchAllLearners() {
 
   if (error) {
     console.warn("Supabase fetchAllLearners error:", error);
-    return localStorage.getItem("jhs_demo_session") ? getFallbackAllLearners() : [];
+    return [];
   }
 
-  const learners = (data && data.length > 0)
-    ? data
-    : (localStorage.getItem("jhs_demo_session") ? getFallbackAllLearners() : []);
+  // Pure real database records only; never fallback to cooked fake students
+  const learners = (data && data.length > 0) ? data : [];
   const now = Date.now();
 
   // Auto-reconcile stale online status (e.g. closed browser without clean beforeunload)
@@ -1070,8 +1118,25 @@ export async function deleteAssessment(asmtId) {
 
 // -------------------------------------------------------------
 // In-App Notifications API
-// -------------------------------------------------------------
 export async function fetchNotifications(classLevel = "ALL") {
+  if (isMockDataCleared()) {
+    const supabase = getSupabase();
+    if (!supabase) return [];
+    let query = supabase
+      .from("notifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (classLevel && classLevel !== "ALL") {
+      query = query.or(`target_class.eq.ALL,target_class.eq.${classLevel}`);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data;
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
     return getFallbackNotifications();
@@ -1088,7 +1153,7 @@ export async function fetchNotifications(classLevel = "ALL") {
   }
 
   const { data, error } = await query;
-  if (error || !data || data.length === 0) {
+  if (error || !data) {
     return getFallbackNotifications();
   }
   return data;
@@ -1694,6 +1759,7 @@ export function getFallbackAssessments() {
   }
 
   // Pure Computing Ghanaian Curriculum Assessments - 4 Official CATs
+  // Default to CLOSED so they only become active and countdown when activated by administrator!
   return [
     {
       id: "asmt-001",
@@ -1704,7 +1770,7 @@ export function getFallbackAssessments() {
       description: "Continuous Assessment Test 1 covering Trends in Computing, Perceptual & Quantum Computing.",
       max_score: 20,
       weight: 50.00,
-      status: "AVAILABLE",
+      status: "CLOSED",
       unlock_time: null,
       deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
       time_limit_minutes: 15,
@@ -1719,7 +1785,7 @@ export function getFallbackAssessments() {
       description: "Continuous Assessment Test 1 covering Artificial Intelligence & Quantum Architecture.",
       max_score: 20,
       weight: 50.00,
-      status: "AVAILABLE",
+      status: "CLOSED",
       unlock_time: null,
       deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
       time_limit_minutes: 15,
@@ -1734,7 +1800,7 @@ export function getFallbackAssessments() {
       description: "Continuous Assessment Test 2 covering Cloud Computing, Storage & Quantum Processors.",
       max_score: 20,
       weight: 50.00,
-      status: "AVAILABLE",
+      status: "CLOSED",
       unlock_time: null,
       deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
       time_limit_minutes: 15,
@@ -1749,7 +1815,7 @@ export function getFallbackAssessments() {
       description: "Continuous Assessment Test 2 covering Network Storage, Virtual Cloud & Cyber Ergonomics.",
       max_score: 20,
       weight: 50.00,
-      status: "AVAILABLE",
+      status: "CLOSED",
       unlock_time: null,
       deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
       time_limit_minutes: 15,
@@ -1759,131 +1825,40 @@ export function getFallbackAssessments() {
 }
 
 export function getFallbackSubmissions() {
-  const local = localStorage.getItem("jhs_local_submissions");
-  if (local) {
-    try {
-      const parsed = JSON.parse(local);
-      // Strictly purge any non-Computing submissions (Creative Arts / Math)
-      const filtered = parsed.filter(s => (s.assessments?.subject === "Computing" || !s.assessments?.subject) && !s.assessments?.title?.toLowerCase().includes("math") && !s.assessments?.title?.toLowerCase().includes("creative") && !s.assessments?.title?.toLowerCase().includes("art"));
-      if (filtered.length !== parsed.length) {
-        localStorage.setItem("jhs_local_submissions", JSON.stringify(filtered));
-      }
-      if (filtered.length > 0) return filtered;
-    } catch (e) {}
-  }
-  return [
-    {
-      id: "sub-001",
-      assessment_id: "asmt-005",
-      learner_id: "demo-user-12345",
-      score: 18.5,
-      max_score: 20,
-      correct_count: 9,
-      incorrect_count: 1,
-      status: "GRADED",
-      submission_rank: 7,
-      submitted_at: "2026-10-11T09:42:18Z",
-      teacher_remarks: "Excellent grasp of control structures and flowchart conventions. Keep up the high standard!",
-      assessments: {
-        id: "asmt-005",
-        title: "Computing CAT 2: Algorithms & Scratch",
-        subject: "Computing",
-        class_level: "Basic 9",
-        assessment_type: "CAT",
-        max_score: 20,
-        weight: 20.00,
-      },
-    },
-    /*
-    // [MATHEMATICS SUBMISSION EXCLUDED]
-    {
-      id: "sub-002",
-      assessment_id: "asmt-006",
-      score: 36,
-      assessments: { subject: "Mathematics" }
+  if (isMockDataCleared()) {
+    const local = localStorage.getItem("jhs_local_submissions");
+    if (local) {
+      try {
+        const parsed = JSON.parse(local);
+        return parsed || [];
+      } catch (e) {}
     }
-    */
-  ];
+    return [];
+  }
+  return [];
 }
 
+
 export function getFallbackNotifications() {
+  if (isMockDataCleared()) {
+    return [];
+  }
   const local = localStorage.getItem("jhs_local_notifications");
   if (local) {
     try { return JSON.parse(local); } catch (e) {}
   }
-  return [
-    {
-      id: "note-01",
-      title: "Computing CAT 1 Reminder",
-      message: "Continuous Assessment (CAT 1) for Basic 9 is now live. Please submit your answers before Friday 5:00 PM.",
-      target_class: "ALL",
-      type: "DEADLINE",
-      sender_name: "Head of Computing Department",
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    },
-    {
-      id: "note-02",
-      title: "Project Work Flowchart Rubrics",
-      message: "Please remember to test all Scratch loops and conditional branches before uploading your project submission link.",
-      target_class: "Basic 9A",
-      type: "ANNOUNCEMENT",
-      sender_name: "Master Debrah (Admin)",
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-    },
-    {
-      id: "note-03",
-      title: "Inter-School Computing & Robotics Challenge Prep",
-      message: "Extra prep sessions for selected contestants will hold on Thursday at the computer laboratory.",
-      target_class: "ALL",
-      type: "GENERAL",
-      sender_name: "Computing Academic Board",
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-    },
-  ];
+  return [];
 }
 
 export function getFallbackChatMessages() {
+  if (isMockDataCleared()) {
+    return [];
+  }
   const local = localStorage.getItem("jhs_local_chats");
   if (local) {
     try { return JSON.parse(local); } catch (e) {}
   }
-  return [
-    {
-      id: "msg-01",
-      sender_name: "Master Debrah (Admin)",
-      sender_role: "admin",
-      message: "Hello Kwame! Did you review the feedback on your Computing CAT 2 algorithm submission?",
-      media_type: "text",
-      read: true,
-      read_at: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
-      created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    },
-    {
-      id: "msg-02",
-      sender_name: "Kwame Mensah Frimpong",
-      sender_role: "learner",
-      message: "Yes sir, I saw the 18.5/20! Here is the updated flowchart logic for the loop assignment.",
-      media_type: "image",
-      media_url: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=600&q=80",
-      media_name: "Basic9A_Algorithm_Flowchart.png",
-      read: true,
-      read_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-      created_at: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    },
-    {
-      id: "msg-03",
-      sender_name: "Master Debrah (Admin)",
-      sender_role: "admin",
-      message: "Excellent diagram Kwame! Listen to this brief voice note on optimizing step 4.",
-      media_type: "audio",
-      media_url: "https://cdn.freesound.org/previews/263/263133_2064400-lq.mp3",
-      media_name: "Teacher_Audio_Feedback.mp3",
-      audio_duration: "0:06",
-      read: true,
-      read_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-      created_at: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-    },
-  ];
+  return [];
 }
 
 /**
@@ -1964,6 +1939,7 @@ export async function getNextStudentSequence(classLevel) {
 }
 
 export function getFallbackAllLearners() {
+  if (isMockDataCleared()) return [];
   const avatars = [
     "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
     "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
