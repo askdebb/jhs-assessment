@@ -201,11 +201,28 @@ export async function updateLearnerProfile(profileData) {
 
   const supabase = getSupabase();
   try {
-    const { data, error } = await supabase
+    let payload = { ...profileData };
+    let { data, error } = await supabase
       .from("learners")
-      .upsert(profileData, { onConflict: "id" })
+      .upsert(payload, { onConflict: "id" })
       .select()
       .single();
+
+    // If there is a student_id collision (Postgres code 23505), re-calculate safe sequence and retry
+    if (error && (error.code === "23505" || String(error.message || "").includes("student_id"))) {
+      console.warn("Student ID collision detected on profile save. Generating next sequence...", error);
+      const freshSeq = await getNextStudentSequence(payload.class_level || "Basic 9A");
+      payload.student_id = generateStudentId(payload.class_level || "Basic 9A", freshSeq);
+      const retryRes = await supabase
+        .from("learners")
+        .upsert(payload, { onConflict: "id" })
+        .select()
+        .single();
+      if (!retryRes.error && retryRes.data) {
+        data = retryRes.data;
+        error = null;
+      }
+    }
 
     if (error) {
       console.warn("Supabase upsert failed, saving locally:", error);
@@ -577,10 +594,12 @@ export async function enrollLearner(learnerData) {
   // Allow DB trigger on auth.users to execute
   await new Promise((r) => setTimeout(r, 200));
 
+  const targetClass = learnerData.class_level || "Basic 9A";
+  const studentSeq = learnerData.student_id ? 1 : await getNextStudentSequence(targetClass);
   const profilePayload = {
     id: userId,
     full_name: fullName,
-    student_id: learnerData.student_id || generateStudentId(learnerData.class_level || "Basic 9A", 1),
+    student_id: learnerData.student_id || generateStudentId(targetClass, studentSeq),
     email: email,
     gender: learnerData.gender || "Male",
     class_level: learnerData.class_level || "Basic 9A",
@@ -1960,14 +1979,24 @@ export async function getNextStudentSequence(classLevel) {
   }
 
   try {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from("learners")
-      .select("id", { count: "exact", head: true })
-      .eq("class_level", classLevel)
-      .eq("role", "learner");
+      .select("student_id")
+      .eq("class_level", classLevel);
 
-    if (error || count == null) return 1;
-    return count + 1;
+    if (error || !data || data.length === 0) return 1;
+
+    let maxSeq = 0;
+    data.forEach((row) => {
+      if (row.student_id) {
+        const parts = String(row.student_id).split("-");
+        const num = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    });
+    return maxSeq + 1;
   } catch (err) {
     return 1;
   }
