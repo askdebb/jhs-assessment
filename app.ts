@@ -249,18 +249,72 @@ const notifCountUnread = document.getElementById("notifCountUnread");
 
 // Onboarding Modal Elements
 const onboardingModal = document.getElementById("onboardingModal");
+const onboardingModalDialog = document.getElementById("onboardingModalDialog");
+const onboardingModalTitle = document.getElementById("onboardingModalTitle");
+const onboardingModalSubtitle = document.getElementById("onboardingModalSubtitle");
+const onboardingMandatoryNotice = document.getElementById("onboardingMandatoryNotice");
 const onboardingForm = document.getElementById("onboardingForm");
-const regFullName = document.getElementById("regFullName");
-const regDob = document.getElementById("regDob");
+const regFullName = document.getElementById("regFullName") as HTMLInputElement;
+const regDob = document.getElementById("regDob") as HTMLInputElement;
 const regDobLockIcon = document.getElementById("regDobLockIcon");
-const regGender = document.getElementById("regGender");
-const regClass = document.getElementById("regClass");
-const onboardAvatarPreview = document.getElementById("onboardAvatarPreview");
-const selectedAvatarUrl = document.getElementById("selectedAvatarUrl");
+const regGender = document.getElementById("regGender") as HTMLSelectElement;
+const regClass = document.getElementById("regClass") as HTMLSelectElement;
+const onboardAvatarPreview = document.getElementById("onboardAvatarPreview") as HTMLImageElement;
+const selectedAvatarUrl = document.getElementById("selectedAvatarUrl") as HTMLInputElement;
 const avatarPresetsContainer = document.getElementById("avatarPresets");
-const regAvatarFile = document.getElementById("regAvatarFile");
+const regAvatarFile = document.getElementById("regAvatarFile") as HTMLInputElement;
 const customAvatarIndicator = document.getElementById("customAvatarIndicator");
 const closeOnboardingModalBtn = document.getElementById("closeOnboardingModalBtn");
+
+// Mandatory DOB Notice Elements
+const missingDobNoticeBanner = document.getElementById("missingDobNoticeBanner");
+const bannerEditProfileDobBtn = document.getElementById("bannerEditProfileDobBtn");
+const dashboardDobBlockerNotice = document.getElementById("dashboardDobBlockerNotice");
+const dashboardSetDobBtn = document.getElementById("dashboardSetDobBtn");
+
+function hasRegisteredDob(profile: any): boolean {
+  if (!profile) return false;
+  return Boolean(profile.date_of_birth && String(profile.date_of_birth).trim() !== "");
+}
+
+function isProfileComplete(profile: any): boolean {
+  if (!profile) return false;
+  const hasDob = hasRegisteredDob(profile);
+  const hasClass = Boolean(profile.class_level && String(profile.class_level).trim() !== "");
+  const hasGender = Boolean(profile.gender && String(profile.gender).trim() !== "");
+  const hasName = Boolean(profile.full_name && String(profile.full_name).trim() !== "");
+  const hasOnboarded = Boolean(profile.onboarding_completed);
+  return hasDob && hasClass && hasGender && hasName && hasOnboarded;
+}
+
+function shakeModal(modalEl: HTMLElement | null) {
+  const dialog = modalEl?.querySelector("#onboardingModalDialog") || modalEl?.firstElementChild;
+  if (!dialog) return;
+  dialog.classList.remove("animate-modal-shake");
+  void (dialog as HTMLElement).offsetWidth;
+  dialog.classList.add("animate-modal-shake");
+  setTimeout(() => dialog.classList.remove("animate-modal-shake"), 500);
+}
+
+function checkAndRenderMissingDobBanner() {
+  const banner = document.getElementById("missingDobNoticeBanner");
+  const dashBlocker = document.getElementById("dashboardDobBlockerNotice");
+
+  if (!state.user || state.isAdmin) {
+    if (banner) banner.classList.add("hidden");
+    if (dashBlocker) dashBlocker.classList.add("hidden");
+    return;
+  }
+
+  const hasDob = hasRegisteredDob(state.profile);
+  if (!hasDob) {
+    if (banner) banner.classList.remove("hidden");
+    if (dashBlocker) dashBlocker.classList.remove("hidden");
+  } else {
+    if (banner) banner.classList.add("hidden");
+    if (dashBlocker) dashBlocker.classList.add("hidden");
+  }
+}
 
 // Learner Dashboard Elements
 const dashFullName = document.getElementById("dashFullName");
@@ -1050,15 +1104,15 @@ async function checkAuthSession() {
       } else {
         // NON-ADMIN LEARNER:
         // Strictly verify that learner has registered their official details
-        const isRegistered = Boolean(profile && profile.onboarding_completed && profile.date_of_birth && profile.class_level);
+        const isRegistered = isProfileComplete(profile);
         if (!isRegistered) {
           profile = profile || {
             id: user.id,
             full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "",
             email: user.email,
-            gender: "Male",
+            gender: "",
             date_of_birth: "",
-            class_level: "Basic 9A",
+            class_level: "",
             role: "learner",
             avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || AVATAR_PRESETS[0],
             onboarding_completed: false,
@@ -1072,6 +1126,7 @@ async function checkAuthSession() {
         } else {
           state.profile = profile;
         }
+        checkAndRenderMissingDobBanner();
       }
 
       // If completing Google sign-in / OAuth redirect: show "Successfully signed in" before sending to dashboard
@@ -1383,6 +1438,7 @@ async function handleSignOut() {
   state.profile = null;
   state.isAdmin = false;
   state.activeView = "learner";
+  checkAndRenderMissingDobBanner();
   updateActiveTestBanner();
   renderAuthLanding();
 }
@@ -1445,21 +1501,49 @@ function updateHeaderNav() {
 // Onboarding Experience
 // ------------------------------------------------------------------------------
 function showOnboardingModal(user, existingProfile) {
+  if (!onboardingModal) return;
   onboardingModal.classList.remove("hidden");
+
+  const isComplete = isProfileComplete(existingProfile);
+  const titleEl = document.getElementById("onboardingModalTitle");
+  const subtitleEl = document.getElementById("onboardingModalSubtitle");
+  const noticeEl = document.getElementById("onboardingMandatoryNotice");
+
+  if (!isComplete) {
+    // Non-dismissible mandatory mode: hide close button and show alert
+    closeOnboardingModalBtn?.classList.add("hidden");
+    if (noticeEl) noticeEl.classList.remove("hidden");
+    if (titleEl) titleEl.textContent = "Learner Registration (Mandatory)";
+    if (subtitleEl) subtitleEl.textContent = "Complete your official Class, Date of Birth, and Gender to access the platform.";
+  } else {
+    // Editable profile mode: close button available
+    closeOnboardingModalBtn?.classList.remove("hidden");
+    if (noticeEl) noticeEl.classList.add("hidden");
+    if (titleEl) titleEl.textContent = "Edit Learner Profile";
+    if (subtitleEl) subtitleEl.textContent = "Update your profile photo or review your registered academic details.";
+  }
 
   const googleName = user?.user_metadata?.full_name || user?.user_metadata?.name || "";
   const googleAvatar = user?.user_metadata?.avatar_url || user?.user_metadata?.picture || AVATAR_PRESETS[0];
 
-  regFullName.value = existingProfile?.full_name || googleName;
-  if (existingProfile?.gender) regGender.value = existingProfile.gender;
-  if (existingProfile?.class_level) regClass.value = existingProfile.class_level;
+  if (regFullName) regFullName.value = existingProfile?.full_name || googleName;
+  if (regGender) regGender.value = existingProfile?.gender || "";
+  if (regClass) regClass.value = existingProfile?.class_level || "";
 
-  // Enforce DOB immutability: once account is created with DOB, it cannot be changed by user
-  const isAccountCreated = Boolean(existingProfile?.onboarding_completed && existingProfile?.date_of_birth);
+  // Reset any error highlights
+  regFullName?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regGender?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regClass?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regDob?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+
+  const hasExistingDob = Boolean(existingProfile?.date_of_birth && String(existingProfile.date_of_birth).trim() !== "");
+  const isAccountCreated = Boolean(existingProfile?.onboarding_completed && hasExistingDob);
 
   if (regDob) {
-    if (existingProfile?.date_of_birth) {
-      regDob.value = existingProfile.date_of_birth;
+    if (hasExistingDob) {
+      regDob.value = existingProfile.date_of_birth.substring(0, 10);
+    } else {
+      regDob.value = "";
     }
 
     if (isAccountCreated) {
@@ -1476,8 +1560,8 @@ function showOnboardingModal(user, existingProfile) {
   }
 
   const initialAvatar = existingProfile?.avatar_url || googleAvatar;
-  selectedAvatarUrl.value = initialAvatar;
-  onboardAvatarPreview.src = initialAvatar;
+  if (selectedAvatarUrl) selectedAvatarUrl.value = initialAvatar;
+  if (onboardAvatarPreview) onboardAvatarPreview.src = initialAvatar;
 
   const isPreset = AVATAR_PRESETS.includes(initialAvatar);
   if (isPreset) {
@@ -1704,19 +1788,58 @@ function showClassChangeWarningModal(oldClass, newClass, onConfirm, onCancel) {
 async function handleOnboardingSubmit(e) {
   e.preventDefault();
 
-  const nameVal = regFullName.value.trim();
-  const genderVal = regGender.value;
-  const classVal = regClass.value;
-  const avatarVal = selectedAvatarUrl.value || AVATAR_PRESETS[0];
+  const nameVal = regFullName ? regFullName.value.trim() : "";
+  const genderVal = regGender ? regGender.value : "";
+  const classVal = regClass ? regClass.value : "";
+  const avatarVal = selectedAvatarUrl?.value || AVATAR_PRESETS[0];
 
   // If user already has an established date_of_birth, enforce immutability:
   let finalDob = state.profile?.date_of_birth;
-  if (!finalDob) {
+  if (!finalDob || String(finalDob).trim() === "") {
     finalDob = regDob ? regDob.value : "";
   }
 
-  if (!nameVal || !genderVal || !classVal || !finalDob) {
-    alert("Please fill out all required fields, including your Date of Birth.");
+  // Clear previous validation styling
+  regFullName?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regGender?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regClass?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+  regDob?.classList.remove("ring-2", "ring-rose-500", "border-rose-500");
+
+  let hasValidationError = false;
+  const missingFields: string[] = [];
+
+  if (!nameVal) {
+    regFullName?.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+    missingFields.push("Full Name (as in class register)");
+    hasValidationError = true;
+  }
+  if (!classVal) {
+    regClass?.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+    missingFields.push("Class / Form");
+    hasValidationError = true;
+  }
+  if (!genderVal) {
+    regGender?.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+    missingFields.push("Sex / Gender");
+    hasValidationError = true;
+  }
+  if (!finalDob) {
+    regDob?.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+    missingFields.push("Date of Birth");
+    hasValidationError = true;
+  } else {
+    const dobDate = new Date(finalDob);
+    const today = new Date();
+    if (isNaN(dobDate.getTime()) || dobDate > today) {
+      regDob?.classList.add("ring-2", "ring-rose-500", "border-rose-500");
+      missingFields.push("Valid Date of Birth (must not be in the future)");
+      hasValidationError = true;
+    }
+  }
+
+  if (hasValidationError) {
+    shakeModal(onboardingModal);
+    alert(`⚠️ Mandatory Registration Incomplete:\n\nPlease complete the following required fields before proceeding:\n• ${missingFields.join("\n• ")}`);
     return;
   }
 
@@ -1731,7 +1854,7 @@ async function handleOnboardingSubmit(e) {
         handleOnboardingSubmit(e);
       },
       () => {
-        regClass.value = prevClass;
+        if (regClass) regClass.value = prevClass;
         (window as any).__confirmedClassChange = false;
       }
     );
@@ -1766,11 +1889,12 @@ async function handleOnboardingSubmit(e) {
     const saved = await updateLearnerProfile(profilePayload);
     state.profile = saved;
 
-    onboardingModal.classList.add("hidden");
+    onboardingModal?.classList.add("hidden");
+    checkAndRenderMissingDobBanner();
     await renderDashboard();
   } catch (err) {
     console.error("Onboarding save error:", err);
-    alert("Failed to save profile. Please verify your Supabase credentials.");
+    alert("Failed to save profile. Please verify your connection or Supabase credentials.");
   } finally {
     setOnboardingFormLockdown(false);
   }
@@ -1987,13 +2111,21 @@ async function renderDashboard() {
   floatingChatContainer.classList.remove("hidden");
 
   updateHeaderNav();
+  checkAndRenderMissingDobBanner();
+
+  const profile = state.profile;
+  const user = state.user;
+
+  // If learner does not have DOB in the system, immediately show non-dismissible registration modal
+  if (!state.isAdmin && !hasRegisteredDob(profile)) {
+    setTimeout(() => {
+      showOnboardingModal(user, profile);
+    }, 250);
+  }
 
   // Render skeletons across card components while fetching
   renderAssessmentSkeletons(6);
   renderLearnerKpiSkeletons();
-
-  const profile = state.profile;
-  const user = state.user;
 
   // Banner Details
   dashFullName.textContent = profile?.full_name || "Student Learner";
@@ -2470,6 +2602,12 @@ function renderAssessmentCards() {
   // Attach Start Quiz button handlers
   document.querySelectorAll(".start-quiz-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (!state.isAdmin && !hasRegisteredDob(state.profile)) {
+        alert("⚠️ Action Required: You must register your Date of Birth in your profile before you can take assessments.");
+        showOnboardingModal(state.user, state.profile);
+        setTimeout(() => regDob?.focus(), 150);
+        return;
+      }
       const asmtId = btn.getAttribute("data-asmt-id");
       startAssessmentQuiz(asmtId);
     });
@@ -2478,6 +2616,12 @@ function renderAssessmentCards() {
   // Attach View Score button handlers
   document.querySelectorAll(".view-score-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
+      if (!state.isAdmin && !hasRegisteredDob(state.profile)) {
+        alert("⚠️ Action Required: You must register your Date of Birth in your profile before accessing continuous assessment marks.");
+        showOnboardingModal(state.user, state.profile);
+        setTimeout(() => regDob?.focus(), 150);
+        return;
+      }
       const subId = btn.getAttribute("data-sub-id");
       const sub = state.submissions.find((s) => s.id === subId);
       if (sub) openScoreDetailsModal(sub);
@@ -2540,6 +2684,13 @@ function startAssessmentLiveCountdowns() {
 // In-Portal Secure Assessment / Quiz Runner (Anti-Cheat & Blind Progression)
 // ------------------------------------------------------------------------------
 function startAssessmentQuiz(asmtId) {
+  if (!state.isAdmin && !hasRegisteredDob(state.profile)) {
+    alert("⚠️ Action Required: You must register your Date of Birth in your profile before you can take assessments.");
+    showOnboardingModal(state.user, state.profile);
+    setTimeout(() => regDob?.focus(), 150);
+    return;
+  }
+
   const asmt = state.assessments.find((a) => a.id === asmtId);
   if (!asmt) return;
 
@@ -3895,10 +4046,12 @@ async function handleRoute() {
 
   // If user is not authenticated, show the Learner Sign In screen (without headers)
   if (!state.user) {
+    checkAndRenderMissingDobBanner();
     renderAuthLanding();
     return;
   }
 
+  checkAndRenderMissingDobBanner();
   updateActiveTestBanner();
   document.getElementById("mainHeader")?.classList.remove("hidden");
   document.getElementById("mainFooter")?.classList.remove("hidden");
@@ -3906,6 +4059,13 @@ async function handleRoute() {
   await renderDashboard();
   updateHeaderNav();
   await initChat();
+
+  // If learner does not have DOB or completed profile, immediately open non-dismissible onboarding modal
+  if (!state.isAdmin && !isProfileComplete(state.profile)) {
+    setTimeout(() => {
+      showOnboardingModal(state.user, state.profile);
+    }, 250);
+  }
 
   // Start learner presence pulse so admin sees learner online in real time
   startLearnerPresenceHeartbeat();
@@ -13350,6 +13510,13 @@ function updateActiveTestBanner() {
 }
 
 (window as any).navigateToAssessment = (asmtId: string) => {
+  if (!state.isAdmin && !hasRegisteredDob(state.profile)) {
+    alert("⚠️ Action Required: Please set your Date of Birth in your profile before accessing assessments.");
+    showOnboardingModal(state.user, state.profile);
+    setTimeout(() => regDob?.focus(), 150);
+    return;
+  }
+
   if (state.activeView === "admin") {
     showAdminSubview("assessments");
     const row = document.querySelector(`[data-asmt-id="${asmtId}"]`);
@@ -13821,7 +13988,53 @@ function attachEventListeners() {
       );
     }
   });
-  closeOnboardingModalBtn?.addEventListener("click", () => onboardingModal.classList.add("hidden"));
+  closeOnboardingModalBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!isProfileComplete(state.profile)) {
+      shakeModal(onboardingModal);
+      alert("⚠️ Mandatory Registration Incomplete:\nYou must enter and save your Class, Date of Birth, and Gender before accessing the platform.");
+      return;
+    }
+    onboardingModal?.classList.add("hidden");
+  });
+
+  // Modal Backdrop Click Guard: Prevent dismiss when profile is incomplete
+  onboardingModal?.addEventListener("click", (e) => {
+    if (e.target === onboardingModal) {
+      if (!isProfileComplete(state.profile)) {
+        shakeModal(onboardingModal);
+        return;
+      }
+      onboardingModal.classList.add("hidden");
+    }
+  });
+
+  // Escape Key Guard: Prevent dismiss when profile is incomplete
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && onboardingModal && !onboardingModal.classList.contains("hidden")) {
+      if (!isProfileComplete(state.profile)) {
+        e.preventDefault();
+        e.stopPropagation();
+        shakeModal(onboardingModal);
+        return;
+      }
+      onboardingModal.classList.add("hidden");
+    }
+  });
+
+  // Banner & Dashboard "Set Date of Birth" buttons
+  bannerEditProfileDobBtn?.addEventListener("click", () => {
+    if (state.user) {
+      showOnboardingModal(state.user, state.profile);
+      setTimeout(() => regDob?.focus(), 150);
+    }
+  });
+  dashboardSetDobBtn?.addEventListener("click", () => {
+    if (state.user) {
+      showOnboardingModal(state.user, state.profile);
+      setTimeout(() => regDob?.focus(), 150);
+    }
+  });
 
   // Status Filter Tabs
   document.querySelectorAll(".filter-tab").forEach((tab) => {

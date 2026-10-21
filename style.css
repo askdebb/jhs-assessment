@@ -800,3 +800,14 @@ html.google-signing-in #authLoaderSection {
   opacity: 0.45 !important;
   cursor: not-allowed !important;
 }
+
+/* Modal Mandatory Shake Effect */
+@keyframes modal-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-9px); }
+  40%, 80% { transform: translateX(9px); }
+}
+
+.animate-modal-shake {
+  animation: modal-shake 0.4s ease-in-out !important;
+}

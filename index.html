@@ -48,6 +48,39 @@
   </head>
   <body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
 
+    <!-- MANDATORY DATE OF BIRTH NOTICE BANNER (Displayed when learner DOB is missing) -->
+    <div
+      id="missingDobNoticeBanner"
+      class="hidden bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white py-2.5 px-3 sm:px-4 border-b border-red-800 sticky top-0 z-[45] shadow-md transition-all duration-300 animate-in fade-in"
+    >
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center shrink-0 text-sm shadow-2xs animate-pulse">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </span>
+          <div class="min-w-0">
+            <p class="font-bold text-xs sm:text-sm text-white tracking-tight flex items-center gap-1.5 flex-wrap">
+              <span class="uppercase tracking-wider text-[10px] bg-white text-rose-700 font-extrabold px-1.5 py-0.5 rounded shadow-2xs">Action Required</span>
+              <span>Date of Birth Missing: Set your date of birth to unlock access</span>
+            </p>
+            <p class="text-[11px] text-rose-100 font-medium mt-0.5 leading-snug">
+              Under Ghana Education Service regulations, you must set your date of birth by editing your profile before you can access quizzes, assessments, or other parts of the platform.
+            </p>
+          </div>
+        </div>
+        <div class="shrink-0 w-full sm:w-auto flex items-center gap-2 justify-end">
+          <button
+            id="bannerEditProfileDobBtn"
+            type="button"
+            class="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-rose-50 text-rose-700 font-bold text-xs shadow-sm hover:shadow transition cursor-pointer"
+          >
+            <i class="fa-solid fa-calendar-plus text-rose-600"></i>
+            <span>Set Date of Birth in Profile</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Top Announcement Bar (Dynamic Active Test & Live Countdown Marquee) -->
     <div id="topAnnouncementBar" class="hidden bg-slate-900 text-white text-[11px] sm:text-xs py-1.5 px-3 sm:px-4 border-b border-slate-800 z-50 transition-all duration-300">
       <div id="topAnnouncementContent" class="max-w-7xl mx-auto flex items-center justify-between gap-3 overflow-hidden min-h-[24px]">
@@ -484,6 +517,31 @@
               </button>
             </div>
 
+          </div>
+        </div>
+
+        <!-- Learner Dashboard DOB Missing Lock Alert -->
+        <div id="dashboardDobBlockerNotice" class="hidden mb-6 rounded-2xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-4 sm:p-5 shadow-lg border border-red-500/40 animate-fade-in">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center text-lg shrink-0 border border-white/20">
+                <i class="fa-solid fa-lock"></i>
+              </div>
+              <div>
+                <h4 class="font-bold text-sm text-white">Assessment Access Locked — Date of Birth Missing</h4>
+                <p class="text-xs text-rose-100 mt-0.5 leading-relaxed">
+                  Your academic records require a verified Date of Birth before you can access quizzes, assessments, or view continuous assessment marks.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              id="dashboardSetDobBtn"
+              class="self-start sm:self-center px-4 py-2 rounded-xl bg-white text-rose-700 hover:bg-rose-50 font-bold text-xs shadow transition cursor-pointer flex items-center gap-1.5 shrink-0"
+            >
+              <i class="fa-solid fa-calendar-check text-rose-600"></i>
+              <span>Set Date of Birth Now</span>
+            </button>
           </div>
         </div>
 
@@ -2863,25 +2921,36 @@
     </div>
 
     <!-- ================================================================= -->
-    <!-- MODAL 1: ONBOARDING MODAL (First Time Sign-Up)                    -->
+    <!-- MODAL 1: ONBOARDING MODAL (First Time Sign-Up & Profile Edit)      -->
     <!-- ================================================================= -->
     <div id="onboardingModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto">
+      <div id="onboardingModalDialog" class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 sm:p-8 relative max-h-[90vh] overflow-y-auto">
         
         <!-- Header -->
-        <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-6">
+        <div class="flex items-start justify-between pb-4 border-b border-slate-100 mb-5">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
               <i class="fa-solid fa-user-graduate text-lg"></i>
             </div>
             <div>
-              <h3 class="font-bold text-lg text-slate-900">Learner Registration</h3>
-              <p class="text-xs text-slate-500">Ensure details match your official school register.</p>
+              <h3 id="onboardingModalTitle" class="font-bold text-lg text-slate-900">Learner Registration</h3>
+              <p id="onboardingModalSubtitle" class="text-xs text-slate-500">Ensure details match your official school register.</p>
             </div>
           </div>
           <button id="closeOnboardingModalBtn" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
+        </div>
+
+        <!-- Mandatory Notice Alert (Shown when onboarding / registration is compulsory) -->
+        <div id="onboardingMandatoryNotice" class="hidden mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800">
+          <i class="fa-solid fa-triangle-exclamation text-rose-600 text-sm mt-0.5 shrink-0"></i>
+          <div class="space-y-0.5">
+            <p class="font-bold text-rose-900">Mandatory Profile Completion Required</p>
+            <p class="text-rose-700 leading-relaxed">
+              Under GES regulations, your <strong>Class / Form, Date of Birth, and Gender</strong> are strictly required to record continuous assessments. You cannot dismiss this window until all details are saved.
+            </p>
+          </div>
         </div>
 
         <form id="onboardingForm" class="space-y-5">
@@ -2920,8 +2989,8 @@
                 type="date"
                 id="regDob"
                 required
-                max="2017-12-31"
-                min="2004-01-01"
+                max="2018-12-31"
+                min="2000-01-01"
                 class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
               />
             </div>
@@ -2936,7 +3005,7 @@
                 required
                 class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
               >
-                <option value="" disabled selected>Select</option>
+                <option value="" disabled selected>Select Gender *</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
@@ -2952,7 +3021,8 @@
                 required
                 class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition cursor-pointer"
               >
-                <option value="Basic 9A" selected>Basic 9A</option>
+                <option value="" disabled selected>Select Class *</option>
+                <option value="Basic 9A">Basic 9A</option>
                 <option value="Basic 9B">Basic 9B</option>
                 <option value="Basic 8A">Basic 8A</option>
                 <option value="Basic 8B">Basic 8B</option>
