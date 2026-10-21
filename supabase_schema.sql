@@ -301,6 +301,17 @@ CREATE POLICY "Admins can delete call recordings"
     ON public.call_recordings FOR DELETE
     USING (EXISTS (SELECT 1 FROM public.learners WHERE id = auth.uid() AND role IN ('admin', 'teacher')));
 
+-- 9b. Explicit Data API Table Grants (Complies with Supabase October 30 Policy)
+-- Ensures supabase-js, PostgREST, and GraphQL retain access to public schema tables
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
 -- 10. Enable Supabase Realtime Replication (Idempotent)
 DO $$
 BEGIN

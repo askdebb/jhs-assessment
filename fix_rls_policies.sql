@@ -63,7 +63,17 @@ CREATE POLICY "Allow all for submissions"
     USING (true)
     WITH CHECK (true);
 
--- 4. Verification Check
+-- 4. Data API Grants (October 30 Supabase Policy Compliance)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- 5. Verification Check
 SELECT 'learners' AS table_name, count(*) AS total_count FROM public.learners
 UNION ALL
 SELECT 'assessments', count(*) FROM public.assessments
