@@ -1101,16 +1101,19 @@ export async function updateAssessment(asmtId, updates) {
     localStorage.setItem("jhs_local_assessments", JSON.stringify(localAsmts));
   }
 
-  const supabase = getSupabase();
+  const supabase = getAdminSupabase() || getSupabase();
   if (supabase) {
     try {
+      const dbUpdates = { ...updates };
+      delete dbUpdates.due_date;
       const { data, error } = await supabase
         .from("assessments")
-        .update(updates)
+        .update(dbUpdates)
         .eq("id", asmtId)
         .select()
         .single();
       if (!error && data) return data;
+      if (error) console.warn("Supabase updateAssessment notice:", error);
     } catch (e) {
       console.warn("Supabase assessment update error, falling back to local:", e);
     }
@@ -1134,15 +1137,17 @@ export async function createAssessment(asmtPayload) {
   localAsmts.push(newAsmt);
   localStorage.setItem("jhs_local_assessments", JSON.stringify(localAsmts));
 
-  const supabase = getSupabase();
+  const supabase = getAdminSupabase() || getSupabase();
   if (supabase) {
     try {
+      const dbPayload = {
+        ...asmtPayload,
+        status: initialStatus,
+      };
+      delete dbPayload.due_date;
       const { data, error } = await supabase
         .from("assessments")
-        .insert({
-          ...asmtPayload,
-          status: initialStatus,
-        })
+        .insert(dbPayload)
         .select()
         .single();
       if (!error && data) return data;
@@ -1284,7 +1289,17 @@ export async function fetchChatMessages() {
     try {
       const parsed = JSON.parse(local);
       parsed.forEach((lm) => {
-        if (!combined.some((rm) => rm.id === lm.id || (rm.created_at === lm.created_at && rm.message === lm.message))) {
+        const matchIdx = combined.findIndex((rm) => rm.id === lm.id || (rm.created_at === lm.created_at && rm.message === lm.message));
+        if (matchIdx !== -1) {
+          combined[matchIdx] = {
+            ...lm,
+            ...combined[matchIdx],
+            recipient_id: combined[matchIdx].recipient_id || lm.recipient_id,
+            recipient_email: combined[matchIdx].recipient_email || lm.recipient_email,
+            recipient_student_id: combined[matchIdx].recipient_student_id || lm.recipient_student_id,
+            recipient_role: combined[matchIdx].recipient_role || lm.recipient_role,
+          };
+        } else {
           combined.push(lm);
         }
       });
@@ -1319,7 +1334,46 @@ export function broadcastCallSignal(signal) {
   return false;
 }
 
+export const chatBroadcastChannel =
+  typeof window !== "undefined" && "BroadcastChannel" in window
+    ? new BroadcastChannel("jhs_chat_sync_channel")
+    : null;
+
+if (chatBroadcastChannel) {
+  chatBroadcastChannel.onmessage = (event) => {
+    const { type, payload } = event.data || {};
+    if (type === "new_chat_message" && payload && chatRealtimeCallbacks.onNewMessage) {
+      chatRealtimeCallbacks.onNewMessage(payload);
+    } else if (type === "chat_message_read" && payload && chatRealtimeCallbacks.onMessageUpdate) {
+      chatRealtimeCallbacks.onMessageUpdate(payload);
+    } else if (type === "chat_message_updated" && payload && chatRealtimeCallbacks.onMessageUpdate) {
+      chatRealtimeCallbacks.onMessageUpdate(payload);
+    } else if (type === "webrtc_call_signal" && payload && chatRealtimeCallbacks.onCallSignal) {
+      chatRealtimeCallbacks.onCallSignal(payload);
+    }
+  };
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === "jhs_local_chats" && e.newValue) {
+      try {
+        const chats = JSON.parse(e.newValue);
+        const lastMsg = chats[chats.length - 1];
+        if (lastMsg && chatRealtimeCallbacks.onNewMessage) {
+          chatRealtimeCallbacks.onNewMessage(lastMsg);
+        }
+      } catch (err) {}
+    }
+  });
+}
+
 export function broadcastChatMessage(msg) {
+  if (chatBroadcastChannel) {
+    try {
+      chatBroadcastChannel.postMessage({ type: "new_chat_message", payload: msg });
+    } catch (e) {}
+  }
   if (activeChatRealtimeChannel) {
     try {
       activeChatRealtimeChannel.send({
@@ -1334,16 +1388,22 @@ export function broadcastChatMessage(msg) {
 }
 
 export function broadcastMessageRead(viewerId, partnerId) {
+  const payload = {
+    viewerId,
+    partnerId,
+    read_at: new Date().toISOString(),
+  };
+  if (chatBroadcastChannel) {
+    try {
+      chatBroadcastChannel.postMessage({ type: "chat_message_read", payload });
+    } catch (e) {}
+  }
   if (activeChatRealtimeChannel) {
     try {
       activeChatRealtimeChannel.send({
         type: "broadcast",
         event: "chat_message_read",
-        payload: {
-          viewerId,
-          partnerId,
-          read_at: new Date().toISOString(),
-        },
+        payload,
       });
     } catch (e) {
       console.warn("broadcastMessageRead error:", e);
@@ -1352,6 +1412,11 @@ export function broadcastMessageRead(viewerId, partnerId) {
 }
 
 export function broadcastMessageUpdate(updatedMsg) {
+  if (chatBroadcastChannel) {
+    try {
+      chatBroadcastChannel.postMessage({ type: "chat_message_updated", payload: updatedMsg });
+    } catch (e) {}
+  }
   if (activeChatRealtimeChannel) {
     try {
       activeChatRealtimeChannel.send({
@@ -1367,50 +1432,59 @@ export function broadcastMessageUpdate(updatedMsg) {
 
 export async function sendChatMessage(chatPayload) {
   const supabase = getAdminSupabase() || getSupabase();
-  const payloadToInsert = { ...chatPayload };
-
-  const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-  if (!isValidUUID(payloadToInsert.sender_id)) {
-    if (payloadToInsert.sender_role === "admin") {
-      payloadToInsert.sender_id = "dcf939ce-7723-44f2-afe8-ae77bfa8eaba";
-    } else {
-      payloadToInsert.sender_id = "30d8e3f6-a5c4-47d2-af35-97cd81bbc0bf";
-    }
-  }
-
-  if (payloadToInsert.recipient_id && !isValidUUID(payloadToInsert.recipient_id)) {
-    payloadToInsert.recipient_id = null;
-  }
 
   // Pre-generate unique ID & ISO timestamp for instant sub-30ms WebSocket dispatch
   const generatedId = "msg-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7);
   const nowIso = new Date().toISOString();
 
+  // 1. Create immediate message preserving authentic sender, recipient, and email metadata
   const immediateMsg = {
     id: generatedId,
     temp_id: generatedId,
-    ...payloadToInsert,
+    ...chatPayload,
+    sender_name: chatPayload.sender_name || (chatPayload.sender_role === "admin" ? "Master Debrah (Admin)" : "Student Learner"),
+    read: false,
     created_at: nowIso,
   };
 
-  // 1. Save to local storage cache immediately
+  // 2. Save to local storage cache immediately
   const localChats = getFallbackChatMessages();
   localChats.push(immediateMsg);
   localStorage.setItem("jhs_local_chats", JSON.stringify(localChats));
 
-  // 2. INSTANT WebSocket Broadcast to all active learners & admin across all tabs (< 25ms)
+  // 3. INSTANT BroadcastChannel + WebSocket Broadcast across all tabs and network
   broadcastChatMessage(immediateMsg);
 
   if (!supabase) {
     return immediateMsg;
   }
 
-  // 3. Persist to Supabase Database
+  // 4. Persist to Supabase Database with UUID sanitization only for the DB payload
   try {
+    const isValidUUID = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const dbPayload = { ...chatPayload };
+    delete dbPayload.temp_id;
+    delete dbPayload.sender_email;
+    delete dbPayload.recipient_email;
+    delete dbPayload.sender_student_id;
+    delete dbPayload.recipient_student_id;
+    delete dbPayload.recipient_role;
+
+    if (!isValidUUID(dbPayload.sender_id)) {
+      if (dbPayload.sender_role === "admin") {
+        dbPayload.sender_id = "dcf939ce-7723-44f2-afe8-ae77bfa8eaba";
+      } else {
+        dbPayload.sender_id = "30d8e3f6-a5c4-47d2-af35-97cd81bbc0bf";
+      }
+    }
+
+    if (dbPayload.recipient_id && !isValidUUID(dbPayload.recipient_id)) {
+      dbPayload.recipient_id = null;
+    }
+
     const { data, error } = await supabase
       .from("chat_messages")
-      .insert(payloadToInsert)
+      .insert(dbPayload)
       .select()
       .single();
 
@@ -1420,7 +1494,10 @@ export async function sendChatMessage(chatPayload) {
     }
 
     if (data) {
-      return data;
+      return {
+        ...immediateMsg,
+        id: data.id,
+      };
     }
     return immediateMsg;
   } catch (err) {
@@ -1429,14 +1506,16 @@ export async function sendChatMessage(chatPayload) {
   }
 }
 
-export async function markChatMessagesAsRead(viewerId, partnerId, viewerRole) {
+export async function markChatMessagesAsRead(viewerId, partnerId, viewerRole, partnerEmail) {
   const supabase = getAdminSupabase() || getSupabase();
   const localChats = getFallbackChatMessages();
   let updated = false;
 
   localChats.forEach((msg) => {
     const matchesPartner = partnerId
-      ? msg.sender_id === partnerId || (msg.sender_role === "admin" && partnerId === "dcf939ce-7723-44f2-afe8-ae77bfa8eaba")
+      ? msg.sender_id === partnerId ||
+        (partnerEmail && msg.sender_email && msg.sender_email.toLowerCase() === partnerEmail.toLowerCase()) ||
+        (msg.sender_role === "admin" && (partnerId === "dcf939ce-7723-44f2-afe8-ae77bfa8eaba" || viewerRole === "learner"))
       : true;
     if (matchesPartner && !msg.read) {
       msg.read = true;
@@ -1449,7 +1528,7 @@ export async function markChatMessagesAsRead(viewerId, partnerId, viewerRole) {
     localStorage.setItem("jhs_local_chats", JSON.stringify(localChats));
   }
 
-  // Broadcast read receipt instantly over WebSocket
+  // Broadcast read receipt instantly over WebSocket & BroadcastChannel
   broadcastMessageRead(viewerId, partnerId);
 
   if (!supabase) return localChats;

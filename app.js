@@ -4842,6 +4842,19 @@ function handleQuestionEditorSubmit(e) {
     renderEmbeddedAnswerKeyView(asmtId);
   }
 }
+function toLocalDatetimeInputValue(dateInput) {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function openExtendPeriodModal(asmtId) {
   if (!extendPeriodModal) return;
   const asmt = (state.assessments || []).find((a) => a.id === asmtId);
@@ -4856,14 +4869,35 @@ function openExtendPeriodModal(asmtId) {
     extendDurationInput.value = asmt.time_limit_minutes || 15;
   }
   if (extendUnlockDatetimeInput) {
-    extendUnlockDatetimeInput.value = asmt.unlock_time ? new Date(asmt.unlock_time).toISOString().slice(0, 16) : "";
+    extendUnlockDatetimeInput.value = asmt.unlock_time ? toLocalDatetimeInputValue(asmt.unlock_time) : "";
   }
-  const defaultExtend = currentDue ? new Date(currentDue).toISOString().slice(0, 16) : new Date(Date.now() + 24 * 3600 * 1e3).toISOString().slice(0, 16);
+  const defaultExtend = currentDue ? toLocalDatetimeInputValue(currentDue) : toLocalDatetimeInputValue(new Date(Date.now() + 24 * 3600 * 1e3));
   if (extendCustomDatetimeInput) {
     extendCustomDatetimeInput.value = defaultExtend;
   }
+
+  const activateCheckbox = document.getElementById("extendModalActivateCheckbox");
+  const activateLabel = document.getElementById("extendModalActivateCheckboxLabel");
+  if (activateCheckbox && activateLabel) {
+    const isAlreadyOpen = asmt.status === "AVAILABLE";
+    activateCheckbox.checked = true;
+    activateLabel.textContent = isAlreadyOpen
+      ? "Keep assessment Active & Open for learners"
+      : "Turn ON / Make Available to learners upon saving";
+  }
+
+  const syncCheckbox = document.getElementById("extendModalSyncTrackCheckbox");
+  const syncLabel = document.getElementById("extendModalSyncTrackCheckboxLabel");
+  if (syncCheckbox && syncLabel) {
+    syncCheckbox.checked = true;
+    const is9A = (asmt.class_level === "Basic 9A") || (asmt.title || "").includes("9A");
+    const otherTrack = is9A ? "Basic 9B" : "Basic 9A";
+    syncLabel.textContent = `Also apply to parallel track (${otherTrack})`;
+  }
+
   extendPeriodModal.classList.remove("hidden");
 }
+
 async function handleSaveExtendPeriod() {
   const asmtId = extendModalAsmtId?.value;
   if (!asmtId) return;
@@ -4872,6 +4906,13 @@ async function handleSaveExtendPeriod() {
   const durationVal = parseInt(extendDurationInput?.value, 10) || 15;
   const newDeadlineIso = customVal ? new Date(customVal).toISOString() : null;
   const newUnlockIso = unlockVal ? new Date(unlockVal).toISOString() : null;
+
+  const activateCheckbox = document.getElementById("extendModalActivateCheckbox");
+  const shouldActivate = activateCheckbox ? activateCheckbox.checked : false;
+
+  const syncCheckbox = document.getElementById("extendModalSyncTrackCheckbox");
+  const shouldSyncTrack = syncCheckbox ? syncCheckbox.checked : false;
+
   if (saveExtendPeriodBtn) {
     saveExtendPeriodBtn.disabled = true;
     saveExtendPeriodBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Saving...`;
@@ -4887,6 +4928,10 @@ async function handleSaveExtendPeriod() {
   if (newUnlockIso !== void 0) {
     updates.unlock_time = newUnlockIso;
   }
+  if (shouldActivate) {
+    updates.status = "AVAILABLE";
+  }
+
   await updateAssessment(asmtId, updates);
   const asmt = (state.assessments || []).find((a) => a.id === asmtId);
   if (asmt) {
@@ -4898,6 +4943,32 @@ async function handleSaveExtendPeriod() {
     if (newUnlockIso !== void 0) {
       asmt.unlock_time = newUnlockIso;
     }
+    if (shouldActivate) {
+      asmt.status = "AVAILABLE";
+      notifyAssessmentActivated(asmtId);
+    }
+
+    if (shouldSyncTrack && asmt.title) {
+      const is9A = (asmt.class_level === "Basic 9A") || asmt.title.includes("9A");
+      const targetClass = is9A ? "Basic 9B" : "Basic 9A";
+      const baseTitle = asmt.title.replace(" (Basic 9A)", "").replace(" (Basic 9B)", "").replace(" 9A", "").replace(" 9B", "").trim();
+      const parallelAsmt = (state.assessments || []).find((a) => a.id !== asmtId && a.class_level === targetClass && a.title.includes(baseTitle));
+      if (parallelAsmt) {
+        await updateAssessment(parallelAsmt.id, updates);
+        parallelAsmt.time_limit_minutes = durationVal;
+        if (newDeadlineIso) {
+          parallelAsmt.deadline = newDeadlineIso;
+          parallelAsmt.due_date = newDeadlineIso;
+        }
+        if (newUnlockIso !== void 0) {
+          parallelAsmt.unlock_time = newUnlockIso;
+        }
+        if (shouldActivate) {
+          parallelAsmt.status = "AVAILABLE";
+          notifyAssessmentActivated(parallelAsmt.id);
+        }
+      }
+    }
   }
   if (saveExtendPeriodBtn) {
     saveExtendPeriodBtn.disabled = false;
@@ -4908,6 +4979,7 @@ async function handleSaveExtendPeriod() {
   renderAdminAssessmentConfigTable();
   renderAdminAssessmentConfigTable2();
   renderAssessmentCards();
+  updateActiveTestBanner();
 }
 function getAdminLearnersPageSize() {
   if (state.adminLearnersCustomPageSize) {
@@ -6249,46 +6321,163 @@ function getMyUserId() {
 }
 function isMessageAddressedToMe(msg, myId) {
   if (!msg) return false;
-  if (msg.sender_id === myId) return false;
-  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  const isCurrentUserAdmin =
+    state.isAdmin ||
+    (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+    state.activeView === "admin";
+
+  // If current viewer is Admin:
   if (isCurrentUserAdmin) {
-    return msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_id === myId || msg.recipient_role === "admin" || !msg.recipient_id;
-  } else {
-    return msg.recipient_id === myId || msg.sender_role === "admin" && (!msg.recipient_id || msg.recipient_id === myId);
+    if (
+      msg.sender_role === "admin" ||
+      msg.sender_id === ADMIN_CONTACT.id ||
+      msg.sender_id === myId ||
+      (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())
+    ) {
+      return false;
+    }
+    return (
+      msg.recipient_role === "admin" ||
+      msg.recipient_id === ADMIN_CONTACT.id ||
+      msg.recipient_id === myId ||
+      (msg.recipient_email && (
+        msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+        msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase()
+      )) ||
+      !msg.recipient_id
+    );
   }
+
+  // If current viewer is Learner:
+  const profileId = state.profile?.id;
+  const userId = state.user?.id;
+  const studentId = state.profile?.student_id;
+  const email = (state.profile?.email || state.user?.email || "").toLowerCase();
+
+  // Find this learner in state.allLearners to get any alias ID (such as lrn-001)
+  const myLearnerInList = (state.allLearners || []).find((l) => {
+    if (email && (l.email || "").toLowerCase() === email) return true;
+    if (studentId && (l.student_id === studentId || l.id === studentId)) return true;
+    if (profileId && l.id === profileId) return true;
+    if (userId && l.id === userId) return true;
+    return false;
+  });
+  const listId = myLearnerInList?.id;
+  const listStudentId = myLearnerInList?.student_id;
+  const listEmail = (myLearnerInList?.email || "").toLowerCase();
+
+  // 1. Do not count messages sent by myself as unread
+  const isSentByMe =
+    msg.sender_id === myId ||
+    (profileId && msg.sender_id === profileId) ||
+    (userId && msg.sender_id === userId) ||
+    (studentId && (msg.sender_id === studentId || msg.sender_student_id === studentId)) ||
+    (listId && msg.sender_id === listId) ||
+    (listStudentId && (msg.sender_id === listStudentId || msg.sender_student_id === listStudentId)) ||
+    (email && msg.sender_email && msg.sender_email.toLowerCase() === email) ||
+    (listEmail && msg.sender_email && msg.sender_email.toLowerCase() === listEmail);
+
+  if (isSentByMe) return false;
+
+  // 2. Direct recipient match for this learner (friend-to-friend or admin-to-learner)
+  const isDirectRecipient =
+    Boolean(msg.recipient_id && (
+      msg.recipient_id === myId ||
+      (profileId && msg.recipient_id === profileId) ||
+      (userId && msg.recipient_id === userId) ||
+      (studentId && msg.recipient_id === studentId) ||
+      (listId && msg.recipient_id === listId) ||
+      (listStudentId && msg.recipient_id === listStudentId)
+    )) ||
+    Boolean(msg.recipient_student_id && (
+      (studentId && msg.recipient_student_id === studentId) ||
+      (listStudentId && msg.recipient_student_id === listStudentId)
+    )) ||
+    Boolean(msg.recipient_email && (
+      (email && msg.recipient_email.toLowerCase() === email) ||
+      (listEmail && msg.recipient_email.toLowerCase() === listEmail)
+    ));
+
+  if (isDirectRecipient) return true;
+
+  // 3. Admin broadcast announcement or reply directed to learner
+  if (
+    (msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id) &&
+    (!msg.recipient_id || msg.recipient_id === "all" || msg.recipient_role === "learner")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 function updateChatUnreadDot() {
   const myId = getMyUserId();
-  const unreadMessages = (state.chatMessages || []).filter((m) => {
+  const allMessages = (state.chatMessages && state.chatMessages.length > 0)
+    ? state.chatMessages
+    : (chatQueryClient.getQueryData(["chat_messages"]) || []);
+
+  const unreadMessages = allMessages.filter((m) => {
     return !m.read && isMessageAddressedToMe(m, myId);
   });
   const totalUnread = unreadMessages.length;
   const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
-  if (chatUnreadDot) {
+
+  const dot = chatUnreadDot || document.getElementById("chatUnreadDot");
+  if (dot) {
     if (totalUnread > 0 && !isChatOpen) {
-      chatUnreadDot.textContent = totalUnread > 9 ? "9+" : String(totalUnread);
-      chatUnreadDot.classList.remove("hidden");
-      chatUnreadDot.classList.add("flex");
+      dot.textContent = totalUnread > 99 ? "99+" : String(totalUnread);
+      dot.classList.remove("hidden");
+      dot.classList.add("flex");
+      dot.style.display = "flex";
+      dot.setAttribute("aria-label", `${totalUnread} unread messages`);
     } else {
-      chatUnreadDot.classList.add("hidden");
-      chatUnreadDot.classList.remove("flex");
-      chatUnreadDot.textContent = "";
+      dot.classList.add("hidden");
+      dot.classList.remove("flex");
+      dot.style.display = "none";
+      dot.textContent = "";
+      dot.removeAttribute("aria-label");
     }
   }
   const contactsBadge = document.getElementById("chatContactsUnreadBadge");
   if (contactsBadge) {
-    const otherUnread = unreadMessages.filter(
-      (m) => !state.activeChatPartner || m.sender_id !== state.activeChatPartner.id && !(state.activeChatPartner.role === "admin" && m.sender_role === "admin")
-    ).length;
+    const partner = state.activeChatPartner;
+    const partnerId = partner?.id || null;
+    const partnerEmail = (partner?.email || "").toLowerCase();
+    const partnerStudentId = partner?.student_id;
+    const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
+
+    const otherUnread = unreadMessages.filter((m) => {
+      if (!partner) return true;
+      if (isPartnerAdmin) {
+        return !(
+          m.sender_role === "admin" ||
+          m.sender_id === ADMIN_CONTACT.id ||
+          (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())
+        );
+      }
+      return !(
+        m.sender_id === partnerId ||
+        (partnerEmail && m.sender_email && m.sender_email.toLowerCase() === partnerEmail) ||
+        (partnerStudentId && (m.sender_id === partnerStudentId || m.sender_student_id === partnerStudentId))
+      );
+    }).length;
+
     if (otherUnread > 0) {
-      contactsBadge.textContent = otherUnread > 9 ? "9+" : String(otherUnread);
+      contactsBadge.textContent = otherUnread > 99 ? "99+" : String(otherUnread);
       contactsBadge.classList.remove("hidden");
       contactsBadge.classList.add("inline-flex");
+      contactsBadge.style.display = "inline-flex";
     } else {
       contactsBadge.classList.add("hidden");
       contactsBadge.classList.remove("inline-flex");
+      contactsBadge.style.display = "none";
       contactsBadge.textContent = "";
     }
+  }
+
+  if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+    renderChatContactsList();
   }
 }
 let globalUnlockedAudioCtx = null;
@@ -6508,9 +6697,12 @@ function renderChatContactsList() {
       (l) => l.id === ADMIN_CONTACT.id || (l.role || "").toLowerCase() === "admin" || (l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()
     ) || ADMIN_CONTACT;
     const isAdminOnline = isLearnerOnline(adminLearner);
-    const isCurrentPartner = state.activeChatPartner?.id === ADMIN_CONTACT.id;
+    const isCurrentPartner = state.activeChatPartner?.id === ADMIN_CONTACT.id || state.activeChatPartner?.role === "admin";
     const unreadAdminCount = (state.chatMessages || []).filter(
-      (m) => (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id) && !m.read && isMessageAddressedToMe(m, myId)
+      (m) =>
+        (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id || (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+        !m.read &&
+        isMessageAddressedToMe(m, myId)
     ).length;
     const adminMatches = !search || ADMIN_CONTACT.full_name.toLowerCase().includes(search) || "admin".includes(search) || "teacher".includes(search) || "computing".includes(search);
     if (adminMatches) {
@@ -6571,11 +6763,18 @@ function renderChatContactsList() {
     `;
   } else {
     students.forEach((student) => {
-      const isCurrent = state.activeChatPartner?.id === student.id;
+      const studentEmail = (student.email || "").toLowerCase();
+      const studentId = student.student_id;
+      const isCurrent = state.activeChatPartner?.id === student.id || (studentEmail && state.activeChatPartner?.email && state.activeChatPartner.email.toLowerCase() === studentEmail);
       const isOnline = isLearnerOnline(student);
-      const unreadCount = (state.chatMessages || []).filter(
-        (m) => m.sender_id === student.id && !m.read && isMessageAddressedToMe(m, myId)
-      ).length;
+      const unreadCount = (state.chatMessages || []).filter((m) => {
+        if (m.read) return false;
+        const isFromStudent =
+          m.sender_id === student.id ||
+          (studentEmail && m.sender_email && m.sender_email.toLowerCase() === studentEmail) ||
+          (studentId && (m.sender_id === studentId || m.sender_student_id === studentId));
+        return isFromStudent && isMessageAddressedToMe(m, myId);
+      }).length;
       html += `
         <div
           class="chat-contact-item flex items-center justify-between p-2 rounded-xl border mb-1.5 ${isCurrent ? "bg-indigo-50/90 border-indigo-200 ring-1 ring-indigo-300" : "bg-white border-slate-200 hover:bg-slate-50"} transition cursor-pointer group shadow-2xs"
@@ -6933,15 +7132,25 @@ async function initChat() {
           const isForMe = isMessageAddressedToMe(newMsg, myId);
           const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
           const partner = state.activeChatPartner;
-          const isCurrentPartner = partner && (newMsg.sender_id === partner.id || partner.role === "admin" && newMsg.sender_role === "admin" || newMsg.sender_id === myId && newMsg.recipient_id === partner.id);
+          const partnerEmail = (partner?.email || "").toLowerCase();
+          const partnerStudentId = partner?.student_id;
+          const isCurrentPartner = partner && (
+            newMsg.sender_id === partner.id ||
+            (partnerEmail && newMsg.sender_email && newMsg.sender_email.toLowerCase() === partnerEmail) ||
+            (partnerStudentId && (newMsg.sender_id === partnerStudentId || newMsg.sender_student_id === partnerStudentId)) ||
+            (partner.role === "admin" && newMsg.sender_role === "admin") ||
+            (newMsg.sender_id === myId && (newMsg.recipient_id === partner.id || (partnerEmail && newMsg.recipient_email && newMsg.recipient_email.toLowerCase() === partnerEmail)))
+          );
           if (isChatOpen && isCurrentPartner) {
             if (isForMe) {
               markCurrentChatAsSeen();
             }
           } else {
-            if (isForMe && isNew) {
-              playNotificationChime();
-              showIncomingChatToast(newMsg);
+            if (isForMe) {
+              if (isNew) {
+                playNotificationChime();
+                showIncomingChatToast(newMsg);
+              }
               updateChatUnreadDot();
               if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
                 renderChatContactsList();
@@ -7071,12 +7280,24 @@ window.state = state;
 async function markCurrentChatAsSeen() {
   const myId = getMyUserId();
   const partner = state.activeChatPartner;
+  if (!partner) return;
+
   const partnerId = partner?.id || null;
+  const partnerEmail = (partner?.email || "").toLowerCase();
+  const partnerStudentId = partner?.student_id || null;
+  const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
   const viewerRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
+
   chatQueryClient.setQueryData(["chat_messages"], (old = []) => {
     let changed = false;
     const updated = old.map((m) => {
-      const matchesPartner = partnerId ? m.sender_id === partnerId || m.sender_role === "admin" && partnerId === ADMIN_CONTACT.id : true;
+      const matchesPartner = isPartnerAdmin
+        ? (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id || (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()))
+        : (
+            (partnerId && m.sender_id === partnerId) ||
+            (partnerEmail && m.sender_email && m.sender_email.toLowerCase() === partnerEmail) ||
+            (partnerStudentId && (m.sender_id === partnerStudentId || m.sender_student_id === partnerStudentId))
+          );
       if (matchesPartner && !m.read) {
         changed = true;
         return { ...m, read: true, read_at: (/* @__PURE__ */ new Date()).toISOString() };
@@ -7085,7 +7306,9 @@ async function markCurrentChatAsSeen() {
     });
     return changed ? updated : old;
   });
-  await markChatMessagesAsRead(myId, partnerId, viewerRole);
+
+  updateChatUnreadDot();
+  await markChatMessagesAsRead(myId, partnerId, viewerRole, partnerEmail);
 }
 function formatFullTimestamp(dateStr) {
   if (!dateStr) return "";
@@ -7209,18 +7432,38 @@ function renderChatMessages() {
     `;
     return;
   }
+  const partnerEmail = (partner.email || "").toLowerCase();
+  const partnerStudentId = partner.student_id;
   const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
   const defaultPartnerAvatar = isPartnerAdmin ? TEACHER_AVATAR : partner.avatar_url || AVATAR_PRESETS[0];
-  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || state.activeView === "admin";
   const threadMessages = state.chatMessages.filter((msg) => {
     if (isCurrentUserAdmin) {
       if (isPartnerAdmin) return false;
-      return msg.sender_id === partner.id && (msg.recipient_id === myId || msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id) || (msg.sender_id === myId || msg.sender_role === "admin") && (msg.recipient_id === partner.id || !msg.recipient_id);
+      const fromLearnerToAdmin =
+        (msg.sender_id === partner.id || (partnerEmail && msg.sender_email && msg.sender_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.sender_id === partnerStudentId || msg.sender_student_id === partnerStudentId))) &&
+        (msg.recipient_id === myId || msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || (msg.recipient_email && (msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase())) || !msg.recipient_id);
+      const fromAdminToLearner =
+        (msg.sender_id === myId || msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id || (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+        (msg.recipient_id === partner.id || (partnerEmail && msg.recipient_email && msg.recipient_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.recipient_id === partnerStudentId || msg.recipient_student_id === partnerStudentId)));
+      return fromLearnerToAdmin || fromAdminToLearner;
     } else {
       if (isPartnerAdmin) {
-        return msg.sender_id === myId && (msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id) || (msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id) && (msg.recipient_id === myId || !msg.recipient_id);
+        const fromMeToAdmin =
+          !isMessageAddressedToMe(msg, myId) &&
+          (msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || (msg.recipient_email && (msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase())) || !msg.recipient_id);
+        const fromAdminToMe =
+          (msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id || (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+          isMessageAddressedToMe(msg, myId);
+        return fromMeToAdmin || fromAdminToMe;
       } else {
-        return msg.sender_id === myId && msg.recipient_id === partner.id || msg.sender_id === partner.id && msg.recipient_id === myId;
+        const fromPartnerToMe =
+          (msg.sender_id === partner.id || (partnerEmail && msg.sender_email && msg.sender_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.sender_id === partnerStudentId || msg.sender_student_id === partnerStudentId))) &&
+          isMessageAddressedToMe(msg, myId);
+        const fromMeToPartner =
+          (msg.recipient_id === partner.id || (partnerEmail && msg.recipient_email && msg.recipient_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.recipient_id === partnerStudentId || msg.recipient_student_id === partnerStudentId))) &&
+          !isMessageAddressedToMe(msg, myId);
+        return fromPartnerToMe || fromMeToPartner;
       }
     }
   });
@@ -7759,6 +8002,11 @@ async function sendAudioRecording() {
       recipient_id: partnerId,
       sender_name: senderName,
       sender_role: senderRole,
+      sender_email: (state.profile?.email || state.user?.email || (senderRole === "admin" ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+      recipient_email: (partner?.email || (isPartnerAdmin ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+      sender_student_id: state.profile?.student_id || null,
+      recipient_student_id: partner?.student_id || null,
+      recipient_role: isPartnerAdmin ? "admin" : (partner?.role || "learner"),
       message: `Voice Note (${durationStr})`,
       media_type: "audio",
       media_url: finalAudioUrl,
@@ -7803,6 +8051,11 @@ async function handleChatInputSubmit(e) {
     recipient_id: partnerId,
     sender_name: senderName,
     sender_role: senderRole,
+    sender_email: (state.profile?.email || state.user?.email || (senderRole === "admin" ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+    recipient_email: (partner?.email || (isPartnerAdmin ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+    sender_student_id: state.profile?.student_id || null,
+    recipient_student_id: partner?.student_id || null,
+    recipient_role: isPartnerAdmin ? "admin" : (partner?.role || "learner"),
     message: text || (currentAttachment ? `Shared ${currentAttachment.name}` : ""),
     media_type: currentAttachment ? currentAttachment.type : "text",
     media_url: currentAttachment ? currentAttachment.dataUrl : null,

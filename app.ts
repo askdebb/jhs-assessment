@@ -3836,6 +3836,7 @@ function renderAdminAssessmentConfigTable() {
       renderAdminAssessmentConfigTable2();
       renderAssessmentCards();
       updateKpiMetrics();
+      updateActiveTestBanner();
     });
   });
 
@@ -4004,6 +4005,8 @@ async function handleRoute() {
     state.allLearners = learners || [];
     state.submissions = subs || [];
     state.notifications = notifs || [];
+
+    await initChat();
 
     // Start Realtime WebSockets & Adaptive Hot-Reload Polling Engine for Admin
     startAdminRealtimeEngine();
@@ -4928,6 +4931,7 @@ function attachQuestionsConfigHandlers() {
       }
       renderQuestionsConfigView();
       renderAssessmentCards();
+      updateActiveTestBanner();
     });
   });
 
@@ -5438,6 +5442,7 @@ function attachAdminAsmtTable2Handlers() {
         }
         renderAdminAssessmentConfigTable2();
         renderAssessmentCards();
+        updateActiveTestBanner();
       });
     });
 
@@ -6187,7 +6192,20 @@ function handleQuestionEditorSubmit(e) {
 // ------------------------------------------------------------------------------
 // Extend Assessment Period Modal Handlers
 // ------------------------------------------------------------------------------
-function openExtendPeriodModal(asmtId) {
+function toLocalDatetimeInputValue(dateInput: string | Date | number | null | undefined): string {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function openExtendPeriodModal(asmtId: string) {
   if (!extendPeriodModal) return;
   const asmt = (state.assessments || []).find((a) => a.id === asmtId);
   if (!asmt) return;
@@ -6207,15 +6225,34 @@ function openExtendPeriodModal(asmtId) {
   }
 
   if (extendUnlockDatetimeInput) {
-    extendUnlockDatetimeInput.value = asmt.unlock_time ? new Date(asmt.unlock_time).toISOString().slice(0, 16) : "";
+    extendUnlockDatetimeInput.value = asmt.unlock_time ? toLocalDatetimeInputValue(asmt.unlock_time) : "";
   }
 
   // Pre-set custom datetime input to current deadline or 24 hours from now
   const defaultExtend = currentDue
-    ? new Date(currentDue).toISOString().slice(0, 16)
-    : new Date(Date.now() + 24 * 3600 * 1000).toISOString().slice(0, 16);
+    ? toLocalDatetimeInputValue(currentDue)
+    : toLocalDatetimeInputValue(new Date(Date.now() + 24 * 3600 * 1000));
   if (extendCustomDatetimeInput) {
     extendCustomDatetimeInput.value = defaultExtend;
+  }
+
+  const activateCheckbox = document.getElementById("extendModalActivateCheckbox") as HTMLInputElement | null;
+  const activateLabel = document.getElementById("extendModalActivateCheckboxLabel") as HTMLElement | null;
+  if (activateCheckbox && activateLabel) {
+    const isAlreadyOpen = asmt.status === "AVAILABLE";
+    activateCheckbox.checked = true;
+    activateLabel.textContent = isAlreadyOpen
+      ? "Keep assessment Active & Open for learners"
+      : "Turn ON / Make Available to learners upon saving";
+  }
+
+  const syncCheckbox = document.getElementById("extendModalSyncTrackCheckbox") as HTMLInputElement | null;
+  const syncLabel = document.getElementById("extendModalSyncTrackCheckboxLabel") as HTMLElement | null;
+  if (syncCheckbox && syncLabel) {
+    syncCheckbox.checked = true;
+    const is9A = (asmt.class_level === "Basic 9A") || (asmt.title || "").includes("9A");
+    const otherTrack = is9A ? "Basic 9B" : "Basic 9A";
+    syncLabel.textContent = `Also apply to parallel track (${otherTrack})`;
   }
 
   extendPeriodModal.classList.remove("hidden");
@@ -6231,6 +6268,12 @@ async function handleSaveExtendPeriod() {
 
   const newDeadlineIso = customVal ? new Date(customVal).toISOString() : null;
   const newUnlockIso = unlockVal ? new Date(unlockVal).toISOString() : null;
+
+  const activateCheckbox = document.getElementById("extendModalActivateCheckbox") as HTMLInputElement | null;
+  const shouldActivate = activateCheckbox ? activateCheckbox.checked : false;
+
+  const syncCheckbox = document.getElementById("extendModalSyncTrackCheckbox") as HTMLInputElement | null;
+  const shouldSyncTrack = syncCheckbox ? syncCheckbox.checked : false;
 
   if (saveExtendPeriodBtn) {
     saveExtendPeriodBtn.disabled = true;
@@ -6249,6 +6292,9 @@ async function handleSaveExtendPeriod() {
   if (newUnlockIso !== undefined) {
     updates.unlock_time = newUnlockIso;
   }
+  if (shouldActivate) {
+    updates.status = "AVAILABLE";
+  }
 
   await updateAssessment(asmtId, updates);
   const asmt = (state.assessments || []).find((a) => a.id === asmtId);
@@ -6260,6 +6306,32 @@ async function handleSaveExtendPeriod() {
     }
     if (newUnlockIso !== undefined) {
       asmt.unlock_time = newUnlockIso;
+    }
+    if (shouldActivate) {
+      asmt.status = "AVAILABLE";
+      notifyAssessmentActivated(asmtId);
+    }
+
+    if (shouldSyncTrack && asmt.title) {
+      const is9A = (asmt.class_level === "Basic 9A") || asmt.title.includes("9A");
+      const targetClass = is9A ? "Basic 9B" : "Basic 9A";
+      const baseTitle = asmt.title.replace(" (Basic 9A)", "").replace(" (Basic 9B)", "").replace(" 9A", "").replace(" 9B", "").trim();
+      const parallelAsmt = (state.assessments || []).find((a) => a.id !== asmtId && a.class_level === targetClass && a.title.includes(baseTitle));
+      if (parallelAsmt) {
+        await updateAssessment(parallelAsmt.id, updates);
+        parallelAsmt.time_limit_minutes = durationVal;
+        if (newDeadlineIso) {
+          parallelAsmt.deadline = newDeadlineIso;
+          parallelAsmt.due_date = newDeadlineIso;
+        }
+        if (newUnlockIso !== undefined) {
+          parallelAsmt.unlock_time = newUnlockIso;
+        }
+        if (shouldActivate) {
+          parallelAsmt.status = "AVAILABLE";
+          notifyAssessmentActivated(parallelAsmt.id);
+        }
+      }
     }
   }
 
@@ -6273,6 +6345,7 @@ async function handleSaveExtendPeriod() {
   renderAdminAssessmentConfigTable();
   renderAdminAssessmentConfigTable2();
   renderAssessmentCards();
+  updateActiveTestBanner();
 }
 
 function getAdminLearnersPageSize(): number {
@@ -6397,13 +6470,13 @@ function renderAdminLearnersTable() {
       <tr class="hover:bg-slate-50/80 transition-colors">
         <td class="py-3.5 px-4">
           <div class="flex items-center gap-3">
-            <div class="relative">
+            <button type="button" class="admin-view-learner-btn relative shrink-0 rounded-full cursor-pointer hover:ring-2 hover:ring-indigo-400 transition" data-student-id="${learner.id}" title="View full profile">
               <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-9 h-9 rounded-full object-cover ring-1 ring-slate-200" />
               <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-500 ring-2 ring-white' : 'bg-slate-400'}"></span>
-            </div>
+            </button>
             <div>
               <div class="font-bold text-slate-900 flex items-center gap-2">
-                <span>${escapeHtml(learner.full_name)}</span>
+                <button type="button" class="admin-view-learner-btn text-left font-bold text-slate-900 hover:text-indigo-700 hover:underline underline-offset-2 cursor-pointer transition" data-student-id="${learner.id}" title="View full profile">${escapeHtml(learner.full_name)}</button>
                 ${roleBadge}
                 ${isBirthdayToday(learner.date_of_birth) ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 text-pink-700 border border-pink-200 animate-pulse whitespace-nowrap"><i class="fa-solid fa-cake-candles text-pink-500"></i> Birthday Today!</span>` : ""}
               </div>
@@ -6498,13 +6571,13 @@ function renderAdminLearnersTable() {
         <div class="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3.5 space-y-3 hover:border-slate-300 transition-all">
           <div class="flex items-start justify-between gap-2">
             <div class="flex items-center gap-2.5 min-w-0">
-              <div class="relative shrink-0">
+              <button type="button" class="admin-view-learner-btn relative shrink-0 rounded-full cursor-pointer" data-student-id="${learner.id}" title="View full profile">
                 <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-10 h-10 rounded-full object-cover ring-2 ring-slate-100 shadow-2xs" />
                 <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
-              </div>
+              </button>
               <div class="min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                  <span class="font-bold text-slate-900 text-sm leading-tight truncate">${escapeHtml(learner.full_name)}</span>
+                  <button type="button" class="admin-view-learner-btn text-left font-bold text-slate-900 text-sm leading-tight truncate hover:text-indigo-700 cursor-pointer" data-student-id="${learner.id}" title="View full profile">${escapeHtml(learner.full_name)}</button>
                   ${roleBadge}
                   ${birthdayBadge}
                 </div>
@@ -6607,6 +6680,15 @@ function renderAdminLearnersTable() {
     btn.addEventListener("click", () => {
       const studentId = btn.getAttribute("data-student-id");
       if (studentId) openEditLearnerModal(studentId);
+    });
+  });
+
+  // Attach View Profile handlers (clicking learner name / avatar)
+  document.querySelectorAll(".admin-view-learner-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const studentId = btn.getAttribute("data-student-id");
+      if (studentId) openLearnerProfileModal(studentId);
     });
   });
 
@@ -7136,6 +7218,38 @@ function renderActiveLearnersList() {
   });
 }
 
+function openLearnerProfileModal(learnerId: string) {
+  const learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  if (!learner) return;
+  const modalEl = activeLearnersModal || document.getElementById("activeLearnersModal");
+  if (!modalEl) return;
+  modalEl.style.display = "flex";
+  modalEl.classList.remove("hidden");
+  showActiveLearnerDetail(learner);
+}
+(window as any).openLearnerProfileModal = openLearnerProfileModal;
+
+function openLearnerPhotoViewer(src: string, name: string) {
+  const existing = document.getElementById("learnerPhotoViewer");
+  if (existing) existing.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "learnerPhotoViewer";
+  overlay.className = "fixed inset-0 z-[80] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-4 cursor-zoom-out";
+  overlay.innerHTML = `
+    <img src="${src}" alt="${escapeHtml(name)}" class="max-w-[92vw] max-h-[80vh] w-auto h-auto rounded-3xl object-contain shadow-2xl ring-4 ring-white/20" />
+    <p class="mt-4 text-white font-bold text-base">${escapeHtml(name)}</p>
+    <p class="text-slate-400 text-xs mt-1">Click anywhere or press Esc to close</p>
+  `;
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") close(); };
+  overlay.addEventListener("click", close);
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(overlay);
+}
+
 function showActiveLearnerDetail(learner) {
   const detailContent = activeLearnerDetailContent || document.getElementById("activeLearnerDetailContent");
   const detailView = activeLearnerDetailView || document.getElementById("activeLearnerDetailView");
@@ -7182,6 +7296,12 @@ function showActiveLearnerDetail(learner) {
       openEditLearnerModal(learner.id);
     });
   });
+
+  document.querySelectorAll(".active-modal-photo-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openLearnerPhotoViewer(learner.avatar_url || AVATAR_PRESETS[0], learner.full_name || "Learner");
+    });
+  });
 }
 
 function renderActiveLearnerDetailHtml(learner) {
@@ -7192,22 +7312,28 @@ function renderActiveLearnerDetailHtml(learner) {
     : "0.0";
   const lastScore = subCount > 0 ? `${subs[0].score}/${subs[0].max_score || 20}` : "None";
   const age = calculateAge(learner.date_of_birth);
+  const isOnlineNow = isLearnerOnline(learner);
 
   return `
     <!-- Top Identity Card -->
     <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div class="flex items-center gap-3.5">
-          <div class="relative">
-            <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="Avatar" class="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-400 shadow-md" />
-            <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-slate-900 flex items-center justify-center">
-              <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+        <div class="flex flex-col sm:flex-row items-center sm:items-center gap-4 text-center sm:text-left">
+          <button type="button" class="active-modal-photo-btn relative shrink-0 group cursor-zoom-in" title="Click to view full-size photo">
+            <img src="${learner.avatar_url || AVATAR_PRESETS[0]}" alt="${escapeHtml(learner.full_name)}" class="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl object-cover ring-4 ${isOnlineNow ? 'ring-emerald-400' : 'ring-slate-500'} shadow-xl group-hover:scale-[1.03] transition-transform" />
+            <span class="absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full ${isOnlineNow ? 'bg-emerald-500' : 'bg-slate-500'} ring-4 ring-slate-900 flex items-center justify-center">
+              <span class="w-2 h-2 rounded-full bg-white ${isOnlineNow ? 'animate-pulse' : ''}"></span>
             </span>
-          </div>
+            <span class="absolute inset-0 rounded-3xl bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold">
+              <i class="fa-solid fa-magnifying-glass-plus mr-1"></i> Enlarge
+            </span>
+          </button>
           <div>
-            <div class="flex items-center gap-2">
-              <h4 class="text-base sm:text-lg font-bold">${escapeHtml(learner.full_name)}</h4>
-              <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">Online Now</span>
+            <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+              <h4 class="text-lg sm:text-xl font-bold">${escapeHtml(learner.full_name)}</h4>
+              ${isOnlineNow
+                ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider">Online Now</span>`
+                : `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-slate-300 border border-white/20 uppercase tracking-wider">Offline &bull; ${formatTimeAgo(learner.last_seen)}</span>`}
             </div>
             <div class="flex flex-wrap items-center gap-2 text-xs text-slate-300 mt-1">
               <span class="font-mono bg-white/10 px-2 py-0.5 rounded font-bold text-emerald-300">${escapeHtml(learner.student_id || generateStudentId(learner.class_level, 1))}</span>
@@ -7273,8 +7399,8 @@ function renderActiveLearnerDetailHtml(learner) {
       </div>
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
         <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Presence</span>
-        <span class="text-sm font-bold text-emerald-600 flex items-center justify-center gap-1 mt-1">
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Active
+        <span class="text-sm font-bold ${isOnlineNow ? 'text-emerald-600' : 'text-slate-500'} flex items-center justify-center gap-1 mt-1">
+          <span class="w-2 h-2 rounded-full ${isOnlineNow ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span> ${isOnlineNow ? 'Active' : 'Offline'}
         </span>
         <span class="text-[10px] text-slate-400 block mt-0.5">${formatTimeAgo(learner.last_seen)}</span>
       </div>
@@ -7982,62 +8108,167 @@ function getMyUserId(): string {
 
 function isMessageAddressedToMe(msg: any, myId: string): boolean {
   if (!msg) return false;
-  if (msg.sender_id === myId) return false;
 
-  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const isCurrentUserAdmin =
+    state.isAdmin ||
+    (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+    state.activeView === "admin";
 
+  // If current viewer is Admin:
   if (isCurrentUserAdmin) {
+    if (
+      msg.sender_role === "admin" ||
+      msg.sender_id === ADMIN_CONTACT.id ||
+      msg.sender_id === myId ||
+      (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())
+    ) {
+      return false;
+    }
     return (
+      msg.recipient_role === "admin" ||
       msg.recipient_id === ADMIN_CONTACT.id ||
       msg.recipient_id === myId ||
-      msg.recipient_role === "admin" ||
+      (msg.recipient_email && (
+        msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+        msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase()
+      )) ||
       !msg.recipient_id
     );
-  } else {
-    return (
-      msg.recipient_id === myId ||
-      (msg.sender_role === "admin" && (!msg.recipient_id || msg.recipient_id === myId))
-    );
   }
+
+  // If current viewer is Learner:
+  const profileId = state.profile?.id;
+  const userId = state.user?.id;
+  const studentId = state.profile?.student_id;
+  const email = (state.profile?.email || state.user?.email || "").toLowerCase();
+
+  // Find this learner in state.allLearners to get any alias ID (such as lrn-001)
+  const myLearnerInList = (state.allLearners || []).find((l: any) => {
+    if (email && (l.email || "").toLowerCase() === email) return true;
+    if (studentId && (l.student_id === studentId || l.id === studentId)) return true;
+    if (profileId && l.id === profileId) return true;
+    if (userId && l.id === userId) return true;
+    return false;
+  });
+  const listId = myLearnerInList?.id;
+  const listStudentId = myLearnerInList?.student_id;
+  const listEmail = (myLearnerInList?.email || "").toLowerCase();
+
+  // 1. Do not count messages sent by myself as unread
+  const isSentByMe =
+    msg.sender_id === myId ||
+    (profileId && msg.sender_id === profileId) ||
+    (userId && msg.sender_id === userId) ||
+    (studentId && (msg.sender_id === studentId || msg.sender_student_id === studentId)) ||
+    (listId && msg.sender_id === listId) ||
+    (listStudentId && (msg.sender_id === listStudentId || msg.sender_student_id === listStudentId)) ||
+    (email && msg.sender_email && msg.sender_email.toLowerCase() === email) ||
+    (listEmail && msg.sender_email && msg.sender_email.toLowerCase() === listEmail);
+
+  if (isSentByMe) return false;
+
+  // 2. Direct recipient match for this learner (friend-to-friend or admin-to-learner)
+  const isDirectRecipient =
+    Boolean(msg.recipient_id && (
+      msg.recipient_id === myId ||
+      (profileId && msg.recipient_id === profileId) ||
+      (userId && msg.recipient_id === userId) ||
+      (studentId && msg.recipient_id === studentId) ||
+      (listId && msg.recipient_id === listId) ||
+      (listStudentId && msg.recipient_id === listStudentId)
+    )) ||
+    Boolean(msg.recipient_student_id && (
+      (studentId && msg.recipient_student_id === studentId) ||
+      (listStudentId && msg.recipient_student_id === listStudentId)
+    )) ||
+    Boolean(msg.recipient_email && (
+      (email && msg.recipient_email.toLowerCase() === email) ||
+      (listEmail && msg.recipient_email.toLowerCase() === listEmail)
+    ));
+
+  if (isDirectRecipient) return true;
+
+  // 3. Admin broadcast announcement or reply directed to learner
+  if (
+    (msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id) &&
+    (!msg.recipient_id || msg.recipient_id === "all" || msg.recipient_role === "learner")
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function updateChatUnreadDot() {
   const myId = getMyUserId();
-  const unreadMessages = (state.chatMessages || []).filter((m) => {
+  const allMessages = (state.chatMessages && state.chatMessages.length > 0)
+    ? state.chatMessages
+    : (chatQueryClient.getQueryData<any[]>(["chat_messages"]) || []);
+
+  const unreadMessages = allMessages.filter((m: any) => {
     return !m.read && isMessageAddressedToMe(m, myId);
   });
 
   const totalUnread = unreadMessages.length;
   const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
 
-  if (chatUnreadDot) {
+  const dot = chatUnreadDot || document.getElementById("chatUnreadDot");
+  if (dot) {
     if (totalUnread > 0 && !isChatOpen) {
-      chatUnreadDot.textContent = totalUnread > 9 ? "9+" : String(totalUnread);
-      chatUnreadDot.classList.remove("hidden");
-      chatUnreadDot.classList.add("flex");
+      dot.textContent = totalUnread > 99 ? "99+" : String(totalUnread);
+      dot.classList.remove("hidden");
+      dot.classList.add("flex");
+      dot.style.display = "flex";
+      dot.setAttribute("aria-label", `${totalUnread} unread messages`);
     } else {
-      chatUnreadDot.classList.add("hidden");
-      chatUnreadDot.classList.remove("flex");
-      chatUnreadDot.textContent = "";
+      dot.classList.add("hidden");
+      dot.classList.remove("flex");
+      dot.style.display = "none";
+      dot.textContent = "";
+      dot.removeAttribute("aria-label");
     }
   }
 
   // Update Contacts drawer button badge
   const contactsBadge = document.getElementById("chatContactsUnreadBadge");
   if (contactsBadge) {
-    const otherUnread = unreadMessages.filter(
-      (m) => !state.activeChatPartner || (m.sender_id !== state.activeChatPartner.id && !(state.activeChatPartner.role === "admin" && m.sender_role === "admin"))
-    ).length;
+    const partner = state.activeChatPartner;
+    const partnerId = partner?.id || null;
+    const partnerEmail = (partner?.email || "").toLowerCase();
+    const partnerStudentId = partner?.student_id;
+    const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
+
+    const otherUnread = unreadMessages.filter((m: any) => {
+      if (!partner) return true;
+      if (isPartnerAdmin) {
+        return !(
+          m.sender_role === "admin" ||
+          m.sender_id === ADMIN_CONTACT.id ||
+          (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())
+        );
+      }
+      return !(
+        m.sender_id === partnerId ||
+        (partnerEmail && m.sender_email && m.sender_email.toLowerCase() === partnerEmail) ||
+        (partnerStudentId && (m.sender_id === partnerStudentId || m.sender_student_id === partnerStudentId))
+      );
+    }).length;
 
     if (otherUnread > 0) {
-      contactsBadge.textContent = otherUnread > 9 ? "9+" : String(otherUnread);
+      contactsBadge.textContent = otherUnread > 99 ? "99+" : String(otherUnread);
       contactsBadge.classList.remove("hidden");
       contactsBadge.classList.add("inline-flex");
+      contactsBadge.style.display = "inline-flex";
     } else {
       contactsBadge.classList.add("hidden");
       contactsBadge.classList.remove("inline-flex");
+      contactsBadge.style.display = "none";
       contactsBadge.textContent = "";
     }
+  }
+
+  if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
+    renderChatContactsList();
   }
 }
 
@@ -8288,9 +8519,12 @@ function renderChatContactsList() {
     ) || ADMIN_CONTACT;
     const isAdminOnline = isLearnerOnline(adminLearner);
 
-    const isCurrentPartner = state.activeChatPartner?.id === ADMIN_CONTACT.id;
+    const isCurrentPartner = state.activeChatPartner?.id === ADMIN_CONTACT.id || state.activeChatPartner?.role === "admin";
     const unreadAdminCount = (state.chatMessages || []).filter(
-      (m) => (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id) && !m.read && isMessageAddressedToMe(m, myId)
+      (m) =>
+        (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id || (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+        !m.read &&
+        isMessageAddressedToMe(m, myId)
     ).length;
 
     const adminMatches =
@@ -8367,11 +8601,18 @@ function renderChatContactsList() {
     `;
   } else {
     students.forEach((student: any) => {
-      const isCurrent = state.activeChatPartner?.id === student.id;
+      const studentEmail = (student.email || "").toLowerCase();
+      const studentId = student.student_id;
+      const isCurrent = state.activeChatPartner?.id === student.id || (studentEmail && state.activeChatPartner?.email && state.activeChatPartner.email.toLowerCase() === studentEmail);
       const isOnline = isLearnerOnline(student);
-      const unreadCount = (state.chatMessages || []).filter(
-        (m) => m.sender_id === student.id && !m.read && isMessageAddressedToMe(m, myId)
-      ).length;
+      const unreadCount = (state.chatMessages || []).filter((m) => {
+        if (m.read) return false;
+        const isFromStudent =
+          m.sender_id === student.id ||
+          (studentEmail && m.sender_email && m.sender_email.toLowerCase() === studentEmail) ||
+          (studentId && (m.sender_id === studentId || m.sender_student_id === studentId));
+        return isFromStudent && isMessageAddressedToMe(m, myId);
+      }).length;
 
       html += `
         <div
@@ -8795,10 +9036,14 @@ async function initChat() {
         const isForMe = isMessageAddressedToMe(newMsg, myId);
         const isChatOpen = chatWindow && !chatWindow.classList.contains("hidden");
         const partner = state.activeChatPartner;
+        const partnerEmail = (partner?.email || "").toLowerCase();
+        const partnerStudentId = partner?.student_id;
         const isCurrentPartner = partner && (
           newMsg.sender_id === partner.id ||
+          (partnerEmail && newMsg.sender_email && newMsg.sender_email.toLowerCase() === partnerEmail) ||
+          (partnerStudentId && (newMsg.sender_id === partnerStudentId || newMsg.sender_student_id === partnerStudentId)) ||
           (partner.role === "admin" && newMsg.sender_role === "admin") ||
-          (newMsg.sender_id === myId && newMsg.recipient_id === partner.id)
+          (newMsg.sender_id === myId && (newMsg.recipient_id === partner.id || (partnerEmail && newMsg.recipient_email && newMsg.recipient_email.toLowerCase() === partnerEmail)))
         );
 
         if (isChatOpen && isCurrentPartner) {
@@ -8806,11 +9051,13 @@ async function initChat() {
             markCurrentChatAsSeen();
           }
         } else {
-          if (isForMe && isNew) {
-            // Instant sound alert only on newly arrived messages (not on duplicate updates)
-            playNotificationChime();
-            // Instant toast notification preview
-            showIncomingChatToast(newMsg);
+          if (isForMe) {
+            if (isNew) {
+              // Instant sound alert only on newly arrived messages (not on duplicate updates)
+              playNotificationChime();
+              // Instant toast notification preview
+              showIncomingChatToast(newMsg);
+            }
             // Instant unread badge on floating chatbot icon
             updateChatUnreadDot();
             if (chatContactsDrawer && !chatContactsDrawer.classList.contains("hidden")) {
@@ -8960,16 +9207,25 @@ function openChatWithUser(student: any) {
 async function markCurrentChatAsSeen() {
   const myId = getMyUserId();
   const partner = state.activeChatPartner;
+  if (!partner) return;
+
   const partnerId = partner?.id || null;
+  const partnerEmail = (partner?.email || "").toLowerCase();
+  const partnerStudentId = partner?.student_id || null;
+  const isPartnerAdmin = partner?.role === "admin" || partner?.id === ADMIN_CONTACT.id;
   const viewerRole = state.isAdmin && state.activeView === "admin" ? "admin" : "learner";
 
   // Optimistically mark messages as read in TanStack Query cache
   chatQueryClient.setQueryData(["chat_messages"], (old: any[] = []) => {
     let changed = false;
     const updated = old.map((m: any) => {
-      const matchesPartner = partnerId
-        ? m.sender_id === partnerId || (m.sender_role === "admin" && partnerId === ADMIN_CONTACT.id)
-        : true;
+      const matchesPartner = isPartnerAdmin
+        ? (m.sender_role === "admin" || m.sender_id === ADMIN_CONTACT.id || (m.sender_email && m.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()))
+        : (
+            (partnerId && m.sender_id === partnerId) ||
+            (partnerEmail && m.sender_email && m.sender_email.toLowerCase() === partnerEmail) ||
+            (partnerStudentId && (m.sender_id === partnerStudentId || m.sender_student_id === partnerStudentId))
+          );
       if (matchesPartner && !m.read) {
         changed = true;
         return { ...m, read: true, read_at: new Date().toISOString() };
@@ -8979,7 +9235,8 @@ async function markCurrentChatAsSeen() {
     return changed ? updated : old;
   });
 
-  await markChatMessagesAsRead(myId, partnerId, viewerRole);
+  updateChatUnreadDot();
+  await markChatMessagesAsRead(myId, partnerId, viewerRole, partnerEmail);
 }
 
 // ------------------------------------------------------------------------------
@@ -9126,29 +9383,40 @@ function renderChatMessages() {
     return;
   }
 
+  const partnerEmail = (partner.email || "").toLowerCase();
+  const partnerStudentId = partner.student_id;
   const isPartnerAdmin = partner.role === "admin" || partner.id === ADMIN_CONTACT.id;
   const defaultPartnerAvatar = isPartnerAdmin ? TEACHER_AVATAR : (partner.avatar_url || AVATAR_PRESETS[0]);
-  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  const isCurrentUserAdmin = state.isAdmin || (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || state.activeView === "admin";
 
   // Scoped message filter for this 1-on-1 thread
   const threadMessages = state.chatMessages.filter((msg) => {
     if (isCurrentUserAdmin) {
       if (isPartnerAdmin) return false;
-      return (
-        (msg.sender_id === partner.id && (msg.recipient_id === myId || msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id)) ||
-        ((msg.sender_id === myId || msg.sender_role === "admin") && (msg.recipient_id === partner.id || !msg.recipient_id))
-      );
+      const fromLearnerToAdmin =
+        (msg.sender_id === partner.id || (partnerEmail && msg.sender_email && msg.sender_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.sender_id === partnerStudentId || msg.sender_student_id === partnerStudentId))) &&
+        (msg.recipient_id === myId || msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || (msg.recipient_email && (msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase())) || !msg.recipient_id);
+      const fromAdminToLearner =
+        (msg.sender_id === myId || msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id || (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+        (msg.recipient_id === partner.id || (partnerEmail && msg.recipient_email && msg.recipient_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.recipient_id === partnerStudentId || msg.recipient_student_id === partnerStudentId)));
+      return fromLearnerToAdmin || fromAdminToLearner;
     } else {
       if (isPartnerAdmin) {
-        return (
-          (msg.sender_id === myId && (msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || !msg.recipient_id)) ||
-          ((msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id) && (msg.recipient_id === myId || !msg.recipient_id))
-        );
+        const fromMeToAdmin =
+          !isMessageAddressedToMe(msg, myId) &&
+          (msg.recipient_id === ADMIN_CONTACT.id || msg.recipient_role === "admin" || (msg.recipient_email && (msg.recipient_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() || msg.recipient_email.toLowerCase() === ADMIN_CONTACT.email.toLowerCase())) || !msg.recipient_id);
+        const fromAdminToMe =
+          (msg.sender_role === "admin" || msg.sender_id === ADMIN_CONTACT.id || (msg.sender_email && msg.sender_email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase())) &&
+          isMessageAddressedToMe(msg, myId);
+        return fromMeToAdmin || fromAdminToMe;
       } else {
-        return (
-          (msg.sender_id === myId && msg.recipient_id === partner.id) ||
-          (msg.sender_id === partner.id && msg.recipient_id === myId)
-        );
+        const fromPartnerToMe =
+          (msg.sender_id === partner.id || (partnerEmail && msg.sender_email && msg.sender_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.sender_id === partnerStudentId || msg.sender_student_id === partnerStudentId))) &&
+          isMessageAddressedToMe(msg, myId);
+        const fromMeToPartner =
+          (msg.recipient_id === partner.id || (partnerEmail && msg.recipient_email && msg.recipient_email.toLowerCase() === partnerEmail) || (partnerStudentId && (msg.recipient_id === partnerStudentId || msg.recipient_student_id === partnerStudentId))) &&
+          !isMessageAddressedToMe(msg, myId);
+        return fromPartnerToMe || fromMeToPartner;
       }
     }
   });
@@ -9760,6 +10028,11 @@ async function sendAudioRecording() {
       recipient_id: partnerId,
       sender_name: senderName,
       sender_role: senderRole,
+      sender_email: (state.profile?.email || state.user?.email || (senderRole === "admin" ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+      recipient_email: (partner?.email || (isPartnerAdmin ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+      sender_student_id: state.profile?.student_id || null,
+      recipient_student_id: partner?.student_id || null,
+      recipient_role: isPartnerAdmin ? "admin" : (partner?.role || "learner"),
       message: `Voice Note (${durationStr})`,
       media_type: "audio",
       media_url: finalAudioUrl,
@@ -9816,6 +10089,11 @@ async function handleChatInputSubmit(e) {
     recipient_id: partnerId,
     sender_name: senderName,
     sender_role: senderRole,
+    sender_email: (state.profile?.email || state.user?.email || (senderRole === "admin" ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+    recipient_email: (partner?.email || (isPartnerAdmin ? PRIMARY_ADMIN_EMAIL : "")).toLowerCase(),
+    sender_student_id: state.profile?.student_id || null,
+    recipient_student_id: partner?.student_id || null,
+    recipient_role: isPartnerAdmin ? "admin" : (partner?.role || "learner"),
     message: text || (currentAttachment ? `Shared ${currentAttachment.name}` : ""),
     media_type: currentAttachment ? currentAttachment.type : "text",
     media_url: currentAttachment ? currentAttachment.dataUrl : null,
@@ -13746,10 +14024,10 @@ function attachEventListeners() {
   saveExtendPeriodBtn?.addEventListener("click", handleSaveExtendPeriod);
   document.querySelectorAll(".quick-extend-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const hours = parseInt(btn.getAttribute("data-hours"), 10) || 24;
+      const hours = parseInt(btn.getAttribute("data-hours") || "24", 10) || 24;
       const newDate = new Date(Date.now() + hours * 3600 * 1000);
       if (extendCustomDatetimeInput) {
-        extendCustomDatetimeInput.value = newDate.toISOString().slice(0, 16);
+        extendCustomDatetimeInput.value = toLocalDatetimeInputValue(newDate);
       }
     });
   });

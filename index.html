@@ -1942,7 +1942,8 @@
         <i class="fa-solid fa-comments"></i>
         <span
           id="chatUnreadDot"
-          class="hidden absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 bg-rose-600 text-white text-[9px] font-extrabold rounded-full border-2 border-white flex items-center justify-center shadow-md animate-bounce"
+          style="min-width: 20px; height: 20px; display: none;"
+          class="hidden absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 bg-rose-600 text-white text-[10px] font-black rounded-full border-2 border-white flex items-center justify-center shadow-lg leading-none z-20 pointer-events-none"
         ></span>
       </button>
 
@@ -2019,7 +2020,7 @@
               <i class="fa-solid fa-users text-xs"></i>
               <span
                 id="chatContactsUnreadBadge"
-                class="hidden absolute -top-1 -right-1 min-w-[15px] h-3.5 px-0.5 rounded-full text-[9px] font-extrabold bg-rose-500 text-white flex items-center justify-center border border-slate-900"
+                class="hidden absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-black bg-rose-500 text-white flex items-center justify-center border-2 border-slate-900 shadow-sm leading-none pointer-events-none"
               ></span>
             </button>
             <!-- Close Chat Button -->
@@ -4111,6 +4112,28 @@
             id="extendCustomDatetimeInput"
             class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
+        </div>
+
+        <!-- Status & Sync Options -->
+        <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
+          <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 select-none">
+            <input
+              type="checkbox"
+              id="extendModalActivateCheckbox"
+              checked
+              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+            />
+            <span id="extendModalActivateCheckboxLabel">Turn ON / Make Available to learners now</span>
+          </label>
+          <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-600 select-none">
+            <input
+              type="checkbox"
+              id="extendModalSyncTrackCheckbox"
+              checked
+              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+            />
+            <span id="extendModalSyncTrackCheckboxLabel">Also apply this deadline &amp; duration to parallel track</span>
+          </label>
         </div>
 
         <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
