@@ -1196,100 +1196,188 @@
 
           <!-- Live Registered Student Directory & Realtime Chat -->
           <div class="bg-white rounded-xl border border-slate-200/90 shadow-2xs p-3.5 sm:p-5">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200 mb-4">
-              <div>
-                <h3 class="font-bold text-sm sm:text-base text-slate-900 tracking-tight flex items-center gap-1.5">
-                  <i class="fa-solid fa-address-book text-indigo-600 text-xs sm:text-sm"></i>
-                  Registered Learner Directory &amp; Realtime Communication
-                </h3>
-                <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                  View real student grades, presence, record scores, and start 1-on-1 chats.
-                </p>
+            <!-- Header Row: Title & Action Buttons -->
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
+                  <i class="fa-solid fa-address-book text-base"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
+                      Registered Learner Directory
+                    </h3>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live Real-time
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-500 mt-0.5">
+                    Track live presence, assess continuous task submissions, record scores, and launch 1-on-1 chats.
+                  </p>
+                </div>
               </div>
 
-              <!-- Actions & Filter Controls (Mobile First Responsive Architecture) -->
-              <div class="flex flex-col gap-3 w-full">
-                <!-- Search & Class Filter Row -->
-                <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full">
-                  <!-- Instant Learner Search Input -->
-                  <div class="relative flex-1 w-full">
-                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-xs">
-                      <i class="fa-solid fa-magnifying-glass"></i>
-                    </span>
-                    <input
-                      type="text"
-                      id="adminLearnerSearchInput"
-                      placeholder="Search student by name, student ID, email..."
-                      class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-2 sm:py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
-                    />
-                  </div>
+              <!-- Top Action Buttons -->
+              <div class="flex items-center gap-2 flex-wrap shrink-0">
+                <!-- Create / Enroll User Button -->
+                <button
+                  id="adminEnrollStudentBtn"
+                  type="button"
+                  class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
+                  title="Enroll or create a learner, teacher, or admin account"
+                >
+                  <i class="fa-solid fa-user-plus text-xs"></i>
+                  <span>+ Enroll User</span>
+                </button>
 
-                  <!-- Class Filter -->
-                  <div class="flex items-center gap-2 shrink-0">
-                    <label for="adminClassFilter" class="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0">Class:</label>
-                    <select
-                      id="adminClassFilter"
-                      class="w-full sm:w-auto bg-slate-50 sm:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-2 sm:py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
-                    >
-                      <option value="ALL">All Users &amp; Classes</option>
-                      <option value="Basic 9A">Basic 9A</option>
-                      <option value="Basic 9B">Basic 9B</option>
-                      <option value="Basic 8A">Basic 8A</option>
-                      <option value="Basic 8B">Basic 8B</option>
-                      <option value="Basic 7A">Basic 7A</option>
-                      <option value="Basic 7B">Basic 7B</option>
-                      <option value="STAFF">Staff &amp; Teachers Only</option>
-                      <option value="ONLINE">Online Users Only</option>
-                    </select>
-                  </div>
+                <!-- Record Marks Button -->
+                <button
+                  id="adminRecordMarksBtn"
+                  type="button"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-all cursor-pointer active:scale-95"
+                  title="Record or update real assessment marks"
+                >
+                  <i class="fa-solid fa-pen-to-square text-xs text-indigo-600"></i>
+                  <span>Record Marks</span>
+                </button>
+
+                <!-- Export Excel Broadsheet Button -->
+                <button
+                  id="adminExportExcelBtn"
+                  type="button"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer active:scale-95"
+                  title="Download All User Continuous Assessment Broadsheet in Excel with BECE 2026 Stanine Grades and Class Ranks"
+                >
+                  <i class="fa-solid fa-file-excel text-xs"></i>
+                  <span id="adminExportExcelBtnText">Download Excel</span>
+                </button>
+
+                <!-- Purge Cooked / Test Data Button -->
+                <button
+                  id="adminPurgeTestDataBtn"
+                  type="button"
+                  class="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 shadow-2xs transition-all cursor-pointer active:scale-95"
+                  title="Purge all cooked mock data, demo students, and test submissions to start clean testing with real users"
+                >
+                  <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
+                  <span id="adminPurgeTestDataBtnText">Clear Test Data</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Search, Filters & Quick View Toolbar -->
+            <div class="my-4 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+              <!-- Top Toolbar Row: Search Input + Class Filter + Sort Dropdown -->
+              <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2.5">
+                <!-- Instant Learner Search Input -->
+                <div class="relative flex-1 min-w-0">
+                  <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 text-xs">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                  </span>
+                  <input
+                    type="text"
+                    id="adminLearnerSearchInput"
+                    placeholder="Search by student name, ID, class, or email..."
+                    class="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
+                  />
                 </div>
 
-                <!-- Action Buttons: 2-column grid on mobile, flex on desktop -->
-                <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto sm:self-end">
-                  <!-- Create / Enroll User Button -->
-                  <button
-                    id="adminEnrollStudentBtn"
-                    type="button"
-                    class="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs transition-all cursor-pointer"
-                    title="Enroll or create a learner, teacher, or admin account"
+                <!-- Class Filter -->
+                <div class="flex items-center gap-2 shrink-0">
+                  <label for="adminClassFilter" class="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-graduation-cap text-indigo-500"></i>
+                    <span>Class:</span>
+                  </label>
+                  <select
+                    id="adminClassFilter"
+                    class="bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs min-w-[150px]"
                   >
-                    <i class="fa-solid fa-user-plus text-xs"></i>
-                    <span>+ Enroll User</span>
-                  </button>
-
-                  <!-- Record Marks Button -->
-                  <button
-                    id="adminRecordMarksBtn"
-                    type="button"
-                    class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-all cursor-pointer"
-                    title="Record or update real assessment marks"
-                  >
-                    <i class="fa-solid fa-pen-to-square text-xs text-indigo-600"></i>
-                    <span>Record Marks</span>
-                  </button>
-
-                  <!-- Export Excel Broadsheet Button -->
-                  <button
-                    id="adminExportExcelBtn"
-                    type="button"
-                    class="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-all cursor-pointer"
-                    title="Download All User Continuous Assessment Broadsheet in Excel with BECE 2026 Stanine Grades and Class Ranks"
-                  >
-                    <i class="fa-solid fa-file-excel text-xs"></i>
-                    <span id="adminExportExcelBtnText">Download Excel</span>
-                  </button>
-
-                  <!-- Purge Cooked / Test Data Button -->
-                  <button
-                    id="adminPurgeTestDataBtn"
-                    type="button"
-                    class="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 shadow-2xs transition-all cursor-pointer"
-                    title="Purge all cooked mock data, demo students, and test submissions to start clean testing with real users"
-                  >
-                    <i class="fa-solid fa-trash-can text-xs text-rose-600"></i>
-                    <span id="adminPurgeTestDataBtnText">Clear All Test Data</span>
-                  </button>
+                    <option value="ALL">All Classes &amp; Roles</option>
+                    <option value="Basic 9A">Basic 9A</option>
+                    <option value="Basic 9B">Basic 9B</option>
+                    <option value="Basic 8A">Basic 8A</option>
+                    <option value="Basic 8B">Basic 8B</option>
+                    <option value="Basic 7A">Basic 7A</option>
+                    <option value="Basic 7B">Basic 7B</option>
+                    <option value="STAFF">Staff &amp; Teachers Only</option>
+                    <option value="ONLINE">Online Users Only</option>
+                    <option value="TASK_DONE">Task Performed (Done)</option>
+                    <option value="TASK_PENDING">Task Not Performed (Pending)</option>
+                  </select>
                 </div>
+
+                <!-- Sort Selector -->
+                <div class="flex items-center gap-2 shrink-0">
+                  <label for="adminLearnerSortFilter" class="text-xs font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <i class="fa-solid fa-arrow-down-short-wide text-indigo-500"></i>
+                    <span>Sort:</span>
+                  </label>
+                  <select
+                    id="adminLearnerSortFilter"
+                    class="bg-white border border-slate-200 text-slate-800 text-xs font-semibold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs min-w-[190px]"
+                    title="Sort users by Online/Active presence, Task performance, Name, or Tasks count"
+                  >
+                    <option value="ONLINE_FIRST">🟢 Active / Online First</option>
+                    <option value="TASK_DONE_FIRST">✅ Performed Task First</option>
+                    <option value="TASK_NOT_DONE_FIRST">⏳ Not Performed Task First</option>
+                    <option value="ONLINE_AND_TASK">⚡ Active + Performed Task First</option>
+                    <option value="NAME_ASC">🔤 Learner Name (A → Z)</option>
+                    <option value="NAME_DESC">🔤 Learner Name (Z → A)</option>
+                    <option value="TASKS_COUNT_DESC">📊 Most Tasks Submitted</option>
+                    <option value="DEFAULT">🕒 Recently Enrolled (Default)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Bottom Toolbar Row: Quick Filter Segmented Pills Strip -->
+              <div class="flex items-center gap-2 pt-2.5 border-t border-slate-200/60 overflow-x-auto no-scrollbar">
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1.5 mr-1">
+                  <i class="fa-solid fa-filter text-indigo-500 text-[10px]"></i>
+                  <span>Quick View:</span>
+                </span>
+                <button
+                  type="button"
+                  id="adminQuickFilterAll"
+                  class="admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-indigo-600 text-white shadow-xs border border-indigo-600 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs"
+                  data-filter="ALL"
+                  title="View all enrolled users"
+                >
+                  <span>All Users</span>
+                  <span id="quickCountAll" class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-white/25">0</span>
+                </button>
+                <button
+                  type="button"
+                  id="adminQuickSortOnline"
+                  class="admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-white text-slate-700 hover:bg-slate-100/80 border border-slate-200 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs shadow-2xs"
+                  data-sort="ONLINE_FIRST"
+                  title="Sort active/online users to top"
+                >
+                  <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Online Now</span>
+                  <span id="quickCountOnline" class="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-bold">0</span>
+                </button>
+                <button
+                  type="button"
+                  id="adminQuickSortTaskDone"
+                  class="admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-white text-slate-700 hover:bg-slate-100/80 border border-slate-200 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs shadow-2xs"
+                  data-sort="TASK_DONE_FIRST"
+                  title="Sort users who performed tasks to top"
+                >
+                  <i class="fa-solid fa-circle-check text-emerald-500 text-xs"></i>
+                  <span>Performed Task</span>
+                  <span id="quickCountTaskDone" class="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-100 text-emerald-800 font-bold">0</span>
+                </button>
+                <button
+                  type="button"
+                  id="adminQuickSortTaskPending"
+                  class="admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-white text-slate-700 hover:bg-slate-100/80 border border-slate-200 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs shadow-2xs"
+                  data-sort="TASK_NOT_DONE_FIRST"
+                  title="Sort users who have not performed tasks yet to top"
+                >
+                  <i class="fa-regular fa-clock text-amber-500 text-xs"></i>
+                  <span>Not Performed (Pending)</span>
+                  <span id="quickCountTaskPending" class="px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">0</span>
+                </button>
               </div>
             </div>
 
@@ -1302,11 +1390,26 @@
             <div class="hidden sm:block overflow-x-auto no-scrollbar -mx-4 sm:mx-0 px-4 sm:px-0">
               <table class="min-w-[700px] w-full text-left border-collapse">
                 <thead>
-                  <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                    <th class="py-3 px-4">Learner Name (As in Register)</th>
+                  <tr class="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-50/50">
+                    <th id="thSortName" class="py-3 px-4 cursor-pointer hover:text-indigo-600 transition group" title="Click to sort alphabetically by name">
+                      <div class="flex items-center gap-1.5">
+                        <span>Learner Name (As in Register)</span>
+                        <i id="thSortNameIcon" class="fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]"></i>
+                      </div>
+                    </th>
                     <th class="py-3 px-4">Class</th>
-                    <th class="py-3 px-4">Presence Status</th>
-                    <th class="py-3 px-4">Academic Status</th>
+                    <th id="thSortPresence" class="py-3 px-4 cursor-pointer hover:text-indigo-600 transition group" title="Click to sort by Active / Online presence">
+                      <div class="flex items-center gap-1.5">
+                        <span>Presence Status</span>
+                        <i id="thSortPresenceIcon" class="fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]"></i>
+                      </div>
+                    </th>
+                    <th id="thSortAcademic" class="py-3 px-4 cursor-pointer hover:text-indigo-600 transition group" title="Click to sort by Task performance (performed vs not performed)">
+                      <div class="flex items-center gap-1.5">
+                        <span>Academic Status</span>
+                        <i id="thSortAcademicIcon" class="fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]"></i>
+                      </div>
+                    </th>
                     <th class="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>

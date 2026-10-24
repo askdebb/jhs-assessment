@@ -181,6 +181,7 @@ const state = {
   collapsedQuestionKeys: new Set<string>(),
   allLearners: [],
   learnerSearchQuery: "",
+  adminLearnerSort: "ONLINE_FIRST",
   selectedRecordingIds: new Set<string>(),
   adminLearnersCurrentPage: 1,
   adminLearnersCustomPageSize: null as number | null,
@@ -372,6 +373,13 @@ const notifMessageInput = document.getElementById("notifMessageInput");
 const sendBroadcastSubmitBtn = document.getElementById("sendBroadcastSubmitBtn");
 const adminClassFilter = document.getElementById("adminClassFilter");
 const adminLearnerSearchInput = document.getElementById("adminLearnerSearchInput") as HTMLInputElement | null;
+const adminLearnerSortFilter = document.getElementById("adminLearnerSortFilter") as HTMLSelectElement | null;
+const thSortName = document.getElementById("thSortName");
+const thSortPresence = document.getElementById("thSortPresence");
+const thSortAcademic = document.getElementById("thSortAcademic");
+const thSortNameIcon = document.getElementById("thSortNameIcon");
+const thSortPresenceIcon = document.getElementById("thSortPresenceIcon");
+const thSortAcademicIcon = document.getElementById("thSortAcademicIcon");
 const adminLearnersTableBody = document.getElementById("adminLearnersTableBody");
 const adminLearnersCardsMobile = document.getElementById("adminLearnersCardsMobile");
 const adminSwitchLearnerBtn = document.getElementById("adminSwitchLearnerBtn");
@@ -6384,13 +6392,86 @@ function renderAdminLearnersTable() {
     return;
   }
 
-  const filterVal = adminClassFilter?.value || "ALL";
+  // Quick View Counts & Badges
+  const quickCountAll = document.getElementById("quickCountAll");
+  const quickCountOnline = document.getElementById("quickCountOnline");
+  const quickCountTaskDone = document.getElementById("quickCountTaskDone");
+  const quickCountTaskPending = document.getElementById("quickCountTaskPending");
+
+  if (state.allLearners && state.allLearners.length > 0) {
+    const totalCount = state.allLearners.length;
+    const onlineCount = state.allLearners.filter(isLearnerOnline).length;
+    const taskDoneCount = state.allLearners.filter((l: any) => l.submissions && l.submissions.length > 0).length;
+    const taskPendingCount = Math.max(0, totalCount - taskDoneCount);
+
+    if (quickCountAll) quickCountAll.textContent = totalCount.toString();
+    if (quickCountOnline) quickCountOnline.textContent = onlineCount.toString();
+    if (quickCountTaskDone) quickCountTaskDone.textContent = taskDoneCount.toString();
+    if (quickCountTaskPending) quickCountTaskPending.textContent = taskPendingCount.toString();
+  }
+
+  const activeSort = state.adminLearnerSort || "ONLINE_FIRST";
+  const filterVal = (adminClassFilter as HTMLSelectElement | null)?.value || "ALL";
+
+  // Sync Quick View buttons active style
+  const setActiveQuickBtn = (btnId: string, isActive: boolean) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (isActive) {
+      btn.className = "admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-indigo-600 text-white shadow-xs border border-indigo-600 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs";
+    } else {
+      btn.className = "admin-quick-filter-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-white text-slate-700 hover:bg-slate-100/80 border border-slate-200 cursor-pointer transition whitespace-nowrap active:scale-95 text-xs shadow-2xs";
+    }
+  };
+  setActiveQuickBtn("adminQuickFilterAll", filterVal === "ALL" && activeSort === "DEFAULT");
+  setActiveQuickBtn("adminQuickSortOnline", activeSort === "ONLINE_FIRST" || filterVal === "ONLINE");
+  setActiveQuickBtn("adminQuickSortTaskDone", activeSort === "TASK_DONE_FIRST" || filterVal === "TASK_DONE");
+  setActiveQuickBtn("adminQuickSortTaskPending", activeSort === "TASK_NOT_DONE_FIRST" || filterVal === "TASK_PENDING");
+
+  // Sync Sort Filter Select
+  if (adminLearnerSortFilter && adminLearnerSortFilter.value !== activeSort) {
+    adminLearnerSortFilter.value = activeSort;
+  }
+
+  // Update Table Header Sort Indicators
+  if (thSortNameIcon) {
+    if (activeSort === "NAME_ASC") {
+      thSortNameIcon.className = "fa-solid fa-arrow-down-a-z text-indigo-600 font-bold text-[11px]";
+    } else if (activeSort === "NAME_DESC") {
+      thSortNameIcon.className = "fa-solid fa-arrow-up-z-a text-indigo-600 font-bold text-[11px]";
+    } else {
+      thSortNameIcon.className = "fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]";
+    }
+  }
+  if (thSortPresenceIcon) {
+    if (activeSort === "ONLINE_FIRST") {
+      thSortPresenceIcon.className = "fa-solid fa-arrow-down-wide-short text-emerald-600 font-bold text-[11px]";
+    } else if (activeSort === "OFFLINE_FIRST") {
+      thSortPresenceIcon.className = "fa-solid fa-arrow-up-short-wide text-indigo-600 font-bold text-[11px]";
+    } else {
+      thSortPresenceIcon.className = "fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]";
+    }
+  }
+  if (thSortAcademicIcon) {
+    if (activeSort === "TASK_DONE_FIRST") {
+      thSortAcademicIcon.className = "fa-solid fa-circle-check text-emerald-600 font-bold text-[11px]";
+    } else if (activeSort === "TASK_NOT_DONE_FIRST") {
+      thSortAcademicIcon.className = "fa-solid fa-clock text-amber-600 font-bold text-[11px]";
+    } else if (activeSort === "TASKS_COUNT_DESC") {
+      thSortAcademicIcon.className = "fa-solid fa-arrow-down-9-1 text-indigo-600 font-bold text-[11px]";
+    } else {
+      thSortAcademicIcon.className = "fa-solid fa-sort text-slate-300 group-hover:text-indigo-500 text-[10px]";
+    }
+  }
+
   const searchQuery = (state.learnerSearchQuery || "").trim().toLowerCase();
 
-  let filtered = state.allLearners.filter((l) => {
+  let filtered = state.allLearners.filter((l: any) => {
     if (filterVal === "ONLINE" && !isLearnerOnline(l)) return false;
+    if (filterVal === "TASK_DONE" && (!l.submissions || l.submissions.length === 0)) return false;
+    if (filterVal === "TASK_PENDING" && (l.submissions && l.submissions.length > 0)) return false;
     if (filterVal === "STAFF" && !(l.role === "teacher" || l.role === "admin" || (l.email && l.email.toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()))) return false;
-    if (filterVal !== "ALL" && filterVal !== "ONLINE" && filterVal !== "STAFF" && l.class_level !== filterVal) return false;
+    if (filterVal !== "ALL" && filterVal !== "ONLINE" && filterVal !== "TASK_DONE" && filterVal !== "TASK_PENDING" && filterVal !== "STAFF" && l.class_level !== filterVal) return false;
     if (searchQuery) {
       const matchName = (l.full_name || "").toLowerCase().includes(searchQuery);
       const matchId = (l.student_id || "").toLowerCase().includes(searchQuery);
@@ -6425,6 +6506,67 @@ function renderAdminLearnersTable() {
     return;
   }
 
+  // Multi-Criteria Sorting Engine: Active/Online Users & Task Performed / Note
+  filtered.sort((a: any, b: any) => {
+    const aOnline = isLearnerOnline(a) ? 1 : 0;
+    const bOnline = isLearnerOnline(b) ? 1 : 0;
+    const aDone = (a.submissions && a.submissions.length > 0) ? 1 : 0;
+    const bDone = (b.submissions && b.submissions.length > 0) ? 1 : 0;
+    const aSubCount = a.submissions?.length || 0;
+    const bSubCount = b.submissions?.length || 0;
+    const nameA = (a.full_name || "").trim().toLowerCase();
+    const nameB = (b.full_name || "").trim().toLowerCase();
+
+    switch (activeSort) {
+      case "ONLINE_FIRST":
+        if (bOnline !== aOnline) return bOnline - aOnline;
+        if (bDone !== aDone) return bDone - aDone;
+        if (bSubCount !== aSubCount) return bSubCount - aSubCount;
+        return nameA.localeCompare(nameB);
+
+      case "OFFLINE_FIRST":
+        if (aOnline !== bOnline) return aOnline - bOnline;
+        if (bDone !== aDone) return bDone - aDone;
+        return nameA.localeCompare(nameB);
+
+      case "TASK_DONE_FIRST":
+        if (bDone !== aDone) return bDone - aDone;
+        if (bOnline !== aOnline) return bOnline - aOnline;
+        if (bSubCount !== aSubCount) return bSubCount - aSubCount;
+        return nameA.localeCompare(nameB);
+
+      case "TASK_NOT_DONE_FIRST":
+        if (aDone !== bDone) return aDone - bDone;
+        if (bOnline !== aOnline) return bOnline - aOnline;
+        return nameA.localeCompare(nameB);
+
+      case "ONLINE_AND_TASK":
+        const aScore = aOnline * 2 + aDone;
+        const bScore = bOnline * 2 + bDone;
+        if (bScore !== aScore) return bScore - aScore;
+        if (bSubCount !== aSubCount) return bSubCount - aSubCount;
+        return nameA.localeCompare(nameB);
+
+      case "NAME_ASC":
+        return nameA.localeCompare(nameB);
+
+      case "NAME_DESC":
+        return nameB.localeCompare(nameA);
+
+      case "TASKS_COUNT_DESC":
+        if (bSubCount !== aSubCount) return bSubCount - aSubCount;
+        if (bOnline !== aOnline) return bOnline - aOnline;
+        return nameA.localeCompare(nameB);
+
+      case "DEFAULT":
+      default:
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return nameA.localeCompare(nameB);
+    }
+  });
+
   // Calculate Responsive Pagination
   const pageSize = getAdminLearnersPageSize();
   const totalItems = filtered.length;
@@ -6444,7 +6586,7 @@ function renderAdminLearnersTable() {
   const pageItems = filtered.slice(startIndex, endIndex);
 
   // 1. Desktop Table Rows (hidden on mobile via wrapper class)
-  adminLearnersTableBody.innerHTML = pageItems.map((learner) => {
+  adminLearnersTableBody.innerHTML = pageItems.map((learner: any) => {
     const isOnline = isLearnerOnline(learner);
     const presenceBadge = isOnline
       ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
@@ -6455,10 +6597,23 @@ function renderAdminLearnersTable() {
          </span>`;
 
     const subCount = learner.submissions?.length || 0;
-    const lastScore = subCount > 0 ? learner.submissions[0].score : null;
-    const academicPill = subCount > 0
-      ? `<span class="font-bold text-slate-800 whitespace-nowrap">${subCount} Task(s) Submitted</span> <span class="text-xs text-slate-400 block whitespace-nowrap">Latest: ${lastScore}/20 marks</span>`
-      : `<span class="text-slate-400 italic whitespace-nowrap">No submissions yet</span>`;
+    const hasPerformedTask = subCount > 0;
+    const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
+    const academicPill = hasPerformedTask
+      ? `<div>
+           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+             <i class="fa-solid fa-circle-check text-emerald-500"></i> ${subCount} Task(s) Done
+           </span>
+           <span class="text-[11px] text-slate-500 block whitespace-nowrap mt-0.5">
+             Latest: <strong class="text-indigo-600 font-mono">${lastScore}/20</strong> marks
+           </span>
+         </div>`
+      : `<div>
+           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+             <i class="fa-regular fa-clock text-amber-500"></i> Not Performed
+           </span>
+           <span class="text-[10px] text-slate-400 block whitespace-nowrap mt-0.5 italic">No submissions yet</span>
+         </div>`;
 
     const roleBadge = learner.role === "admin"
       ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
@@ -6545,7 +6700,7 @@ function renderAdminLearnersTable() {
 
   // 2. Mobile Cards (Touch-Optimized for Handhelds, sm:hidden)
   if (mobileContainer) {
-    mobileContainer.innerHTML = pageItems.map((learner) => {
+    mobileContainer.innerHTML = pageItems.map((learner: any) => {
       const isOnline = isLearnerOnline(learner);
       const presenceBadge = isOnline
         ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
@@ -6556,7 +6711,16 @@ function renderAdminLearnersTable() {
            </span>`;
 
       const subCount = learner.submissions?.length || 0;
-      const lastScore = subCount > 0 ? learner.submissions[0].score : null;
+      const hasPerformedTask = subCount > 0;
+      const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
+      const academicBadgeMobile = hasPerformedTask
+        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+             <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done
+           </span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+             <i class="fa-regular fa-clock text-amber-600"></i> Pending
+           </span>`;
+
       const roleBadge = learner.role === "admin"
         ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
         : (learner.role === "teacher"
@@ -6594,9 +6758,12 @@ function renderAdminLearnersTable() {
 
           <div class="grid grid-cols-2 gap-2 p-2 bg-slate-50/80 rounded-xl border border-slate-100 text-xs">
             <div>
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Tasks</span>
-              <span class="font-bold text-slate-800 text-[11px]">${subCount > 0 ? `${subCount} Submitted` : 'No submissions'}</span>
-              ${lastScore != null ? `<span class="text-[10px] text-slate-400 block">Latest: ${lastScore}/20 marks</span>` : ''}
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Academic Tasks</span>
+                ${academicBadgeMobile}
+              </div>
+              <span class="font-bold text-slate-800 text-[11px] block">${hasPerformedTask ? `${subCount} Task(s) Submitted` : 'No submissions yet'}</span>
+              ${lastScore != null ? `<span class="text-[10px] text-slate-400 block">Latest: <strong class="text-indigo-600 font-mono">${lastScore}/20 marks</strong></span>` : ''}
             </div>
             <div>
               <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Age &amp; Birth</span>
@@ -14094,11 +14261,57 @@ function attachEventListeners() {
   // Broadcast Notification Form
   broadcastNotifForm?.addEventListener("submit", handleBroadcastSubmit);
 
-  // Admin Learners Directory Class Filter & Excel Export
+  // Admin Learners Directory Sort & Filter Handlers
   adminClassFilter?.addEventListener("change", () => {
     state.adminLearnersCurrentPage = 1;
     renderAdminLearnersTable();
   });
+  adminLearnerSortFilter?.addEventListener("change", (e: any) => {
+    state.adminLearnerSort = e.target.value;
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+
+  // Clickable Header Sort Handlers
+  thSortName?.addEventListener("click", () => {
+    state.adminLearnerSort = state.adminLearnerSort === "NAME_ASC" ? "NAME_DESC" : "NAME_ASC";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  thSortPresence?.addEventListener("click", () => {
+    state.adminLearnerSort = state.adminLearnerSort === "ONLINE_FIRST" ? "OFFLINE_FIRST" : "ONLINE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  thSortAcademic?.addEventListener("click", () => {
+    state.adminLearnerSort = state.adminLearnerSort === "TASK_DONE_FIRST" ? "TASK_NOT_DONE_FIRST" : "TASK_DONE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+
+  // Quick View Filter / Sort Pills Handlers
+  document.getElementById("adminQuickFilterAll")?.addEventListener("click", () => {
+    if (adminClassFilter) (adminClassFilter as HTMLSelectElement).value = "ALL";
+    state.adminLearnerSort = "ONLINE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  document.getElementById("adminQuickSortOnline")?.addEventListener("click", () => {
+    state.adminLearnerSort = "ONLINE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  document.getElementById("adminQuickSortTaskDone")?.addEventListener("click", () => {
+    state.adminLearnerSort = "TASK_DONE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+  document.getElementById("adminQuickSortTaskPending")?.addEventListener("click", () => {
+    state.adminLearnerSort = "TASK_NOT_DONE_FIRST";
+    state.adminLearnersCurrentPage = 1;
+    renderAdminLearnersTable();
+  });
+
   window.addEventListener("resize", () => {
     if (state.activeView === "admin") {
       renderAdminLearnersTable();
