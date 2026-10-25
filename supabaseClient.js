@@ -31,7 +31,7 @@ export const DEFAULT_STAFF = [
     email: PRIMARY_ADMIN_EMAIL,
     role: "admin",
     subjects: ["Computing"],
-    classes: ["Basic 9A", "Basic 9B", "Basic 7B"],
+    classes: ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"],
     school_name: "Adjiringanor AdMA JHS",
     permissions: {
       can_create_tests: true,
@@ -65,7 +65,7 @@ export function getInvitedTeachers() {
           if (pAdmin) {
             pAdmin.subjects = ["Computing"];
             if (!pAdmin.classes || pAdmin.classes.length === 0) {
-              pAdmin.classes = ["Basic 9A", "Basic 9B", "Basic 7B"];
+              pAdmin.classes = ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
             }
             if (!pAdmin.school_name) {
               pAdmin.school_name = "Adjiringanor AdMA JHS";
@@ -98,7 +98,7 @@ export function saveInvitedTeacher(teacherData) {
       ? ["Computing"]
       : (Array.isArray(teacherData.subjects) ? teacherData.subjects : []),
     classes: isPrimary
-      ? (teacherData.classes && teacherData.classes.length > 0 ? teacherData.classes : ["Basic 9A", "Basic 9B", "Basic 7B"])
+      ? (teacherData.classes && teacherData.classes.length > 0 ? teacherData.classes : ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"])
       : (Array.isArray(teacherData.classes) ? teacherData.classes : []),
     school_name: teacherData.school_name || "Adjiringanor AdMA JHS",
     permissions: teacherData.permissions || {

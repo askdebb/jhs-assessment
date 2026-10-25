@@ -2240,6 +2240,31 @@ async function renderDashboard() {
   renderAssessmentCards();
 }
 
+// ------------------------------------------------------------------------------
+// Multi-Stream & Multi-Class Assessment Eligibility Helper
+// ------------------------------------------------------------------------------
+export function isAssessmentEligibleForLearnerClass(
+  asmtClass: string | null | undefined,
+  learnerClass: string | null | undefined
+): boolean {
+  if (!asmtClass) return true;
+  const target = asmtClass.trim();
+  if (target === "" || target.toUpperCase() === "ALL" || target.toLowerCase() === "all classes") return true;
+  if (!learnerClass) return true;
+  const current = learnerClass.trim();
+  if (target.toLowerCase() === current.toLowerCase()) return true;
+
+  // Grade-level parent matching (e.g. "Basic 9" applies to "Basic 9A", "Basic 9B", "Basic 9C")
+  if (target === "Basic 9" && current.startsWith("Basic 9")) return true;
+  if (target === "Basic 8" && current.startsWith("Basic 8")) return true;
+  if (target === "Basic 7" && current.startsWith("Basic 7")) return true;
+
+  // Partial match: e.g. "9A" in "Basic 9A" or "Basic 9A" in "9A"
+  if (current.includes(target) || target.includes(current)) return true;
+
+  return false;
+}
+
 function updateKpiMetrics() {
   const graded = state.submissions.filter((s) => s.status === "GRADED" && s.score != null);
 
@@ -2295,14 +2320,9 @@ function updateKpiMetrics() {
     dashOverallRankText.textContent = `${overallOrdinal} of ${totalStudents} in ${learnerClass}`;
   }
 
-  // Filter assessments strictly for this learner's class & Computing subject
+  // Filter assessments strictly for this learner's class stream
   const myClassAssessments = state.assessments.filter((a) => {
-    if (a.subject && a.subject !== "Computing") return false;
-    const titleLower = (a.title || "").toLowerCase();
-    if (titleLower.includes("creative") || titleLower.includes("art") || titleLower.includes("math")) return false;
-    if (a.class_level === "Basic 9A" && learnerClass !== "Basic 9A") return false;
-    if (a.class_level === "Basic 9B" && learnerClass !== "Basic 9B") return false;
-    return true;
+    return isAssessmentEligibleForLearnerClass(a.class_level, learnerClass);
   });
 
   // Completed Count
@@ -2430,18 +2450,13 @@ function renderAssessmentCards() {
   const subMap = new Map();
   submissions.forEach((s) => subMap.set(s.assessment_id, s));
 
-  // Filter with strict lane / track separation between Basic 9A and Basic 9B
+  // Filter assessments based on student class stream eligibility & subject filter
   let filtered = assessments.filter((asmt) => {
-    // Strictly Pure Computing only
-    if (asmt.subject && asmt.subject !== "Computing") return false;
-    const titleLower = (asmt.title || "").toLowerCase();
-    if (titleLower.includes("creative") || titleLower.includes("art") || titleLower.includes("math")) return false;
+    if (!isAssessmentEligibleForLearnerClass(asmt.class_level, learnerClass)) {
+      return false;
+    }
 
-    // 9A and 9B are in their separate lane or track and shouldn't be mixed!
-    if (asmt.class_level === "Basic 9A" && learnerClass !== "Basic 9A") return false;
-    if (asmt.class_level === "Basic 9B" && learnerClass !== "Basic 9B") return false;
-
-    if (filterSubject !== "ALL" && asmt.subject !== filterSubject) {
+    if (filterSubject && filterSubject !== "ALL" && asmt.subject !== filterSubject) {
       return false;
     }
     const sub = subMap.get(asmt.id);
@@ -4023,7 +4038,7 @@ async function handleRoute() {
         state.isAdmin = true;
         state.currentStaffProfile = matched;
         state.selectedSubject = matched.subjects?.[0] || "Computing";
-        state.selectedClass = matched.classes?.[0] || "Basic 9A";
+        state.selectedClass = "ALL";
         localStorage.setItem("jhs_demo_session", JSON.stringify(state.user));
         localStorage.setItem("jhs_active_learner", JSON.stringify(state.profile));
         localStorage.setItem("jhs_view_mode", "admin");
@@ -4081,7 +4096,7 @@ async function handleRoute() {
       if (!state.currentStaffProfile) state.currentStaffProfile = DEFAULT_STAFF[0];
       state.currentStaffProfile.subjects = ["Computing"];
       if (!state.currentStaffProfile.classes || state.currentStaffProfile.classes.length === 0) {
-        state.currentStaffProfile.classes = ["Basic 9A", "Basic 9B", "Basic 7B"];
+        state.currentStaffProfile.classes = ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
       }
       if (!state.currentStaffProfile.school_name) {
         state.currentStaffProfile.school_name = "Adjiringanor AdMA JHS";
@@ -4092,9 +4107,9 @@ async function handleRoute() {
       }
     }
 
-    // Default class filter to first taught class if not already set
-    if (!state.selectedClass || state.selectedClass === "ALL") {
-      state.selectedClass = state.currentStaffProfile?.classes?.[0] || "Basic 9A";
+    // Default class filter to "ALL" so all taught classes are displayed across console
+    if (!state.selectedClass) {
+      state.selectedClass = "ALL";
     }
 
     updateActiveTestBanner();
@@ -4492,7 +4507,7 @@ async function authenticateAsTeacher(emailOrCode: string) {
   state.activeView = "admin";
   state.currentStaffProfile = staff;
   state.selectedSubject = staff.subjects?.[0] || "Computing";
-  state.selectedClass = staff.classes?.[0] || "Basic 9A";
+  state.selectedClass = "ALL";
 
   showAuthLoaderSuccess("Successfully signed in", `Welcome ${staff.full_name}! Opening Assessment Console...`);
   await new Promise((resolve) => setTimeout(resolve, 650));
@@ -4542,15 +4557,17 @@ function syncActiveClassSelector() {
   const isPrimary = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
 
   let myClasses: string[] = [];
-  if (isPrimary) {
-    myClasses = ["Basic 9A", "Basic 9B", "Basic 7B"];
+  if (isPrimary || staff?.role === "admin") {
+    const represented = Array.from(new Set((state.allLearners || []).map((l: any) => l.class_level).filter(Boolean)));
+    const standard = ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
+    myClasses = Array.from(new Set([...standard, ...represented])).filter((c) => c !== "General / Staff" && c !== "ALL");
   } else if (staff && Array.isArray(staff.classes) && staff.classes.length > 0) {
     myClasses = staff.classes;
   } else {
-    myClasses = ["Basic 9A", "Basic 9B", "Basic 7B"];
+    myClasses = ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
   }
 
-  let html = `<option value="ALL">All My Classes (${myClasses.length})</option>`;
+  let html = `<option value="ALL">All My Classes</option>`;
   myClasses.forEach((cls) => {
     html += `<option value="${escapeHtml(cls)}">${escapeHtml(cls)}</option>`;
   });
@@ -4560,8 +4577,8 @@ function syncActiveClassSelector() {
   if (state.selectedClass && (state.selectedClass === "ALL" || myClasses.includes(state.selectedClass))) {
     adminActiveClassSelect.value = state.selectedClass;
   } else {
-    state.selectedClass = myClasses[0] || "ALL";
-    adminActiveClassSelect.value = state.selectedClass;
+    state.selectedClass = "ALL";
+    adminActiveClassSelect.value = "ALL";
   }
 }
 
@@ -5295,13 +5312,9 @@ function finishTeacherOnboarding() {
     : (onboardingDraftProfile?.subjects && onboardingDraftProfile.subjects.length > 0
         ? onboardingDraftProfile.subjects
         : ["Computing"]);
-  const finalClasses = isPrimary
-    ? (onboardingDraftProfile?.classes && onboardingDraftProfile.classes.length > 0
-        ? onboardingDraftProfile.classes
-        : ["Basic 9A", "Basic 9B", "Basic 7B"])
-    : (onboardingDraftProfile?.classes && onboardingDraftProfile.classes.length > 0
-        ? onboardingDraftProfile.classes
-        : ["Basic 9A"]);
+  const finalClasses = onboardingDraftProfile?.classes && onboardingDraftProfile.classes.length > 0
+    ? onboardingDraftProfile.classes
+    : ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
 
   const updatedStaff = saveInvitedTeacher({
     ...staff,
@@ -5315,7 +5328,7 @@ function finishTeacherOnboarding() {
 
   state.currentStaffProfile = updatedStaff;
   state.selectedSubject = finalSubjects[0];
-  state.selectedClass = finalClasses[0];
+  state.selectedClass = "ALL";
 
   if (state.user) {
     state.user.user_metadata = {
@@ -5907,7 +5920,10 @@ async function renderAdminOverviewStats(isHotReload = false) {
   }
 
   // Filter students based on educator's assigned classes and active class stream filter
-  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+  const isGlobalAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+                        state.profile?.role === "admin" ||
+                        state.currentStaffProfile?.role === "admin";
+  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
   const activeClass = state.selectedClass || "ALL";
 
   const students = (state.allLearners || []).filter((l) => {
@@ -5918,6 +5934,7 @@ async function renderAdminOverviewStats(isHotReload = false) {
     if (activeClass !== "ALL") {
       return learnerClass === activeClass;
     }
+    if (isGlobalAdmin) return true;
     return myClasses.some((c) => learnerClass.includes(c) || c.includes(learnerClass));
   });
 
@@ -5934,16 +5951,26 @@ async function renderAdminOverviewStats(isHotReload = false) {
   if (kpiTotalStudents) kpiTotalStudents.textContent = String(students.length);
   const count9A = students.filter((l) => (l.class_level || "").includes("9A")).length;
   const count9B = students.filter((l) => (l.class_level || "").includes("9B")).length;
+  const count8A = students.filter((l) => (l.class_level || "").includes("8A")).length;
+  const count8B = students.filter((l) => (l.class_level || "").includes("8B")).length;
+  const count7A = students.filter((l) => (l.class_level || "").includes("7A")).length;
   const count7B = students.filter((l) => (l.class_level || "").includes("7B")).length;
-  const otherCount = students.length - count9A - count9B - count7B;
+  const otherCount = students.length - count9A - count9B - count8A - count8B - count7A - count7B;
 
   if (kpiRegisteredSubtext) {
-    const parts = [];
-    if (count9A > 0 || myClasses.includes("Basic 9A")) parts.push(`${count9A} in 9A`);
-    if (count9B > 0 || myClasses.includes("Basic 9B")) parts.push(`${count9B} in 9B`);
-    if (count7B > 0 || myClasses.includes("Basic 7B")) parts.push(`${count7B} in 7B`);
-    if (otherCount > 0) parts.push(`${otherCount} other`);
-    kpiRegisteredSubtext.textContent = parts.join(" • ") || "0 registered";
+    if (activeClass !== "ALL") {
+      kpiRegisteredSubtext.textContent = `${students.length} enrolled in ${activeClass}`;
+    } else {
+      const parts = [];
+      if (count9A > 0) parts.push(`${count9A} in 9A`);
+      if (count9B > 0) parts.push(`${count9B} in 9B`);
+      if (count8A > 0) parts.push(`${count8A} in 8A`);
+      if (count8B > 0) parts.push(`${count8B} in 8B`);
+      if (count7A > 0) parts.push(`${count7A} in 7A`);
+      if (count7B > 0) parts.push(`${count7B} in 7B`);
+      if (otherCount > 0) parts.push(`${otherCount} other`);
+      kpiRegisteredSubtext.textContent = parts.join(" • ") || `${students.length} registered`;
+    }
   }
 
   // 3. Active Assessments KPI (scoped to educator's subject and class)
@@ -8013,9 +8040,21 @@ function renderAdminLearnersTable() {
   const quickCountTaskPending = document.getElementById("quickCountTaskPending");
 
   if (state.allLearners && state.allLearners.length > 0) {
-    const totalCount = state.allLearners.length;
-    const onlineCount = state.allLearners.filter(isLearnerOnline).length;
-    const taskDoneCount = state.allLearners.filter((l: any) => l.submissions && l.submissions.length > 0).length;
+    const isGlobalAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+                          state.profile?.role === "admin" ||
+                          state.currentStaffProfile?.role === "admin";
+    const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
+
+    const managedLearners = state.allLearners.filter((l: any) => {
+      if (l.role !== "learner") return false;
+      if ((l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()) return false;
+      if (isGlobalAdmin) return true;
+      return myClasses.some((c) => (l.class_level || "").includes(c) || c.includes(l.class_level || ""));
+    });
+
+    const totalCount = managedLearners.length;
+    const onlineCount = managedLearners.filter(isLearnerOnline).length;
+    const taskDoneCount = managedLearners.filter((l: any) => l.submissions && l.submissions.length > 0).length;
     const taskPendingCount = Math.max(0, totalCount - taskDoneCount);
 
     if (quickCountAll) quickCountAll.textContent = totalCount.toString();
@@ -8080,16 +8119,22 @@ function renderAdminLearnersTable() {
 
   const searchQuery = (state.learnerSearchQuery || "").trim().toLowerCase();
 
-  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+  const isGlobalAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+                        state.profile?.role === "admin" ||
+                        state.currentStaffProfile?.role === "admin";
+  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 8A", "Basic 8B", "Basic 7A", "Basic 7B"];
   const activeClass = state.selectedClass || "ALL";
 
   let filtered = state.allLearners.filter((l: any) => {
-    // Scope to educator's assigned classes so unassigned streams do not populate the view
+    // If a specific class is selected, scope down to that stream
     if (activeClass !== "ALL") {
       if (l.class_level !== activeClass && l.role === "learner") return false;
     } else {
-      const inMyClass = myClasses.some((c) => (l.class_level || "").includes(c) || c.includes(l.class_level || ""));
-      if (l.role === "learner" && !inMyClass) return false;
+      // In "ALL" mode, administrators see all learners in the school; teachers see their assigned streams
+      if (!isGlobalAdmin) {
+        const inMyClass = myClasses.some((c) => (l.class_level || "").includes(c) || c.includes(l.class_level || ""));
+        if (l.role === "learner" && !inMyClass) return false;
+      }
     }
 
     if (filterVal === "ONLINE" && !isLearnerOnline(l)) return false;
@@ -16660,7 +16705,16 @@ function attachEventListeners() {
 
   // Admin Learners Directory Sort & Filter Handlers
   adminClassFilter?.addEventListener("change", () => {
+    const val = (adminClassFilter as HTMLSelectElement | null)?.value || "ALL";
     state.adminLearnersCurrentPage = 1;
+    if (val === "ALL" || val.startsWith("Basic")) {
+      state.selectedClass = val;
+      if (adminActiveClassSelect) {
+        const hasOpt = Array.from(adminActiveClassSelect.options).some((o) => o.value === val);
+        if (hasOpt) adminActiveClassSelect.value = val;
+      }
+      renderAdminOverviewStats(true);
+    }
     renderAdminLearnersTable();
   });
   adminLearnerSortFilter?.addEventListener("change", (e: any) => {
@@ -16688,9 +16742,12 @@ function attachEventListeners() {
 
   // Quick View Filter / Sort Pills Handlers
   document.getElementById("adminQuickFilterAll")?.addEventListener("click", () => {
+    state.selectedClass = "ALL";
+    if (adminActiveClassSelect) adminActiveClassSelect.value = "ALL";
     if (adminClassFilter) (adminClassFilter as HTMLSelectElement).value = "ALL";
     state.adminLearnerSort = "ONLINE_FIRST";
     state.adminLearnersCurrentPage = 1;
+    renderAdminOverviewStats(true);
     renderAdminLearnersTable();
   });
   document.getElementById("adminQuickSortOnline")?.addEventListener("click", () => {
@@ -17069,7 +17126,13 @@ function attachEventListeners() {
   });
 
   adminActiveClassSelect?.addEventListener("change", (e: any) => {
-    state.selectedClass = e.target.value;
+    const val = e.target.value;
+    state.selectedClass = val;
+    if (adminClassFilter) {
+      const hasOpt = Array.from((adminClassFilter as HTMLSelectElement).options).some((o) => o.value === val);
+      if (hasOpt) (adminClassFilter as HTMLSelectElement).value = val;
+    }
+    state.adminLearnersCurrentPage = 1;
     renderAdminOverviewStats(true);
     renderAdminLearnersTable();
     renderAdminAssessmentConfigTable2();
