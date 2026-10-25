@@ -3,16 +3,174 @@ import { createClient } from "@supabase/supabase-js";
 // Default Supabase project URL (Anon key must be supplied via .env / VITE_SUPABASE_ANON_KEY or localStorage)
 const DEFAULT_SUPABASE_URL = "https://vyecjlbknzwqexugtneg.supabase.co";
 
-// Designated admin email strictly required to access /admin and admin subpages
+// Designated primary administrator email
 export const PRIMARY_ADMIN_EMAIL = "computing.b9@gmail.com";
 export const ADMIN_EMAILS = [
   "computing.b9@gmail.com",
 ];
 
+// Ghana Basic Education (JHS NaCCA Curriculum) Official Subject Directory
+export const GHANA_JHS_SUBJECTS = [
+  { id: "computing", name: "Computing", icon: "fa-solid fa-laptop-code", code: "COMP", color: "indigo" },
+  { id: "science", name: "Integrated Science", icon: "fa-solid fa-flask-vial", code: "SCI", color: "emerald" },
+  { id: "mathematics", name: "Mathematics", icon: "fa-solid fa-square-root-variable", code: "MATH", color: "blue" },
+  { id: "english", name: "English Language", icon: "fa-solid fa-book-open", code: "ENG", color: "amber" },
+  { id: "social_studies", name: "Social Studies", icon: "fa-solid fa-earth-africa", code: "SOC", color: "teal" },
+  { id: "career_tech", name: "Career Technology", icon: "fa-solid fa-gears", code: "CTECH", color: "orange" },
+  { id: "creative_arts", name: "Creative Arts & Design", icon: "fa-solid fa-palette", code: "CAD", color: "purple" },
+  { id: "rme", name: "Religious & Moral Education", icon: "fa-solid fa-hands-praying", code: "RME", color: "rose" },
+  { id: "ghanaian_language", name: "Ghanaian Language", icon: "fa-solid fa-language", code: "GHL", color: "emerald" },
+  { id: "french", name: "French", icon: "fa-solid fa-comments", code: "FR", color: "cyan" },
+];
+
+// Primary Computing Administrator (strictly handles Computing curriculum for Adjiringanor AdMA JHS)
+export const DEFAULT_STAFF = [
+  {
+    id: "admin-computing-001",
+    full_name: "Computing Administrator",
+    email: PRIMARY_ADMIN_EMAIL,
+    role: "admin",
+    subjects: ["Computing"],
+    classes: ["Basic 9A", "Basic 9B", "Basic 7B"],
+    school_name: "Adjiringanor AdMA JHS",
+    permissions: {
+      can_create_tests: true,
+      can_manage_learners: true,
+      can_grade_and_review: true,
+      can_grant_retakes: true,
+      can_broadcast: true,
+      can_export_broadsheets: true,
+      can_manage_teachers: true,
+    },
+    status: "active",
+    invitation_code: "COMP-ADMIN",
+    created_at: "2026-09-01T08:00:00Z"
+  }
+];
+
+// Scalable Staff Registry: Supports multi-teacher subject allocation across different schools
+export function getInvitedTeachers() {
+  const stored = localStorage.getItem("jhs_invited_teachers");
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure primary computing admin is always present and strictly bound to Computing
+        const hasPrimary = parsed.some(t => (t.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase());
+        if (!hasPrimary) {
+          parsed.unshift(DEFAULT_STAFF[0]);
+        } else {
+          // Guarantee primary admin is Computing only, preserving customized school or classes if updated
+          const pAdmin = parsed.find(t => (t.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase());
+          if (pAdmin) {
+            pAdmin.subjects = ["Computing"];
+            if (!pAdmin.classes || pAdmin.classes.length === 0) {
+              pAdmin.classes = ["Basic 9A", "Basic 9B", "Basic 7B"];
+            }
+            if (!pAdmin.school_name) {
+              pAdmin.school_name = "Adjiringanor AdMA JHS";
+            }
+          }
+        }
+        return parsed;
+      }
+    } catch (e) {
+      console.warn("Error parsing jhs_invited_teachers:", e);
+    }
+  }
+  return DEFAULT_STAFF;
+}
+
+export function saveInvitedTeacher(teacherData) {
+  const list = getInvitedTeachers();
+  const existingIdx = list.findIndex(
+    (t) => (t.id && t.id === teacherData.id) || (t.email && t.email.toLowerCase() === (teacherData.email || "").toLowerCase())
+  );
+
+  const isPrimary = (teacherData.email || "").toLowerCase().trim() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  const normalized = {
+    id: teacherData.id || `staff-${Date.now()}`,
+    full_name: teacherData.full_name || (isPrimary ? "Computing Administrator" : "Subject Teacher"),
+    email: (teacherData.email || "").toLowerCase().trim(),
+    role: teacherData.role || (isPrimary ? "admin" : "teacher"),
+    subjects: isPrimary
+      ? ["Computing"]
+      : (Array.isArray(teacherData.subjects) ? teacherData.subjects : []),
+    classes: isPrimary
+      ? (teacherData.classes && teacherData.classes.length > 0 ? teacherData.classes : ["Basic 9A", "Basic 9B", "Basic 7B"])
+      : (Array.isArray(teacherData.classes) ? teacherData.classes : []),
+    school_name: teacherData.school_name || "Adjiringanor AdMA JHS",
+    permissions: teacherData.permissions || {
+      can_create_tests: true,
+      can_manage_learners: true,
+      can_grade_and_review: true,
+      can_grant_retakes: true,
+      can_broadcast: true,
+      can_export_broadsheets: true,
+      can_manage_teachers: isPrimary,
+    },
+    onboarding_completed: teacherData.onboarding_completed !== undefined ? teacherData.onboarding_completed : (isPrimary ? true : false),
+    status: teacherData.status || (isPrimary ? "active" : "invited"),
+    invitation_code: teacherData.invitation_code || (isPrimary ? "COMP-ADMIN" : `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`),
+    created_at: teacherData.created_at || new Date().toISOString()
+  };
+
+  if (existingIdx >= 0) {
+    list[existingIdx] = { ...list[existingIdx], ...normalized };
+  } else {
+    list.push(normalized);
+  }
+  localStorage.setItem("jhs_invited_teachers", JSON.stringify(list));
+
+  // Sync to database learners table if connected
+  const supabase = getAdminSupabase() || getSupabase();
+  if (supabase) {
+    supabase.from("learners").upsert({
+      id: normalized.id,
+      full_name: normalized.full_name,
+      email: normalized.email,
+      role: normalized.role || "teacher",
+      class_level: normalized.classes?.[0] || "General / Staff",
+      gender: "Not specified",
+      is_online: false,
+      last_seen: new Date().toISOString()
+    }).then(({ error }) => {
+      if (error) console.warn("Supabase teacher sync notice:", error);
+    }).catch((e) => console.warn("Supabase teacher sync error:", e));
+  }
+  return normalized;
+}
+
+export function deleteInvitedTeacher(teacherId) {
+  let list = getInvitedTeachers();
+  list = list.filter((t) => t.id !== teacherId && (t.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase());
+  localStorage.setItem("jhs_invited_teachers", JSON.stringify(list));
+  return list;
+}
+
+export function isEmailAuthorizedStaff(email) {
+  if (!email) return false;
+  const em = email.toLowerCase().trim();
+  if (em === PRIMARY_ADMIN_EMAIL.toLowerCase()) return true;
+  const list = getInvitedTeachers();
+  return list.some((t) => (t.email || "").toLowerCase() === em);
+}
+
+export function getStaffProfileByEmail(email) {
+  if (!email) return null;
+  const em = email.toLowerCase().trim();
+  const list = getInvitedTeachers();
+  return list.find((t) => (t.email || "").toLowerCase() === em) || null;
+}
+
 export function isUserAdmin(user, profile) {
   if (!user && !profile) return false;
   const email = (user?.email || profile?.email || "").toLowerCase().trim();
-  return email === PRIMARY_ADMIN_EMAIL.toLowerCase();
+  if (email === PRIMARY_ADMIN_EMAIL.toLowerCase()) return true;
+  if (profile?.role === "admin" || profile?.role === "teacher") return true;
+  if (isEmailAuthorizedStaff(email)) return true;
+  return false;
 }
 
 // Retrieve config from Vite environment or fallback to defaults
@@ -389,7 +547,7 @@ export async function fetchAllLearners() {
 }
 
 // -------------------------------------------------------------
-// Assessments & Scores API (Pure Real Database - Pure Computing)
+// Assessments & Scores API (Multi-Teacher, All Ghana JHS Subjects)
 // -------------------------------------------------------------
 export async function fetchAssessments() {
   const supabase = getAdminSupabase() || getSupabase();
@@ -400,84 +558,23 @@ export async function fetchAssessments() {
   const { data, error } = await supabase
     .from("assessments")
     .select("*")
-    .order("deadline", { ascending: true });
+    .order("created_at", { ascending: false });
 
   if (error || !data || data.length === 0) {
-    console.warn("Supabase fetchAssessments notice, using official curriculum CATs:", error);
     return getFallbackAssessments();
   }
 
+  // Combine database assessments with local fallback assessments ensuring no duplicates
   const fallback = getFallbackAssessments();
-
-  // Filter out any non-CAT assessments, math, quiz, project, exam
-  let computing = (data || []).filter((a) => {
-    if (a.subject && a.subject !== "Computing") return false;
-    const title = (a.title || "").toLowerCase();
-    if (title.includes("creative") || title.includes("art") || title.includes("math")) return false;
-    if (title.includes("quiz") || title.includes("project") || title.includes("exam") || title.includes("terminal")) return false;
-    return a.assessment_type === "CAT" || title.includes("cat");
+  const map = new Map();
+  fallback.forEach((a) => {
+    if (a && a.id) map.set(a.id, a);
+  });
+  data.forEach((a) => {
+    if (a && a.id) map.set(a.id, { ...map.get(a.id), ...a });
   });
 
-  // Normalize titles and class levels for CAT 1 and CAT 2
-  computing = computing.map((a) => {
-    const title = (a.title || "").toLowerCase();
-    if (title.includes("cat 2") || title.includes("cat2")) {
-      const is9B = a.class_level === "Basic 9B" || title.includes("9b");
-      return {
-        ...a,
-        title: is9B ? "Computing CAT 2 (Basic 9B)" : "Computing CAT 2 (Basic 9A)",
-        class_level: is9B ? "Basic 9B" : "Basic 9A",
-        description: is9B
-          ? "Continuous Assessment Test 2 covering Network Storage, Virtual Cloud & Cyber Ergonomics."
-          : "Continuous Assessment Test 2 covering Cloud Computing, Storage & Quantum Processors.",
-        weight: 50.00,
-      };
-    }
-    if (title.includes("cat 1") || title.includes("cat1")) {
-      const is9B = a.class_level === "Basic 9B" || title.includes("9b");
-      return {
-        ...a,
-        title: is9B ? "Computing CAT 1 (Basic 9B)" : "Computing CAT 1 (Basic 9A)",
-        class_level: is9B ? "Basic 9B" : "Basic 9A",
-        description: is9B
-          ? "Continuous Assessment Test 1 covering Artificial Intelligence & Quantum Architecture."
-          : "Continuous Assessment Test 1 covering Trends in Computing, Perceptual & Quantum Computing.",
-        weight: 50.00,
-      };
-    }
-    return a;
-  });
-
-  // Ensure both tracks have CAT 1 and CAT 2
-  const has9A_CAT1 = computing.some((a) => a.class_level === "Basic 9A" && a.title.includes("CAT 1"));
-  const has9A_CAT2 = computing.some((a) => a.class_level === "Basic 9A" && a.title.includes("CAT 2"));
-  const has9B_CAT1 = computing.some((a) => a.class_level === "Basic 9B" && a.title.includes("CAT 1"));
-  const has9B_CAT2 = computing.some((a) => a.class_level === "Basic 9B" && a.title.includes("CAT 2"));
-
-  if (!has9A_CAT1) computing.push(fallback.find((a) => a.id === "asmt-001"));
-  if (!has9B_CAT1) computing.push(fallback.find((a) => a.id === "asmt-002"));
-  if (!has9A_CAT2) computing.push(fallback.find((a) => a.id === "asmt-005"));
-  if (!has9B_CAT2) computing.push(fallback.find((a) => a.id === "asmt-006"));
-
-  // Background sync to database if admin client is active
-  const adminSupabase = getAdminSupabase();
-  if (adminSupabase) {
-    try {
-      adminSupabase.from("assessments").delete().neq("assessment_type", "CAT").then(() => {}).catch(() => {});
-    } catch (e) {}
-  }
-
-  const seen = new Set();
-  const unique = [];
-  for (const a of computing) {
-    if (!a) continue;
-    const key = `${(a.title || "").trim().toLowerCase()}___${(a.class_level || "").trim().toLowerCase()}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(a);
-    }
-  }
-  return unique.length > 0 ? unique : fallback;
+  return Array.from(map.values());
 }
 
 export async function fetchLearnerSubmissions(learnerId) {
@@ -1942,19 +2039,11 @@ export function getFallbackAssessments() {
   if (local) {
     try {
       const parsed = JSON.parse(local);
-      // Strictly keep only official CAT 1 and CAT 2 assessments
-      const filtered = parsed.filter(a => {
-        if (a.subject && a.subject !== "Computing") return false;
-        const title = (a.title || "").toLowerCase();
-        if (title.includes("quiz") || title.includes("project") || title.includes("exam") || title.includes("math")) return false;
-        return a.assessment_type === "CAT" || title.includes("cat");
-      });
-      if (filtered.length >= 2) return filtered;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     } catch (e) {}
   }
 
-  // Pure Computing Ghanaian Curriculum Assessments - 4 Official CATs
-  // Default to CLOSED so they only become active and countdown when activated by administrator!
+  // Official Ghana Curriculum Assessments for Adjiringanor AdMA JHS
   return [
     {
       id: "asmt-001",
@@ -1970,6 +2059,7 @@ export function getFallbackAssessments() {
       deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
+      school_name: "Adjiringanor AdMA JHS",
     },
     {
       id: "asmt-002",
@@ -1985,6 +2075,7 @@ export function getFallbackAssessments() {
       deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
+      school_name: "Adjiringanor AdMA JHS",
     },
     {
       id: "asmt-005",
@@ -2000,6 +2091,7 @@ export function getFallbackAssessments() {
       deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
+      school_name: "Adjiringanor AdMA JHS",
     },
     {
       id: "asmt-006",
@@ -2015,6 +2107,23 @@ export function getFallbackAssessments() {
       deadline: null,
       time_limit_minutes: 15,
       assessment_url: null,
+      school_name: "Adjiringanor AdMA JHS",
+    },
+    {
+      id: "asmt-007",
+      title: "Computing Practical Exercise 1 (Basic 7B)",
+      subject: "Computing",
+      class_level: "Basic 7B",
+      assessment_type: "CAT",
+      description: "Hardware Input/Output Units, Memory Modules & Desktop File Systems.",
+      max_score: 20,
+      weight: 50.00,
+      status: "CLOSED",
+      unlock_time: null,
+      deadline: null,
+      time_limit_minutes: 20,
+      assessment_url: null,
+      school_name: "Adjiringanor AdMA JHS",
     }
   ];
 }
@@ -2144,85 +2253,14 @@ export async function getNextStudentSequence(classLevel) {
 }
 
 export function getFallbackAllLearners() {
-  if (isMockDataCleared()) return [];
-  const avatars = [
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80",
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80",
-    "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80",
-    "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=150&q=80",
-    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=150&q=80",
-    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&q=80"
-  ];
-
-  const rawList = [
-    // Basic 9A (23 learners)
-    { name: "Kwame Mensah Frimpong", class: "Basic 9A", gender: "Male", dob: "2011-10-14", email: "kwame.mensah@ghana-edu.gov.gh", online: true, subs: [{ score: 18.5 }, { score: 36 }] },
-    { name: "Akosua Adobea Ansah", class: "Basic 9A", gender: "Female", dob: "2011-08-22", email: "akosua.ansah@gmail.com", online: true, subs: [{ score: 19.0 }] },
-    { name: "Kofi Boateng", class: "Basic 9A", gender: "Male", dob: "2011-03-15", email: "kofi.boateng@gmail.com", online: true, subs: [{ score: 16.0 }] },
-    { name: "Abena Osei", class: "Basic 9A", gender: "Female", dob: "2011-12-05", email: "abena.osei@gmail.com", online: false, subs: [{ score: 17.5 }] },
-    { name: "Yaw Antwi", class: "Basic 9A", gender: "Male", dob: "2011-05-19", email: "yaw.antwi@gmail.com", online: false, subs: [{ score: 14.5 }] },
-    { name: "Efua Danso", class: "Basic 9A", gender: "Female", dob: "2011-07-09", email: "efua.danso@gmail.com", online: false, subs: [{ score: 18.0 }] },
-    { name: "Kweku Asamoah", class: "Basic 9A", gender: "Male", dob: "2011-02-18", email: "kweku.asamoah@gmail.com", online: false, subs: [{ score: 15.5 }] },
-    { name: "Yaa Serwaa", class: "Basic 9A", gender: "Female", dob: "2011-11-28", email: "yaa.serwaa@gmail.com", online: false, subs: [{ score: 20.0 }] },
-    { name: "Kwesi Appiah", class: "Basic 9A", gender: "Male", dob: "2011-04-03", email: "kwesi.appiah@gmail.com", online: false, subs: [{ score: 13.0 }] },
-    { name: "Akua Boadiwaa", class: "Basic 9A", gender: "Female", dob: "2011-09-17", email: "akua.boadiwaa@gmail.com", online: false, subs: [{ score: 19.5 }] },
-    { name: "Kobina Dadzie", class: "Basic 9A", gender: "Male", dob: "2011-01-25", email: "kobina.dadzie@gmail.com", online: false, subs: [{ score: 16.5 }] },
-    { name: "Adjoa Kwartemaa", class: "Basic 9A", gender: "Female", dob: "2011-06-12", email: "adjoa.kwartemaa@gmail.com", online: false, subs: [{ score: 17.0 }] },
-    { name: "Ekow Quansah", class: "Basic 9A", gender: "Male", dob: "2011-08-30", email: "ekow.quansah@gmail.com", online: false, subs: [{ score: 12.5 }] },
-    { name: "Ama Agyemang", class: "Basic 9A", gender: "Female", dob: "2011-03-21", email: "ama.agyemang@gmail.com", online: false, subs: [{ score: 18.5 }] },
-    { name: "Fiifi Essien", class: "Basic 9A", gender: "Male", dob: "2011-10-05", email: "fiifi.essien@gmail.com", online: false, subs: [{ score: 14.0 }] },
-    { name: "Nana Ama Konadu", class: "Basic 9A", gender: "Female", dob: "2011-05-14", email: "nanaama.konadu@gmail.com", online: false, subs: [{ score: 19.0 }] },
-    { name: "Kwabena Badu", class: "Basic 9A", gender: "Male", dob: "2011-07-27", email: "kwabena.badu@gmail.com", online: false, subs: [{ score: 15.0 }] },
-    { name: "Maame Serwah", class: "Basic 9A", gender: "Female", dob: "2011-12-19", email: "maame.serwah@gmail.com", online: false, subs: [{ score: 17.5 }] },
-    { name: "Paa Kwesi Ofori", class: "Basic 9A", gender: "Male", dob: "2011-02-08", email: "paakwesi.ofori@gmail.com", online: false, subs: [{ score: 16.0 }] },
-    { name: "Afia Pokuaa", class: "Basic 9A", gender: "Female", dob: "2011-09-02", email: "afia.pokuaa@gmail.com", online: false, subs: [{ score: 18.0 }] },
-    { name: "Kodwo Nyamekye", class: "Basic 9A", gender: "Male", dob: "2011-04-16", email: "kodwo.nyamekye@gmail.com", online: false, subs: [{ score: 13.5 }] },
-    { name: "Esi Mansah", class: "Basic 9A", gender: "Female", dob: "2011-11-11", email: "esi.mansah@gmail.com", online: false, subs: [{ score: 19.0 }] },
-    { name: "Jojo Turkson", class: "Basic 9A", gender: "Male", dob: "2011-01-07", email: "jojo.turkson@gmail.com", online: false, subs: [] },
-
-    // Basic 9B (22 learners)
-    { name: "Selorm Agbenu", class: "Basic 9B", gender: "Male", dob: "2011-02-14", email: "selorm.agbenu@gmail.com", online: true, subs: [{ score: 17.0 }] },
-    { name: "Eyram Dzifa Doe", class: "Basic 9B", gender: "Female", dob: "2011-07-19", email: "eyram.doe@gmail.com", online: true, subs: [{ score: 19.5 }] },
-    { name: "Mawuli Gbeho", class: "Basic 9B", gender: "Male", dob: "2011-09-23", email: "mawuli.gbeho@gmail.com", online: false, subs: [{ score: 15.0 }] },
-    { name: "Enam Akpalu", class: "Basic 9B", gender: "Female", dob: "2011-04-12", email: "enam.akpalu@gmail.com", online: false, subs: [{ score: 16.5 }] },
-    { name: "Elikplim Ametefe", class: "Basic 9B", gender: "Male", dob: "2011-11-05", email: "elikplim.ametefe@gmail.com", online: false, subs: [{ score: 14.5 }] },
-    { name: "Kafui Sedziafa", class: "Basic 9B", gender: "Female", dob: "2011-01-30", email: "kafui.sedziafa@gmail.com", online: false, subs: [{ score: 18.0 }] },
-    { name: "Senyo Kpodo", class: "Basic 9B", gender: "Male", dob: "2011-06-17", email: "senyo.kpodo@gmail.com", online: false, subs: [{ score: 13.0 }] },
-    { name: "Delali Nyavor", class: "Basic 9B", gender: "Female", dob: "2011-08-08", email: "delali.nyavor@gmail.com", online: false, subs: [{ score: 19.0 }] },
-    { name: "Fafa Tsikata", class: "Basic 9B", gender: "Female", dob: "2011-12-02", email: "fafa.tsikata@gmail.com", online: false, subs: [{ score: 17.5 }] },
-    { name: "Makafui Dotse", class: "Basic 9B", gender: "Male", dob: "2011-03-29", email: "makafui.dotse@gmail.com", online: false, subs: [{ score: 15.5 }] },
-    { name: "Nii Laryea Vanderpuye", class: "Basic 9B", gender: "Male", dob: "2011-05-22", email: "nii.laryea@gmail.com", online: false, subs: [{ score: 16.0 }] },
-    { name: "Naa Ayeley Tagoe", class: "Basic 9B", gender: "Female", dob: "2011-10-18", email: "naa.tagoe@gmail.com", online: false, subs: [{ score: 18.5 }] },
-    { name: "Kpakpo Addo", class: "Basic 9B", gender: "Male", dob: "2011-04-26", email: "kpakpo.addo@gmail.com", online: false, subs: [{ score: 14.0 }] },
-    { name: "Naa Dedei Ashitey", class: "Basic 9B", gender: "Female", dob: "2011-09-14", email: "naa.ashitey@gmail.com", online: false, subs: [{ score: 17.0 }] },
-    { name: "Nii Ayitey Hammond", class: "Basic 9B", gender: "Male", dob: "2011-01-11", email: "nii.ayitey@gmail.com", online: false, subs: [{ score: 15.0 }] },
-    { name: "Naa Shormeh Aryee", class: "Basic 9B", gender: "Female", dob: "2011-07-03", email: "naa.aryee@gmail.com", online: false, subs: [{ score: 19.0 }] },
-    { name: "Nii Okaija Adjei", class: "Basic 9B", gender: "Male", dob: "2011-11-20", email: "nii.okaija@gmail.com", online: false, subs: [{ score: 13.5 }] },
-    { name: "Naa Lamiley Mills", class: "Basic 9B", gender: "Female", dob: "2011-03-08", email: "naa.mills@gmail.com", online: false, subs: [{ score: 18.0 }] },
-    { name: "Tetteh Nortey", class: "Basic 9B", gender: "Male", dob: "2011-08-15", email: "tetteh.nortey@gmail.com", online: false, subs: [{ score: 16.5 }] },
-    { name: "Korkor Lamptey", class: "Basic 9B", gender: "Female", dob: "2011-06-01", email: "korkor.lamptey@gmail.com", online: false, subs: [{ score: 17.5 }] },
-    { name: "Abdul-Rashid Yakubu", class: "Basic 9B", gender: "Male", dob: "2011-02-28", email: "abdul.yakubu@gmail.com", online: false, subs: [{ score: 14.5 }] },
-    { name: "Amina Alhassan", class: "Basic 9B", gender: "Female", dob: "2011-10-31", email: "amina.alhassan@gmail.com", online: false, subs: [] }
-  ];
-
-  return rawList.map((item, idx) => {
-    const classCode = item.class === "Basic 9A" ? "B9A" : "B9B";
-    const num = String(idx + 1).padStart(3, "0");
-    return {
-      id: `lrn-${num}`,
-      student_id: `JHS26-${classCode}-${num}`,
-      full_name: item.name,
-      email: item.email,
-      date_of_birth: item.dob,
-      class_level: item.class,
-      gender: item.gender,
-      role: "learner",
-      is_online: item.online,
-      last_seen: item.online ? new Date().toISOString() : new Date(Date.now() - 1000 * 60 * (idx * 7 + 12)).toISOString(),
-      avatar_url: avatars[idx % avatars.length],
-      submissions: item.subs || []
-    };
-  });
+  const local = localStorage.getItem("jhs_all_learners");
+  if (local) {
+    try {
+      const parsed = JSON.parse(local);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {}
+  }
+  return [];
 }
 
 // ------------------------------------------------------------------------------

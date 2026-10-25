@@ -71,6 +71,13 @@ import {
   triggerWebPushNotification,
   getDispatchedEmails,
   fetchSingleSubmission,
+  GHANA_JHS_SUBJECTS,
+  DEFAULT_STAFF,
+  getInvitedTeachers,
+  saveInvitedTeacher,
+  deleteInvitedTeacher,
+  isEmailAuthorizedStaff,
+  getStaffProfileByEmail,
 } from "./supabaseClient.js";
 
 import {
@@ -204,6 +211,11 @@ const state = {
     notifications: -1,
     subs: -1,
   },
+  currentStaffProfile: null as any,
+  selectedSubject: "Computing" as string,
+  selectedClass: "ALL" as string,
+  onboardingCurrentStep: 1 as number,
+  invitedTeachers: [] as any[],
 };
 
 // ------------------------------------------------------------------------------
@@ -532,6 +544,7 @@ const adminTabOverview = document.getElementById("adminTabOverview");
 const adminTabQuestions = document.getElementById("adminTabQuestions");
 const adminTabAssessments = document.getElementById("adminTabAssessments");
 const adminTabMarkingScheme = document.getElementById("adminTabMarkingScheme");
+const adminTabStaff = document.getElementById("adminTabStaff");
 const adminTabBroadcast = document.getElementById("adminTabBroadcast");
 const adminQuestionsNavBtn = document.getElementById("adminQuestionsNavBtn");
 
@@ -540,7 +553,57 @@ const adminSubViewOverview = document.getElementById("adminSubViewOverview");
 const adminSubViewQuestions = document.getElementById("adminSubViewQuestions");
 const adminSubViewAssessments = document.getElementById("adminSubViewAssessments");
 const adminSubViewMarkingScheme = document.getElementById("adminSubViewMarkingScheme");
+const adminSubViewStaff = document.getElementById("adminSubViewStaff");
 const adminSubViewBroadcast = document.getElementById("adminSubViewBroadcast");
+
+// Staff Management, Task Creator & Teacher Onboarding Elements
+const adminActiveSubjectSelect = document.getElementById("adminActiveSubjectSelect") as HTMLSelectElement | null;
+const adminActiveClassSelect = document.getElementById("adminActiveClassSelect") as HTMLSelectElement | null;
+const adminEditSchoolProfileBtn = document.getElementById("adminEditSchoolProfileBtn");
+const adminHeaderSchoolName = document.getElementById("adminHeaderSchoolName");
+const adminTopCreateTestBtn = document.getElementById("adminTopCreateTestBtn");
+const adminTeacherOnboardingTourBtn = document.getElementById("adminTeacherOnboardingTourBtn");
+const adminStaffTableBody = document.getElementById("adminStaffTableBody");
+const adminInviteTeacherBtn = document.getElementById("adminInviteTeacherBtn");
+const adminRefreshStaffBtn = document.getElementById("adminRefreshStaffBtn");
+const adminInviteTeacherModal = document.getElementById("adminInviteTeacherModal");
+const closeInviteTeacherModalBtn = document.getElementById("closeInviteTeacherModalBtn");
+const cancelInviteTeacherBtn = document.getElementById("cancelInviteTeacherBtn");
+const adminInviteTeacherForm = document.getElementById("adminInviteTeacherForm") as HTMLFormElement | null;
+const inviteResultCard = document.getElementById("inviteResultCard");
+const inviteResultCode = document.getElementById("inviteResultCode");
+const inviteResultLink = document.getElementById("inviteResultLink") as HTMLInputElement | null;
+const copyInviteLinkBtn = document.getElementById("copyInviteLinkBtn");
+
+// Gatekeeper Staff Login Elements
+const adminStaffCodeForm = document.getElementById("adminStaffCodeForm") as HTMLFormElement | null;
+const adminStaffCodeInput = document.getElementById("adminStaffCodeInput") as HTMLInputElement | null;
+
+// Educator Profile & School Editor Modal Elements
+const adminEditProfileModal = document.getElementById("adminEditProfileModal");
+const closeEditProfileModalBtn = document.getElementById("closeEditProfileModalBtn");
+const cancelEditProfileBtn = document.getElementById("cancelEditProfileBtn");
+const adminEditProfileForm = document.getElementById("adminEditProfileForm") as HTMLFormElement | null;
+const editProfileFullName = document.getElementById("editProfileFullName") as HTMLInputElement | null;
+const editProfileEmail = document.getElementById("editProfileEmail") as HTMLInputElement | null;
+const editProfileSchoolName = document.getElementById("editProfileSchoolName") as HTMLInputElement | null;
+
+// Create Task Modal Elements
+const adminCreateTaskModal = document.getElementById("adminCreateTaskModal");
+const closeCreateTaskModalBtn = document.getElementById("closeCreateTaskModalBtn");
+const cancelCreateTaskBtn = document.getElementById("cancelCreateTaskBtn");
+const adminCreateTaskForm = document.getElementById("adminCreateTaskForm") as HTMLFormElement | null;
+
+// Teacher Onboarding Walkthrough Elements
+const teacherOnboardingModal = document.getElementById("teacherOnboardingModal");
+const closeTeacherOnboardingBtn = document.getElementById("closeTeacherOnboardingBtn");
+const onboardingStepLabel = document.getElementById("onboardingStepLabel");
+const onboardingPctLabel = document.getElementById("onboardingPctLabel");
+const onboardingProgressBar = document.getElementById("onboardingProgressBar");
+const onboardingSlideContainer = document.getElementById("onboardingSlideContainer");
+const onboardingPrevBtn = document.getElementById("onboardingPrevBtn") as HTMLButtonElement | null;
+const onboardingNextBtn = document.getElementById("onboardingNextBtn");
+const onboardingDotsContainer = document.getElementById("onboardingDotsContainer");
 
 // Questions Bank & Sitting Config Elements
 const addNewQuestionBtn = document.getElementById("addNewQuestionBtn");
@@ -3948,12 +4011,34 @@ async function handleRoute() {
     state.activeView = "admin";
     updateHeaderNav();
 
-    // STRICT SECURITY GATEKEEPER:
-    // Requires verified email 'computing.b9@gmail.com'
-    const isAuthorizedAdmin = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    // Handle direct invitation link e.g. /admin?invite=CODE
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteParam = urlParams.get("invite") || urlParams.get("code");
+    if (inviteParam) {
+      const staffList = getInvitedTeachers();
+      const matched = staffList.find(t => (t.invitation_code || "").toLowerCase() === inviteParam.trim().toLowerCase());
+      if (matched) {
+        state.user = { id: matched.id, email: matched.email, user_metadata: { full_name: matched.full_name, role: matched.role || "teacher" } };
+        state.profile = { id: matched.id, full_name: matched.full_name, email: matched.email, role: matched.role || "teacher", class_level: matched.classes?.[0] || "Basic 9A" };
+        state.isAdmin = true;
+        state.currentStaffProfile = matched;
+        state.selectedSubject = matched.subjects?.[0] || "Computing";
+        state.selectedClass = matched.classes?.[0] || "Basic 9A";
+        localStorage.setItem("jhs_demo_session", JSON.stringify(state.user));
+        localStorage.setItem("jhs_active_learner", JSON.stringify(state.profile));
+        localStorage.setItem("jhs_view_mode", "admin");
+      }
+    }
+
+    // Role-Based Gatekeeper: Authorized for Primary Admin & Registered Invited Teachers
+    const userEmail = (state.user?.email || "").toLowerCase().trim();
+    const isPrimaryAdmin = userEmail === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    const staffProfile = getStaffProfileByEmail(userEmail) || (isPrimaryAdmin ? DEFAULT_STAFF[0] : null);
+    const isStaffAuthorized = isEmailAuthorizedStaff(userEmail) || staffProfile !== null || state.profile?.role === "admin" || state.profile?.role === "teacher";
+    const isAuthorizedAdmin = Boolean(state.user && (isPrimaryAdmin || isStaffAuthorized));
 
     if (!isAuthorizedAdmin) {
-      // Show Gatekeeper Clearance Screen - Only the sign in form, simply centered
+      // Show Gatekeeper Clearance Screen
       document.getElementById("topAnnouncementBar")?.classList.add("hidden");
       document.getElementById("mainHeader")?.classList.add("hidden");
       document.getElementById("mainFooter")?.classList.add("hidden");
@@ -3972,10 +4057,10 @@ async function handleRoute() {
       const currentEmail = state.user?.email;
       const isRealUser = state.user && !state.user.id?.startsWith("demo-") && state.user.id !== "lrn-001";
 
-      if (isRealUser && currentEmail && currentEmail.toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()) {
+      if (isRealUser && currentEmail && !isEmailAuthorizedStaff(currentEmail)) {
         if (gatekeeperError) gatekeeperError.classList.remove("hidden");
         if (gatekeeperErrorMsg) {
-          gatekeeperErrorMsg.innerHTML = `<strong>${escapeHtml(currentEmail)}</strong> is not authorized. Please choose your dedicated administrator Gmail (<code>${PRIMARY_ADMIN_EMAIL}</code>).`;
+          gatekeeperErrorMsg.innerHTML = `<strong>${escapeHtml(currentEmail)}</strong> is not registered as a teacher or admin. Please sign in with your authorized educator email or enter your invite code.`;
         }
         if (gatekeeperGoogleBtnText) {
           gatekeeperGoogleBtnText.textContent = "Choose another Google Account";
@@ -3989,7 +4074,29 @@ async function handleRoute() {
       return;
     }
 
-    // Authorized Admin
+    // Authorized Admin / Teacher Profile Initialization
+    state.currentStaffProfile = staffProfile || (isPrimaryAdmin ? DEFAULT_STAFF[0] : null);
+    if (isPrimaryAdmin) {
+      state.selectedSubject = "Computing";
+      if (!state.currentStaffProfile) state.currentStaffProfile = DEFAULT_STAFF[0];
+      state.currentStaffProfile.subjects = ["Computing"];
+      if (!state.currentStaffProfile.classes || state.currentStaffProfile.classes.length === 0) {
+        state.currentStaffProfile.classes = ["Basic 9A", "Basic 9B", "Basic 7B"];
+      }
+      if (!state.currentStaffProfile.school_name) {
+        state.currentStaffProfile.school_name = "Adjiringanor AdMA JHS";
+      }
+    } else if (state.currentStaffProfile?.subjects?.length > 0) {
+      if (!state.selectedSubject || !state.currentStaffProfile.subjects.includes(state.selectedSubject)) {
+        state.selectedSubject = state.currentStaffProfile.subjects[0];
+      }
+    }
+
+    // Default class filter to first taught class if not already set
+    if (!state.selectedClass || state.selectedClass === "ALL") {
+      state.selectedClass = state.currentStaffProfile?.classes?.[0] || "Basic 9A";
+    }
+
     updateActiveTestBanner();
     document.getElementById("mainHeader")?.classList.remove("hidden");
     document.getElementById("mainFooter")?.classList.remove("hidden");
@@ -4001,6 +4108,11 @@ async function handleRoute() {
     adminDashboardSection?.classList.remove("hidden");
     floatingChatContainer?.classList.remove("hidden");
 
+    // Sync header dropdowns: subject, class, and school profile
+    syncActiveSubjectSelector();
+    syncActiveClassSelector();
+    syncAdminHeaderProfile();
+
     // Render Admin KPI & Learners Table Skeletons while fetching
     renderAdminKpiSkeletons();
 
@@ -4010,7 +4122,7 @@ async function handleRoute() {
       fetchAllLearners(),
       fetchAllSubmissions(),
       fetchNotifications(),
-      new Promise((resolve) => setTimeout(resolve, 400)),
+      new Promise((resolve) => setTimeout(resolve, 300)),
     ]);
     state.assessments = asmts || [];
     state.allLearners = learners || [];
@@ -4023,11 +4135,18 @@ async function handleRoute() {
     startAdminRealtimeEngine();
     startUserPresenceHeartbeat();
 
+    // Auto-launch teacher onboarding walkthrough if educator hasn't completed setup
+    const isTeacherOnboarded = Boolean(state.currentStaffProfile?.onboarding_completed);
+    if (!isTeacherOnboarded) {
+      setTimeout(() => {
+        openTeacherOnboardingModal(1);
+      }, 450);
+    }
+
     // Resolve subviews
     if (path.includes("/admin/questions")) {
       showAdminSubview("questions");
     } else if (path.includes("/admin/assessments")) {
-      const urlParams = new URLSearchParams(window.location.search);
       const streamParam = urlParams.get("class") || urlParams.get("stream");
       if (streamParam) {
         state.asmtStreamFilter = streamParam;
@@ -4039,6 +4158,8 @@ async function handleRoute() {
       showAdminSubview("broadcast");
     } else if (path.includes("/admin/recordings")) {
       showAdminSubview("recordings");
+    } else if (path.includes("/admin/staff") || path.includes("/admin/teachers")) {
+      showAdminSubview("staff");
     } else {
       showAdminSubview("overview");
     }
@@ -4091,6 +4212,7 @@ function showAdminSubview(subviewKey) {
     { key: "questions", el: adminTabQuestions, view: adminSubViewQuestions },
     { key: "assessments", el: adminTabAssessments, view: adminSubViewAssessments },
     { key: "marking-scheme", el: adminTabMarkingScheme, view: adminSubViewMarkingScheme },
+    { key: "staff", el: adminTabStaff, view: adminSubViewStaff },
     { key: "broadcast", el: adminTabBroadcast, view: adminSubViewBroadcast },
     { key: "recordings", el: adminTabRecordings, view: adminSubViewRecordings },
   ];
@@ -4118,6 +4240,8 @@ function showAdminSubview(subviewKey) {
     renderEmbeddedAnswerKeyView();
   } else if (subviewKey === "recordings") {
     renderAdminCallRecordings();
+  } else if (subviewKey === "staff") {
+    renderAdminStaffTable();
   } else if (subviewKey === "overview") {
     renderAdminOverviewStats();
     renderAdminLearnersTable();
@@ -4312,6 +4436,1469 @@ function startUserPresenceHeartbeat() {
 
 const startLearnerPresenceHeartbeat = startUserPresenceHeartbeat;
 
+// ------------------------------------------------------------------------------
+// Staff & Educator Authentication Handlers
+// ------------------------------------------------------------------------------
+async function authenticateAsTeacher(emailOrCode: string) {
+  const query = (emailOrCode || "").trim().toLowerCase();
+  if (!query) return;
+
+  const staffList = getInvitedTeachers();
+  const staff = staffList.find(
+    (t) => (t.email || "").toLowerCase() === query || (t.invitation_code || "").toLowerCase() === query
+  );
+
+  if (!staff) {
+    const gatekeeperError = document.getElementById("adminGatekeeperError");
+    const gatekeeperErrorMsg = document.getElementById("adminGatekeeperErrorMsg");
+    if (gatekeeperError) gatekeeperError.classList.remove("hidden");
+    if (gatekeeperErrorMsg) {
+      gatekeeperErrorMsg.textContent = `No educator or administrator found with code or email "${emailOrCode}". Please check your credentials or invite code.`;
+    }
+    return;
+  }
+
+  showAuthLoaderSigningIn("Signing in....", `Authenticating ${staff.full_name} (${staff.school_name || "Adjiringanor AdMA JHS"})...`);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  const teacherUser = {
+    id: staff.id,
+    email: staff.email,
+    user_metadata: {
+      full_name: staff.full_name,
+      avatar_url: TEACHER_AVATAR,
+      role: staff.role || "teacher",
+    },
+  };
+  const teacherProfile = {
+    id: staff.id,
+    student_id: staff.invitation_code || "STAFF-001",
+    full_name: staff.full_name,
+    email: staff.email,
+    gender: "Not specified",
+    class_level: staff.classes?.[0] || "Basic 9A",
+    role: staff.role || "teacher",
+    avatar_url: TEACHER_AVATAR,
+    onboarding_completed: Boolean(staff.onboarding_completed),
+  };
+
+  localStorage.setItem("jhs_demo_session", JSON.stringify(teacherUser));
+  localStorage.setItem("jhs_active_learner", JSON.stringify(teacherProfile));
+  localStorage.setItem("jhs_view_mode", "admin");
+
+  state.user = teacherUser;
+  state.profile = teacherProfile;
+  state.isAdmin = true;
+  state.activeView = "admin";
+  state.currentStaffProfile = staff;
+  state.selectedSubject = staff.subjects?.[0] || "Computing";
+  state.selectedClass = staff.classes?.[0] || "Basic 9A";
+
+  showAuthLoaderSuccess("Successfully signed in", `Welcome ${staff.full_name}! Opening Assessment Console...`);
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  hideAuthLoader();
+
+  await initNotifications();
+  await initChat();
+  handleRoute();
+}
+
+// ------------------------------------------------------------------------------
+// Staff & Class Scoping Sync Handlers
+// ------------------------------------------------------------------------------
+function syncActiveSubjectSelector() {
+  if (!adminActiveSubjectSelect) return;
+  const staff = state.currentStaffProfile;
+  const isPrimary = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  let availableSubjects: string[] = [];
+  if (isPrimary) {
+    availableSubjects = ["Computing"];
+  } else if (staff && Array.isArray(staff.subjects) && staff.subjects.length > 0) {
+    availableSubjects = staff.subjects;
+  } else {
+    availableSubjects = ["Computing"];
+  }
+
+  adminActiveSubjectSelect.innerHTML = availableSubjects
+    .map((sub) => `<option value="${escapeHtml(sub)}">${escapeHtml(sub)}</option>`)
+    .join("");
+
+  if (availableSubjects.length > 1) {
+    adminActiveSubjectSelect.innerHTML += `<option value="ALL">All Assigned Subjects</option>`;
+  }
+
+  if (availableSubjects.includes(state.selectedSubject)) {
+    adminActiveSubjectSelect.value = state.selectedSubject;
+  } else {
+    state.selectedSubject = availableSubjects[0];
+    adminActiveSubjectSelect.value = availableSubjects[0];
+  }
+}
+
+function syncActiveClassSelector() {
+  if (!adminActiveClassSelect) return;
+  const staff = state.currentStaffProfile;
+  const isPrimary = (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  let myClasses: string[] = [];
+  if (isPrimary) {
+    myClasses = ["Basic 9A", "Basic 9B", "Basic 7B"];
+  } else if (staff && Array.isArray(staff.classes) && staff.classes.length > 0) {
+    myClasses = staff.classes;
+  } else {
+    myClasses = ["Basic 9A", "Basic 9B", "Basic 7B"];
+  }
+
+  let html = `<option value="ALL">All My Classes (${myClasses.length})</option>`;
+  myClasses.forEach((cls) => {
+    html += `<option value="${escapeHtml(cls)}">${escapeHtml(cls)}</option>`;
+  });
+
+  adminActiveClassSelect.innerHTML = html;
+
+  if (state.selectedClass && (state.selectedClass === "ALL" || myClasses.includes(state.selectedClass))) {
+    adminActiveClassSelect.value = state.selectedClass;
+  } else {
+    state.selectedClass = myClasses[0] || "ALL";
+    adminActiveClassSelect.value = state.selectedClass;
+  }
+}
+
+function syncAdminHeaderProfile() {
+  const staff = state.currentStaffProfile;
+  const schoolName = staff?.school_name || "Adjiringanor AdMA JHS";
+  if (adminHeaderSchoolName) {
+    adminHeaderSchoolName.textContent = schoolName;
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Staff Management & Multi-Teacher Directory (/admin/staff)
+// ------------------------------------------------------------------------------
+function renderAdminStaffTable() {
+  if (!adminStaffTableBody) return;
+  const staffList = getInvitedTeachers();
+
+  if (!staffList || staffList.length === 0) {
+    adminStaffTableBody.innerHTML = `
+      <tr>
+        <td colspan="8" class="py-8 text-center text-slate-400">
+          <i class="fa-solid fa-chalkboard-user text-3xl mb-2 text-slate-300 block"></i>
+          <p class="font-bold text-slate-700 text-sm">No Registered Staff</p>
+          <p class="text-xs text-slate-400 mt-1">Use the "Invite New Teacher" button to onboard educators.</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const subIconMap: Record<string, { icon: string; color: string }> = {
+    Computing: { icon: "fa-solid fa-laptop-code", color: "indigo" },
+    "Integrated Science": { icon: "fa-solid fa-flask-vial", color: "emerald" },
+    Mathematics: { icon: "fa-solid fa-square-root-variable", color: "blue" },
+    "English Language": { icon: "fa-solid fa-book-open", color: "amber" },
+    "Social Studies": { icon: "fa-solid fa-earth-africa", color: "teal" },
+    "Career Technology": { icon: "fa-solid fa-gears", color: "orange" },
+    "Creative Arts & Design": { icon: "fa-solid fa-palette", color: "purple" },
+    "Religious & Moral Education": { icon: "fa-solid fa-hands-praying", color: "rose" },
+    "Ghanaian Language": { icon: "fa-solid fa-language", color: "emerald" },
+    French: { icon: "fa-solid fa-comments", color: "cyan" },
+  };
+
+  const subjectCount: Record<string, number> = {};
+  staffList.forEach((s) => {
+    (s.subjects || []).forEach((sub: string) => {
+      subjectCount[sub] = (subjectCount[sub] || 0) + 1;
+    });
+  });
+
+  const html = staffList
+    .map((staff) => {
+      const isPrimary = (staff.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+      const school = staff.school_name || "Adjiringanor AdMA JHS";
+      const inviteUrl = `${window.location.origin}/admin?invite=${encodeURIComponent(staff.invitation_code || "CODE")}`;
+
+      const isPending = !staff.onboarding_completed && !isPrimary;
+
+      const subjectBadges = Array.isArray(staff.subjects) && staff.subjects.length > 0
+        ? staff.subjects
+            .map((sub: string) => {
+              const meta = subIconMap[sub] || { icon: "fa-solid fa-book", color: "indigo" };
+              const teachersInSub = subjectCount[sub] || 1;
+              const multiTag = teachersInSub > 1 ? `<span class="text-[9px] opacity-75 font-normal ml-0.5" title="${teachersInSub} teachers handle ${sub}">(${teachersInSub})</span>` : "";
+              return `
+                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-${meta.color}-50 text-${meta.color}-700 border border-${meta.color}-200">
+                  <i class="${meta.icon} text-[9px]"></i>
+                  <span>${escapeHtml(sub)}</span>
+                  ${multiTag}
+                </span>
+              `;
+            })
+            .join(" ")
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"><i class="fa-solid fa-clock text-[9px]"></i> Pending Setup</span>`;
+
+      const classBadges = Array.isArray(staff.classes) && staff.classes.length > 0
+        ? staff.classes
+            .map((cls: string) => `<span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">${escapeHtml(cls)}</span>`)
+            .join(" ")
+        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"><i class="fa-solid fa-clock text-[9px]"></i> Pending Setup</span>`;
+
+      const perms = staff.permissions || {};
+      const enabledCount = Object.values(perms).filter(Boolean).length;
+      const permBadges = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+          enabledCount >= 6 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-700"
+        }">
+          <i class="fa-solid fa-shield-check text-emerald-600"></i>
+          <span>${enabledCount >= 6 ? "Full Academic Suite" : `${enabledCount} Permissions`}</span>
+        </span>
+      `;
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition-colors">
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-xs shrink-0 ring-1 ring-indigo-200">
+                ${escapeHtml((staff.full_name || "T").slice(0, 2).toUpperCase())}
+              </div>
+              <div class="min-w-0">
+                <p class="font-bold text-slate-900 text-xs truncate flex items-center gap-1.5">
+                  <span>${escapeHtml(staff.full_name)}</span>
+                  ${isPrimary ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-black bg-indigo-600 text-white uppercase">PRIMARY</span>` : ""}
+                </p>
+                <p class="text-[11px] text-slate-400 font-mono truncate">${escapeHtml(staff.email)}</p>
+              </div>
+            </div>
+          </td>
+
+          <td class="py-3 px-3">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700">
+              <i class="fa-solid fa-school text-[10px] text-indigo-500"></i>
+              <span class="truncate max-w-[140px]">${escapeHtml(school)}</span>
+            </span>
+          </td>
+
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${staff.role === "admin" ? "bg-purple-50 text-purple-700 border border-purple-200" : "bg-blue-50 text-blue-700 border border-blue-200"}">
+                ${staff.role === "admin" ? "Department Head / Admin" : "Subject Teacher"}
+              </span>
+              ${isPending ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200"><i class="fa-solid fa-clock-rotate-left"></i> Tour Pending</span>` : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"><i class="fa-solid fa-circle-check"></i> Active</span>`}
+            </div>
+          </td>
+
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-1 flex-wrap">${subjectBadges}</div>
+          </td>
+
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-1 flex-wrap">${classBadges}</div>
+          </td>
+
+          <td class="py-3 px-3">
+            ${permBadges}
+          </td>
+
+          <td class="py-3 px-3">
+            <div class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200/90 rounded-xl px-2 py-1 shadow-2xs">
+              <span class="font-mono text-[10px] font-extrabold text-indigo-700">${escapeHtml(staff.invitation_code || "CODE")}</span>
+              <button
+                type="button"
+                class="copy-staff-link-btn text-slate-400 hover:text-indigo-600 p-0.5 rounded transition cursor-pointer text-xs"
+                data-url="${escapeHtml(inviteUrl)}"
+                title="Copy direct invitation link"
+              >
+                <i class="fa-solid fa-copy text-[11px]"></i>
+              </button>
+            </div>
+          </td>
+
+          <td class="py-3 px-3 text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <button
+                type="button"
+                class="edit-teacher-profile-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 transition cursor-pointer shadow-2xs"
+                data-id="${escapeHtml(staff.id)}"
+                title="Edit educator classes, subjects or school name"
+              >
+                <i class="fa-solid fa-pen text-[10px] mr-1"></i> Edit
+              </button>
+              ${
+                isPrimary
+                  ? ""
+                  : `
+                <button
+                  type="button"
+                  class="delete-teacher-btn px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer"
+                  data-id="${escapeHtml(staff.id)}"
+                  data-name="${escapeHtml(staff.full_name)}"
+                  title="Revoke access and remove teacher"
+                >
+                  <i class="fa-solid fa-trash-can text-[11px]"></i>
+                </button>
+              `
+              }
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  adminStaffTableBody.innerHTML = html;
+
+  adminStaffTableBody.querySelectorAll(".copy-staff-link-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const url = btn.getAttribute("data-url");
+      if (url) {
+        navigator.clipboard.writeText(url).then(() => {
+          btn.innerHTML = `<i class="fa-solid fa-check text-emerald-600"></i>`;
+          setTimeout(() => {
+            btn.innerHTML = `<i class="fa-solid fa-copy"></i>`;
+          }, 1500);
+        });
+      }
+    });
+  });
+
+  adminStaffTableBody.querySelectorAll(".edit-teacher-profile-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-id");
+      const target = staffList.find((s) => s.id === id);
+      if (target) openEditProfileModal(target);
+    });
+  });
+
+  adminStaffTableBody.querySelectorAll(".delete-teacher-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-id");
+      const name = btn.getAttribute("data-name") || "this teacher";
+      if (id && confirm(`Are you sure you want to revoke teacher administrator access for "${name}"?`)) {
+        deleteInvitedTeacher(id);
+        renderAdminStaffTable();
+      }
+    });
+  });
+}
+
+// ------------------------------------------------------------------------------
+// Educator Profile & School Editor Modal Handlers
+// ------------------------------------------------------------------------------
+function openEditProfileModal(targetStaff: any = null) {
+  const staff = targetStaff || state.currentStaffProfile || DEFAULT_STAFF[0];
+  if (!adminEditProfileModal) return;
+
+  if (editProfileFullName) editProfileFullName.value = staff.full_name || "";
+  if (editProfileEmail) editProfileEmail.value = staff.email || "";
+  if (editProfileSchoolName) editProfileSchoolName.value = staff.school_name || "Adjiringanor AdMA JHS";
+
+  const mySubjects = staff.subjects || ["Computing"];
+  document.querySelectorAll<HTMLInputElement>('input[name="editSubjects"]').forEach((cb) => {
+    cb.checked = mySubjects.includes(cb.value);
+  });
+
+  const myClasses = staff.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+  document.querySelectorAll<HTMLInputElement>('input[name="editClasses"]').forEach((cb) => {
+    cb.checked = myClasses.includes(cb.value);
+  });
+
+  adminEditProfileModal.classList.remove("hidden");
+  (adminEditProfileModal as any)._targetStaffId = staff.id;
+}
+
+function closeEditProfileModal() {
+  adminEditProfileModal?.classList.add("hidden");
+}
+
+function handleEditProfileSubmit(e: Event) {
+  e.preventDefault();
+  const targetId = (adminEditProfileModal as any)?._targetStaffId;
+  const staffList = getInvitedTeachers();
+  const existing = staffList.find((s) => s.id === targetId) || state.currentStaffProfile || DEFAULT_STAFF[0];
+
+  const selectedSubjects: string[] = [];
+  document.querySelectorAll<HTMLInputElement>('input[name="editSubjects"]:checked').forEach((cb) => {
+    selectedSubjects.push(cb.value);
+  });
+
+  const selectedClasses: string[] = [];
+  document.querySelectorAll<HTMLInputElement>('input[name="editClasses"]:checked').forEach((cb) => {
+    selectedClasses.push(cb.value);
+  });
+
+  if (selectedSubjects.length === 0) {
+    alert("Please select at least one curriculum subject.");
+    return;
+  }
+  if (selectedClasses.length === 0) {
+    alert("Please select at least one class stream.");
+    return;
+  }
+
+  const updated = {
+    ...existing,
+    full_name: editProfileFullName?.value.trim() || existing.full_name,
+    school_name: editProfileSchoolName?.value.trim() || "Adjiringanor AdMA JHS",
+    subjects: selectedSubjects,
+    classes: selectedClasses,
+  };
+
+  saveInvitedTeacher(updated);
+  if (state.currentStaffProfile && state.currentStaffProfile.id === updated.id) {
+    state.currentStaffProfile = updated;
+    syncAdminHeaderProfile();
+    syncActiveSubjectSelector();
+    syncActiveClassSelector();
+  }
+
+  closeEditProfileModal();
+  renderAdminStaffTable();
+  renderAdminOverviewStats(true);
+  renderAdminLearnersTable();
+}
+
+// ------------------------------------------------------------------------------
+// Invite Teacher Modal Handlers
+// ------------------------------------------------------------------------------
+function openInviteTeacherModal() {
+  if (!adminInviteTeacherModal) return;
+  adminInviteTeacherForm?.reset();
+  inviteResultCard?.classList.add("hidden");
+  adminInviteTeacherModal.classList.remove("hidden");
+}
+
+function closeInviteTeacherModal() {
+  adminInviteTeacherModal?.classList.add("hidden");
+}
+
+function handleInviteTeacherSubmit(e: Event) {
+  e.preventDefault();
+  const name = (document.getElementById("inviteTeacherName") as HTMLInputElement)?.value.trim();
+  const email = (document.getElementById("inviteTeacherEmail") as HTMLInputElement)?.value.trim();
+  const role = (document.getElementById("inviteTeacherRole") as HTMLSelectElement)?.value || "teacher";
+
+  if (!email) {
+    alert("Please provide the teacher's email address.");
+    return;
+  }
+
+  const inviteCode = `INV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+  const newTeacher = saveInvitedTeacher({
+    full_name: name || "New Educator",
+    email: email,
+    school_name: "Adjiringanor AdMA JHS",
+    role: role,
+    subjects: [], // Configured autonomously by teacher during onboarding tour
+    classes: [],  // Configured autonomously by teacher during onboarding tour
+    permissions: {
+      can_create_tests: true,
+      can_manage_learners: true,
+      can_grade_and_review: true,
+      can_grant_retakes: true,
+      can_broadcast: true,
+      can_export_broadsheets: true,
+      can_manage_teachers: role === "admin",
+    },
+    onboarding_completed: false,
+    status: "invited",
+    invitation_code: inviteCode,
+  });
+
+  const fullLink = `${window.location.origin}/admin?invite=${encodeURIComponent(inviteCode)}`;
+  if (inviteResultCode) inviteResultCode.textContent = inviteCode;
+  if (inviteResultLink) inviteResultLink.value = fullLink;
+  inviteResultCard?.classList.remove("hidden");
+
+  renderAdminStaffTable();
+}
+
+// ------------------------------------------------------------------------------
+// Task & Assessment Creator Handlers
+// ------------------------------------------------------------------------------
+function openAdminCreateTaskModal() {
+  if (!adminCreateTaskModal) return;
+  adminCreateTaskForm?.reset();
+
+  const subjSelect = document.getElementById("createTaskSubject") as HTMLSelectElement | null;
+  if (subjSelect) {
+    const staffSubs = state.currentStaffProfile?.subjects || ["Computing"];
+    subjSelect.innerHTML = staffSubs
+      .map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`)
+      .join("");
+    if (state.selectedSubject && staffSubs.includes(state.selectedSubject)) {
+      subjSelect.value = state.selectedSubject;
+    }
+  }
+
+  const classSelect = document.getElementById("createTaskClass") as HTMLSelectElement | null;
+  if (classSelect) {
+    const staffClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+    classSelect.innerHTML = staffClasses
+      .map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`)
+      .join("");
+    if (state.selectedClass && staffClasses.includes(state.selectedClass)) {
+      classSelect.value = state.selectedClass;
+    }
+  }
+
+  const deadlineInput = document.getElementById("createTaskDeadline") as HTMLInputElement | null;
+  if (deadlineInput) {
+    const d = new Date(Date.now() + 7 * 86400 * 1000);
+    deadlineInput.value = toLocalDatetimeInputValue(d);
+  }
+
+  adminCreateTaskModal.classList.remove("hidden");
+}
+
+function closeCreateTaskModal() {
+  adminCreateTaskModal?.classList.add("hidden");
+}
+
+async function handleAdminCreateTaskSubmit(e: Event) {
+  e.preventDefault();
+  const title = (document.getElementById("createTaskTitle") as HTMLInputElement)?.value.trim();
+  const subject = (document.getElementById("createTaskSubject") as HTMLSelectElement)?.value || "Computing";
+  const classLevel = (document.getElementById("createTaskClass") as HTMLSelectElement)?.value || "Basic 9A";
+  const type = (document.getElementById("createTaskType") as HTMLSelectElement)?.value || "CAT";
+  const maxScore = parseInt((document.getElementById("createTaskMaxScore") as HTMLInputElement)?.value || "20", 10) || 20;
+  const duration = parseInt((document.getElementById("createTaskDuration") as HTMLInputElement)?.value || "30", 10) || 30;
+  const weight = parseFloat((document.getElementById("createTaskWeight") as HTMLInputElement)?.value || "20") || 20;
+  const deadline = (document.getElementById("createTaskDeadline") as HTMLInputElement)?.value;
+  const instructions = (document.getElementById("createTaskInstructions") as HTMLTextAreaElement)?.value.trim();
+
+  if (!title) {
+    alert("Please provide an assessment title.");
+    return;
+  }
+
+  const payload = {
+    title,
+    subject,
+    class_level: classLevel,
+    assessment_type: type,
+    max_score: maxScore,
+    time_limit_minutes: duration,
+    weight,
+    deadline: deadline ? new Date(deadline).toISOString() : null,
+    description: instructions || `Continuous Assessment Task for ${classLevel}.`,
+    status: "CLOSED",
+    school_name: state.currentStaffProfile?.school_name || "Adjiringanor AdMA JHS",
+    created_by_name: state.currentStaffProfile?.full_name || "Educator",
+    created_by_email: state.user?.email || PRIMARY_ADMIN_EMAIL,
+  };
+
+  await createAssessment(payload);
+  state.assessments = await fetchAssessments();
+
+  closeCreateTaskModal();
+  renderAdminAssessmentConfigTable2();
+  renderAdminOverviewStats(true);
+
+  try {
+    await sendNotification({
+      title: `New ${subject} Task Published: ${title}`,
+      message: `A new ${type} task (${title}) has been published for ${classLevel}. Check your Learner Portal for instructions.`,
+      target_type: "STREAM",
+      target_class: classLevel,
+      priority: "NORMAL",
+      category: "ASSESSMENT",
+    });
+    state.notifications = await fetchNotifications();
+  } catch (err) {
+    console.warn("Auto notification notice:", err);
+  }
+}
+
+// ------------------------------------------------------------------------------
+// Professional Teacher Onboarding & Platform Walkthrough Tour
+// ------------------------------------------------------------------------------
+let onboardingDraftProfile: {
+  full_name: string;
+  school_name: string;
+  subjects: string[];
+  classes: string[];
+  acknowledged_features?: boolean;
+  confirmed_ready?: boolean;
+} | null = null;
+
+function isStepValid(step: number): boolean {
+  if (!onboardingDraftProfile) return false;
+
+  if (step === 1) {
+    const nameInput = document.getElementById("onboardingFullName") as HTMLInputElement | null;
+    const schoolInput = document.getElementById("onboardingSchoolName") as HTMLInputElement | null;
+    const name = (nameInput ? nameInput.value : (onboardingDraftProfile.full_name || "")).trim();
+    const school = (schoolInput ? schoolInput.value : (onboardingDraftProfile.school_name || "")).trim();
+    return name.length > 0 && school.length > 0;
+  }
+
+  if (step === 2) {
+    const checked = onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-subject-cb:checked");
+    const count = checked ? checked.length : (onboardingDraftProfile.subjects || []).length;
+    return count >= 1;
+  }
+
+  if (step === 3) {
+    const checked = onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-class-cb:checked");
+    const count = checked ? checked.length : (onboardingDraftProfile.classes || []).length;
+    return count >= 1;
+  }
+
+  if (step === 4) {
+    const ack = document.getElementById("onboardingAcknowledgeFeatures") as HTMLInputElement | null;
+    return ack ? ack.checked : Boolean(onboardingDraftProfile.acknowledged_features);
+  }
+
+  if (step === 5) {
+    const confirm = document.getElementById("onboardingConfirmReady") as HTMLInputElement | null;
+    return confirm ? confirm.checked : Boolean(onboardingDraftProfile.confirmed_ready);
+  }
+
+  return true;
+}
+
+function updateOnboardingNextButtonState() {
+  const currentStep = state.onboardingCurrentStep || 1;
+  const valid = isStepValid(currentStep);
+
+  // Update Next button in footer
+  if (onboardingNextBtn) {
+    (onboardingNextBtn as HTMLButtonElement).disabled = !valid;
+    if (valid) {
+      onboardingNextBtn.classList.remove("opacity-40", "cursor-not-allowed", "bg-slate-200", "text-slate-400", "border", "border-slate-300");
+      onboardingNextBtn.classList.add(
+        "bg-gradient-to-r",
+        "from-indigo-600",
+        "to-indigo-700",
+        "text-white",
+        "hover:from-indigo-700",
+        "hover:to-indigo-800",
+        "shadow-md",
+        "shadow-indigo-500/20",
+        "cursor-pointer",
+        "active:scale-95"
+      );
+      onboardingNextBtn.title = currentStep === 5 ? "Finish onboarding and enter console" : "Proceed to next orientation step";
+    } else {
+      onboardingNextBtn.classList.add("opacity-40", "cursor-not-allowed", "bg-slate-200", "text-slate-400", "border", "border-slate-300");
+      onboardingNextBtn.classList.remove(
+        "bg-gradient-to-r",
+        "from-indigo-600",
+        "to-indigo-700",
+        "text-white",
+        "hover:from-indigo-700",
+        "hover:to-indigo-800",
+        "shadow-md",
+        "shadow-indigo-500/20",
+        "cursor-pointer",
+        "active:scale-95"
+      );
+      onboardingNextBtn.title = "Complete the required fields on this step to proceed";
+    }
+  }
+
+  // Update Step Requirement Helper Badge in the slide container
+  const hintEl = document.getElementById("onboardingStepRequirementStatus");
+  if (hintEl) {
+    if (currentStep === 1) {
+      const nameInput = document.getElementById("onboardingFullName") as HTMLInputElement | null;
+      const schoolInput = document.getElementById("onboardingSchoolName") as HTMLInputElement | null;
+      const nameOk = Boolean(nameInput?.value.trim());
+      const schoolOk = Boolean(schoolInput?.value.trim());
+      if (nameOk && schoolOk) {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i><span>Profile &amp; Institution verified! Next Step button is active.</span>`;
+      } else {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold animate-in fade-in";
+        const missing = !nameOk && !schoolOk ? "educator name and school name" : (!nameOk ? "educator name" : "school name");
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i><span>Please enter your ${missing} to unlock the Next Step.</span>`;
+      }
+    } else if (currentStep === 2) {
+      const checked = onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-subject-cb:checked") || [];
+      const count = checked.length;
+      if (count >= 1) {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i><span>${count} subject(s) selected! Next Step button is active.</span>`;
+      } else {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i><span>Select at least 1 curriculum subject you teach to unlock Next Step.</span>`;
+      }
+    } else if (currentStep === 3) {
+      const checked = onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-class-cb:checked") || [];
+      const count = checked.length;
+      if (count >= 1) {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i><span>${count} class stream(s) selected! Clutter-free view activated. Next Step is active.</span>`;
+      } else {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i><span>Select at least 1 class stream you teach to unlock Next Step.</span>`;
+      }
+    } else if (currentStep === 4) {
+      const ack = document.getElementById("onboardingAcknowledgeFeatures") as HTMLInputElement | null;
+      if (ack?.checked) {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i><span>Features acknowledged! Next Step button is active.</span>`;
+      } else {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i><span>Check the acknowledgment box above to unlock Next Step.</span>`;
+      }
+    } else if (currentStep === 5) {
+      const confirm = document.getElementById("onboardingConfirmReady") as HTMLInputElement | null;
+      const slideBtn = document.getElementById("onboardingSlideFinishBtn") as HTMLButtonElement | null;
+      if (confirm?.checked) {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-rocket text-emerald-600 text-sm"></i><span>Ready to launch! Click either button below to enter your console.</span>`;
+        if (slideBtn) {
+          slideBtn.disabled = false;
+          slideBtn.classList.remove("opacity-40", "cursor-not-allowed", "bg-slate-300");
+          slideBtn.classList.add("bg-gradient-to-r", "from-indigo-600", "to-indigo-700", "hover:from-indigo-700", "hover:to-indigo-800", "cursor-pointer");
+        }
+      } else {
+        hintEl.className = "flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold animate-in fade-in";
+        hintEl.innerHTML = `<i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i><span>Check the confirmation box above to activate your console.</span>`;
+        if (slideBtn) {
+          slideBtn.disabled = true;
+          slideBtn.classList.add("opacity-40", "cursor-not-allowed", "bg-slate-300");
+          slideBtn.classList.remove("bg-gradient-to-r", "from-indigo-600", "to-indigo-700", "hover:from-indigo-700", "hover:to-indigo-800", "cursor-pointer");
+        }
+      }
+    }
+  }
+}
+
+function saveDraftFromCurrentStep(step: number): boolean {
+  if (!onboardingDraftProfile) {
+    const staff = state.currentStaffProfile || DEFAULT_STAFF[0];
+    const isPrimary = (staff.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+    onboardingDraftProfile = {
+      full_name: staff.full_name || (isPrimary ? "Computing Administrator" : ""),
+      school_name: staff.school_name || "Adjiringanor AdMA JHS",
+      subjects: Array.isArray(staff.subjects) ? [...staff.subjects] : [],
+      classes: Array.isArray(staff.classes) ? [...staff.classes] : [],
+      acknowledged_features: false,
+      confirmed_ready: false,
+    };
+  }
+
+  if (step === 1) {
+    const nameInput = document.getElementById("onboardingFullName") as HTMLInputElement | null;
+    const schoolInput = document.getElementById("onboardingSchoolName") as HTMLInputElement | null;
+    if (nameInput) {
+      onboardingDraftProfile.full_name = nameInput.value.trim();
+    }
+    if (schoolInput) {
+      onboardingDraftProfile.school_name = schoolInput.value.trim();
+    }
+    return true;
+  }
+
+  if (step === 2) {
+    const checkedSubs: string[] = [];
+    onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-subject-cb:checked").forEach((cb) => {
+      checkedSubs.push(cb.value);
+    });
+    onboardingDraftProfile.subjects = checkedSubs;
+    return true;
+  }
+
+  if (step === 3) {
+    const checkedCls: string[] = [];
+    onboardingSlideContainer?.querySelectorAll<HTMLInputElement>(".onboarding-class-cb:checked").forEach((cb) => {
+      checkedCls.push(cb.value);
+    });
+    onboardingDraftProfile.classes = checkedCls;
+    return true;
+  }
+
+  if (step === 4) {
+    const ack = document.getElementById("onboardingAcknowledgeFeatures") as HTMLInputElement | null;
+    onboardingDraftProfile.acknowledged_features = Boolean(ack?.checked);
+    return true;
+  }
+
+  if (step === 5) {
+    const confirm = document.getElementById("onboardingConfirmReady") as HTMLInputElement | null;
+    onboardingDraftProfile.confirmed_ready = Boolean(confirm?.checked);
+    return true;
+  }
+
+  return true;
+}
+
+function openTeacherOnboardingModal(step: number = 1) {
+  if (!teacherOnboardingModal) return;
+  const staff = state.currentStaffProfile || DEFAULT_STAFF[0];
+  const isPrimary = (staff.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  // If invited educator, require autonomous selection (start with empty subjects & classes)
+  onboardingDraftProfile = {
+    full_name: staff.full_name || (isPrimary ? "Computing Administrator" : ""),
+    school_name: staff.school_name || "Adjiringanor AdMA JHS",
+    subjects: Array.isArray(staff.subjects) && staff.subjects.length > 0 ? [...staff.subjects] : (isPrimary ? ["Computing"] : []),
+    classes: Array.isArray(staff.classes) && staff.classes.length > 0
+      ? [...staff.classes]
+      : (isPrimary ? ["Basic 9A", "Basic 9B", "Basic 7B"] : []),
+    acknowledged_features: false,
+    confirmed_ready: false,
+  };
+
+  state.onboardingCurrentStep = step;
+  renderOnboardingStep(step);
+  teacherOnboardingModal.classList.remove("hidden");
+}
+
+function closeTeacherOnboarding() {
+  teacherOnboardingModal?.classList.add("hidden");
+}
+
+function handleOnboardingPrev() {
+  saveDraftFromCurrentStep(state.onboardingCurrentStep);
+  if (state.onboardingCurrentStep > 1) {
+    state.onboardingCurrentStep--;
+    renderOnboardingStep(state.onboardingCurrentStep);
+  }
+}
+
+function handleOnboardingNext() {
+  saveDraftFromCurrentStep(state.onboardingCurrentStep);
+
+  // Strictly block advancing if required fields are missing
+  if (!isStepValid(state.onboardingCurrentStep)) {
+    updateOnboardingNextButtonState();
+    return;
+  }
+
+  if (state.onboardingCurrentStep < 5) {
+    state.onboardingCurrentStep++;
+    renderOnboardingStep(state.onboardingCurrentStep);
+  } else {
+    finishTeacherOnboarding();
+  }
+}
+
+function finishTeacherOnboarding() {
+  saveDraftFromCurrentStep(state.onboardingCurrentStep);
+  if (!isStepValid(5)) {
+    updateOnboardingNextButtonState();
+    return;
+  }
+
+  const staff = state.currentStaffProfile || DEFAULT_STAFF[0];
+  const isPrimary = (staff.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  const finalName = onboardingDraftProfile?.full_name?.trim() || staff.full_name || (isPrimary ? "Computing Administrator" : "Subject Teacher");
+  const finalSchool = onboardingDraftProfile?.school_name?.trim() || staff.school_name || "Adjiringanor AdMA JHS";
+  const finalSubjects = isPrimary
+    ? ["Computing"]
+    : (onboardingDraftProfile?.subjects && onboardingDraftProfile.subjects.length > 0
+        ? onboardingDraftProfile.subjects
+        : ["Computing"]);
+  const finalClasses = isPrimary
+    ? (onboardingDraftProfile?.classes && onboardingDraftProfile.classes.length > 0
+        ? onboardingDraftProfile.classes
+        : ["Basic 9A", "Basic 9B", "Basic 7B"])
+    : (onboardingDraftProfile?.classes && onboardingDraftProfile.classes.length > 0
+        ? onboardingDraftProfile.classes
+        : ["Basic 9A"]);
+
+  const updatedStaff = saveInvitedTeacher({
+    ...staff,
+    full_name: finalName,
+    school_name: finalSchool,
+    subjects: finalSubjects,
+    classes: finalClasses,
+    onboarding_completed: true,
+    status: "active",
+  });
+
+  state.currentStaffProfile = updatedStaff;
+  state.selectedSubject = finalSubjects[0];
+  state.selectedClass = finalClasses[0];
+
+  if (state.user) {
+    state.user.user_metadata = {
+      ...state.user.user_metadata,
+      full_name: finalName,
+    };
+    localStorage.setItem("jhs_demo_session", JSON.stringify(state.user));
+  }
+  if (state.profile) {
+    state.profile.full_name = finalName;
+    state.profile.class_level = finalClasses[0];
+    localStorage.setItem("jhs_active_learner", JSON.stringify(state.profile));
+  }
+
+  localStorage.setItem(`jhs_onboarded_${staff.email || "staff"}`, "true");
+  localStorage.setItem("jhs_teacher_onboarding_completed", "true");
+
+  closeTeacherOnboarding();
+
+  syncAdminHeaderProfile();
+  syncActiveSubjectSelector();
+  syncActiveClassSelector();
+
+  renderAdminOverviewStats(true);
+  renderAdminLearnersTable();
+  renderAdminStaffTable();
+
+  displayPremiumToast({
+    title: "Assessment Console Configured!",
+    message: `Welcome, ${finalName}! Your console for ${finalSchool} is configured for ${finalSubjects.join(", ")} across ${finalClasses.join(", ")}.`,
+    badgeText: finalSchool,
+    badgeColor: "emerald",
+    icon: "fa-circle-check",
+  });
+}
+
+function renderOnboardingStep(step: number) {
+  if (!onboardingSlideContainer) return;
+  const staff = state.currentStaffProfile || DEFAULT_STAFF[0];
+  const isPrimary = (staff.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase();
+
+  if (!onboardingDraftProfile) {
+    onboardingDraftProfile = {
+      full_name: staff.full_name || (isPrimary ? "Computing Administrator" : ""),
+      school_name: staff.school_name || "Adjiringanor AdMA JHS",
+      subjects: Array.isArray(staff.subjects) && staff.subjects.length > 0 ? [...staff.subjects] : (isPrimary ? ["Computing"] : []),
+      classes: Array.isArray(staff.classes) && staff.classes.length > 0
+        ? [...staff.classes]
+        : (isPrimary ? ["Basic 9A", "Basic 9B", "Basic 7B"] : []),
+      acknowledged_features: false,
+      confirmed_ready: false,
+    };
+  }
+
+  if (onboardingProgressBar) {
+    onboardingProgressBar.style.width = `${(step / 5) * 100}%`;
+  }
+  if (onboardingPctLabel) {
+    onboardingPctLabel.textContent = `${Math.round((step / 5) * 100)}%`;
+  }
+  if (onboardingPrevBtn) {
+    onboardingPrevBtn.disabled = step === 1;
+  }
+  if (onboardingNextBtn) {
+    onboardingNextBtn.innerHTML =
+      step === 5
+        ? `<span>Finish &amp; Start Teaching</span> <i class="fa-solid fa-check text-xs"></i>`
+        : `<span>Next Step</span> <i class="fa-solid fa-arrow-right text-xs"></i>`;
+  }
+
+  // Render 5 step dots with intelligent locked jump protection
+  if (onboardingDotsContainer) {
+    onboardingDotsContainer.innerHTML = [1, 2, 3, 4, 5]
+      .map(
+        (i) =>
+          `<button type="button" class="onboarding-dot-btn h-2 rounded-full transition-all cursor-pointer ${
+            i === step ? "bg-indigo-600 w-6" : i < step ? "bg-indigo-300 w-2" : "bg-slate-200 w-2"
+          }" data-step="${i}" title="Step ${i}"></button>`
+      )
+      .join("");
+
+    onboardingDotsContainer.querySelectorAll(".onboarding-dot-btn").forEach((dot) => {
+      dot.addEventListener("click", () => {
+        saveDraftFromCurrentStep(state.onboardingCurrentStep);
+        const targetStep = parseInt(dot.getAttribute("data-step") || "1", 10);
+        
+        // Prevent skipping ahead if current step requirements are incomplete
+        if (targetStep > state.onboardingCurrentStep) {
+          if (!isStepValid(state.onboardingCurrentStep)) {
+            updateOnboardingNextButtonState();
+            return;
+          }
+        }
+        state.onboardingCurrentStep = targetStep;
+        renderOnboardingStep(targetStep);
+      });
+    });
+  }
+
+  // ----------------------------------------------------------------------------
+  // Step 1: Welcome & Educator Profile Setup
+  // ----------------------------------------------------------------------------
+  if (step === 1) {
+    if (onboardingStepLabel) onboardingStepLabel.textContent = "Step 1 of 5: Welcome & Profile Setup";
+    onboardingSlideContainer.innerHTML = `
+      <div class="space-y-4 animate-in fade-in duration-200">
+        <!-- Hero Introduction Banner -->
+        <div class="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-purple-50 to-indigo-50 border border-indigo-100/90 flex items-start gap-3.5 shadow-2xs">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm shadow-indigo-500/25">
+            <i class="fa-solid fa-chalkboard-user"></i>
+          </div>
+          <div>
+            <h4 class="font-extrabold text-indigo-950 text-sm sm:text-base">Welcome to the Continuous Assessment Console</h4>
+            <p class="text-xs text-indigo-900/80 mt-1 leading-relaxed">
+              Ghana Basic Education Standard (Basic 7 to 9 / JHS 1 to 3). As an educator, you publish continuous assessments, enforce anti-tamper countdown timers, monitor learner dossiers, and calibrate official BECE Stanine grades.
+            </p>
+          </div>
+        </div>
+
+        <!-- Form Card -->
+        <div class="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <span class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-id-badge text-indigo-600"></i> Your Educator Profile &amp; School
+            </span>
+            <span class="text-[11px] text-indigo-600 font-semibold bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+              Autonomous Setup
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">
+                Your Full Name <span class="text-rose-500">*</span>
+              </label>
+              <input
+                id="onboardingFullName"
+                type="text"
+                required
+                value="${escapeHtml(onboardingDraftProfile.full_name)}"
+                placeholder="e.g. Mr. David Asare"
+                class="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl py-2.5 px-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+              />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-xs font-bold text-slate-700">
+                  School / Institution <span class="text-rose-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  id="onboardingUseDefaultSchoolBtn"
+                  class="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+                  title="Click to apply Adjiringanor AdMA JHS"
+                >
+                  + Use Adjiringanor AdMA JHS
+                </button>
+              </div>
+              <input
+                id="onboardingSchoolName"
+                type="text"
+                required
+                value="${escapeHtml(onboardingDraftProfile.school_name)}"
+                placeholder="e.g. Adjiringanor AdMA JHS"
+                class="w-full bg-slate-50 hover:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl py-2.5 px-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 transition"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Step Requirement Indicator Box -->
+        <div id="onboardingStepRequirementStatus" class="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i>
+          <span>Please enter your educator name and school name to unlock the Next Step.</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-slate-800">
+              <i class="fa-solid fa-users-gear text-indigo-600"></i>
+              <span>Multi-Teacher Architecture</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              Multiple educators can teach the same subject across schools and class streams without conflicts.
+            </p>
+          </div>
+
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-slate-800">
+              <i class="fa-solid fa-shield-halved text-emerald-600"></i>
+              <span>Pure Live Real Data</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              Zero mock records. Every learner and mark shown is a genuine stored record from your institution.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const nameInput = document.getElementById("onboardingFullName");
+    const schoolInput = document.getElementById("onboardingSchoolName");
+    const defaultSchoolBtn = document.getElementById("onboardingUseDefaultSchoolBtn");
+
+    nameInput?.addEventListener("input", () => {
+      saveDraftFromCurrentStep(1);
+      updateOnboardingNextButtonState();
+    });
+    schoolInput?.addEventListener("input", () => {
+      saveDraftFromCurrentStep(1);
+      updateOnboardingNextButtonState();
+    });
+    defaultSchoolBtn?.addEventListener("click", () => {
+      if (schoolInput) {
+        (schoolInput as HTMLInputElement).value = "Adjiringanor AdMA JHS";
+        saveDraftFromCurrentStep(1);
+        updateOnboardingNextButtonState();
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------------------
+  // Step 2: Choose Curriculum Subject(s)
+  // ----------------------------------------------------------------------------
+  else if (step === 2) {
+    if (onboardingStepLabel) onboardingStepLabel.textContent = "Step 2 of 5: Select Your Curriculum Subject(s)";
+    const mySubjects = onboardingDraftProfile.subjects || [];
+
+    const allSubs = [
+      { id: "Computing", icon: "fa-solid fa-laptop-code", label: "Computing", color: "indigo" },
+      { id: "Integrated Science", icon: "fa-solid fa-flask-vial", label: "Integrated Science", color: "emerald" },
+      { id: "Mathematics", icon: "fa-solid fa-square-root-variable", label: "Mathematics", color: "blue" },
+      { id: "English Language", icon: "fa-solid fa-book-open", label: "English Language", color: "amber" },
+      { id: "Social Studies", icon: "fa-solid fa-earth-africa", label: "Social Studies", color: "teal" },
+      { id: "Career Technology", icon: "fa-solid fa-gears", label: "Career Technology", color: "orange" },
+      { id: "Creative Arts & Design", icon: "fa-solid fa-palette", label: "Creative Arts & Design", color: "purple" },
+      { id: "Religious & Moral Education", icon: "fa-solid fa-hands-praying", label: "R.M.E", color: "rose" },
+      { id: "Ghanaian Language", icon: "fa-solid fa-language", label: "Ghanaian Language", color: "emerald" },
+      { id: "French", icon: "fa-solid fa-comments", label: "French", color: "cyan" },
+    ];
+
+    onboardingSlideContainer.innerHTML = `
+      <div class="space-y-4 animate-in fade-in duration-200">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i class="fa-solid fa-book-bookmark text-indigo-600"></i>
+            <span>Select the Subject(s) You Teach <span class="text-rose-500">*</span></span>
+          </h4>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            Select all subjects you manage. Your assessment creator, test marking consoles, and broadsheets will focus strictly on your selected subjects. Multiple teachers can handle the same subject.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200 text-xs font-semibold text-slate-700">
+          ${allSubs
+            .map(
+              (sub) => `
+            <label class="group flex items-center gap-2.5 p-2.5 sm:p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/20 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input
+                type="checkbox"
+                class="onboarding-subject-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                value="${escapeHtml(sub.id)}"
+                ${mySubjects.includes(sub.id) ? "checked" : ""}
+              />
+              <span class="inline-flex items-center gap-1.5 min-w-0">
+                <i class="${sub.icon} text-${sub.color}-600 text-xs"></i>
+                <span class="truncate font-bold">${escapeHtml(sub.label)}</span>
+              </span>
+            </label>
+          `
+            )
+            .join("")}
+        </div>
+
+        <!-- Live Step Requirement Indicator Box -->
+        <div id="onboardingStepRequirementStatus" class="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i>
+          <span>Select at least 1 curriculum subject you teach to unlock Next Step.</span>
+        </div>
+
+        <div class="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl text-xs text-indigo-900 flex items-start gap-2">
+          <i class="fa-solid fa-circle-info text-indigo-600 mt-0.5"></i>
+          <p class="text-[11px] leading-relaxed">
+            Settings are flexible. You can add or remove subjects anytime via the <strong>Adjiringanor AdMA JHS ✏️</strong> button in your header.
+          </p>
+        </div>
+      </div>
+    `;
+
+    onboardingSlideContainer.querySelectorAll(".onboarding-subject-cb").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        saveDraftFromCurrentStep(2);
+        updateOnboardingNextButtonState();
+      });
+    });
+  }
+
+  // ----------------------------------------------------------------------------
+  // Step 3: Select Class Streams (Prevents Cluttered Views)
+  // ----------------------------------------------------------------------------
+  else if (step === 3) {
+    if (onboardingStepLabel) onboardingStepLabel.textContent = "Step 3 of 5: Select the Classes You Teach";
+    const myClasses = onboardingDraftProfile.classes || [];
+    const school = onboardingDraftProfile.school_name || "Adjiringanor AdMA JHS";
+
+    onboardingSlideContainer.innerHTML = `
+      <div class="space-y-4 animate-in fade-in duration-200">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i class="fa-solid fa-filter text-indigo-600"></i>
+            <span>Set Your Class Streams <span class="text-rose-500">*</span></span>
+          </h4>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            Select only the classes you teach at <strong>${escapeHtml(school)}</strong>. Overview KPI cards, broadsheets, and learner lists will be cleanly scoped to your selected streams so you never see clutter from other classes!
+          </p>
+        </div>
+
+        <div class="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+              <i class="fa-solid fa-graduation-cap text-indigo-600"></i> Available Streams (Ghana JHS):
+            </span>
+            <span class="text-[11px] text-indigo-600 font-semibold bg-white px-2 py-0.5 rounded-full border border-slate-200">
+              Zero Clutter Filter
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs font-semibold text-slate-700">
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 9A" ${myClasses.includes("Basic 9A") ? "checked" : ""} />
+              <span class="font-bold">Basic 9A (JHS 3A)</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 9B" ${myClasses.includes("Basic 9B") ? "checked" : ""} />
+              <span class="font-bold">Basic 9B (JHS 3B)</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 8A" ${myClasses.includes("Basic 8A") ? "checked" : ""} />
+              <span class="font-bold">Basic 8A (JHS 2A)</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 8B" ${myClasses.includes("Basic 8B") ? "checked" : ""} />
+              <span class="font-bold">Basic 8B (JHS 2B)</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 7A" ${myClasses.includes("Basic 7A") ? "checked" : ""} />
+              <span class="font-bold">Basic 7A (JHS 1A)</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-3 rounded-xl bg-white border border-slate-200 hover:border-indigo-400 cursor-pointer transition select-none has-[:checked]:border-indigo-600 has-[:checked]:bg-indigo-50/70 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+              <input type="checkbox" class="onboarding-class-cb rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer" value="Basic 7B" ${myClasses.includes("Basic 7B") ? "checked" : ""} />
+              <span class="font-bold">Basic 7B (JHS 1B)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Live Step Requirement Indicator Box -->
+        <div id="onboardingStepRequirementStatus" class="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i>
+          <span>Select at least 1 class stream you teach to unlock Next Step.</span>
+        </div>
+      </div>
+    `;
+
+    onboardingSlideContainer.querySelectorAll(".onboarding-class-cb").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        saveDraftFromCurrentStep(3);
+        updateOnboardingNextButtonState();
+      });
+    });
+  }
+
+  // ----------------------------------------------------------------------------
+  // Step 4: Platform Features: Testing, Timers & Learner Dossiers
+  // ----------------------------------------------------------------------------
+  else if (step === 4) {
+    if (onboardingStepLabel) onboardingStepLabel.textContent = "Step 4 of 5: Testing, Timers & Learner Dossiers";
+    onboardingSlideContainer.innerHTML = `
+      <div class="space-y-4 animate-in fade-in duration-200">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i class="fa-solid fa-laptop-file text-indigo-600"></i>
+            <span>Platform Features: Tasks, Anti-Tamper Timers &amp; Dossiers</span>
+          </h4>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            Review how tasks deploy to learners, how timed countdown locks prevent cheating, and how student dossiers track academic trajectory.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">
+          <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-indigo-950">
+              <i class="fa-solid fa-file-circle-plus text-indigo-600 text-sm"></i>
+              <span>Publish CATs &amp; Quizzes</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              Use "Create Task / Test" in your header. Set duration in minutes, maximum marks, term weight (e.g. 20%), and deadline. Items deploy instantly to students.
+            </p>
+          </div>
+
+          <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-slate-900">
+              <i class="fa-solid fa-clock text-amber-600 text-sm"></i>
+              <span>Anti-Tampering Timers</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              When a student begins, a live countdown timer runs. Submissions automatically lock when time expires to guarantee academic integrity.
+            </p>
+          </div>
+
+          <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-slate-900">
+              <i class="fa-solid fa-wifi text-emerald-600 text-sm"></i>
+              <span>Real-Time Presence</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              WebSocket presence heartbeats show which learners are actively online sitting for tests or reviewing their portal dossiers.
+            </p>
+          </div>
+
+          <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-1">
+            <div class="flex items-center gap-2 font-bold text-slate-900">
+              <i class="fa-solid fa-comments text-blue-600 text-sm"></i>
+              <span>1-on-1 Pedagogical Messaging</span>
+            </div>
+            <p class="text-[11px] text-slate-500 leading-relaxed">
+              Launch direct text chats or review feedback with any student straight from their performance dossier card.
+            </p>
+          </div>
+        </div>
+
+        <!-- Interactive Acknowledgment Requirement -->
+        <label for="onboardingAcknowledgeFeatures" class="flex items-start gap-3 p-3.5 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/70 border border-indigo-200 transition cursor-pointer select-none has-[:checked]:border-indigo-600 has-[:checked]:ring-1 has-[:checked]:ring-indigo-500">
+          <input
+            type="checkbox"
+            id="onboardingAcknowledgeFeatures"
+            class="mt-1 rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+            ${onboardingDraftProfile.acknowledged_features ? "checked" : ""}
+          />
+          <div class="text-xs">
+            <span class="font-bold text-indigo-950 block">I understand the timed assessment workflow, presence tracking, and learner dossiers. <span class="text-rose-500">*</span></span>
+            <span class="text-slate-500 text-[11px] block mt-0.5">Check this box to acknowledge and activate the Next Step button.</span>
+          </div>
+        </label>
+
+        <!-- Live Step Requirement Indicator Box -->
+        <div id="onboardingStepRequirementStatus" class="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i>
+          <span>Check the acknowledgment box above to unlock Next Step.</span>
+        </div>
+      </div>
+    `;
+
+    const ackCb = document.getElementById("onboardingAcknowledgeFeatures") as HTMLInputElement | null;
+    const updateAck = () => {
+      saveDraftFromCurrentStep(4);
+      updateOnboardingNextButtonState();
+    };
+    ackCb?.addEventListener("change", updateAck);
+    ackCb?.addEventListener("click", updateAck);
+  }
+
+  // ----------------------------------------------------------------------------
+  // Step 5: BECE Stanine Broadsheets, Retakes & Setup Summary
+  // ----------------------------------------------------------------------------
+  else if (step === 5) {
+    if (onboardingStepLabel) onboardingStepLabel.textContent = "Step 5 of 5: Broadsheets, Stanine Grades & Ready to Teach";
+    const name = onboardingDraftProfile.full_name || staff.full_name || "Educator";
+    const school = onboardingDraftProfile.school_name || staff.school_name || "Adjiringanor AdMA JHS";
+    const subjects = onboardingDraftProfile.subjects.length > 0 ? onboardingDraftProfile.subjects : ["Computing"];
+    const classes = onboardingDraftProfile.classes.length > 0 ? onboardingDraftProfile.classes : ["Basic 9A"];
+
+    onboardingSlideContainer.innerHTML = `
+      <div class="space-y-4 animate-in fade-in duration-200">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i class="fa-solid fa-file-excel text-emerald-600"></i>
+            <span>Official Broadsheets, Stanine Grades &amp; Retakes</span>
+          </h4>
+          <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+            Analyze results with Ghana WAEC/BECE Stanine 9-point grading scales and issue retakes for learners who need remediation.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div class="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl space-y-1">
+            <div class="flex items-center gap-2 font-bold text-emerald-900">
+              <i class="fa-solid fa-download text-emerald-600"></i>
+              <span>Excel Broadsheet Export</span>
+            </div>
+            <p class="text-[11px] text-emerald-800 leading-relaxed">
+              1-click export of complete continuous assessment broadsheets with raw marks, percentage scores, 9-Stanine grades, and class rank distributions.
+            </p>
+          </div>
+
+          <div class="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl space-y-1">
+            <div class="flex items-center gap-2 font-bold text-amber-900">
+              <i class="fa-solid fa-rotate-right text-amber-600"></i>
+              <span>Teacher Authorized Retakes</span>
+            </div>
+            <p class="text-[11px] text-amber-800 leading-relaxed">
+              If a student experienced a connectivity issue or requires remediation, grant a retake with documented remarks right from their test review.
+            </p>
+          </div>
+        </div>
+
+        <!-- Configuration Summary Box -->
+        <div class="p-4 bg-slate-950 text-white rounded-2xl space-y-3 text-xs shadow-lg border border-slate-800">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="font-bold text-emerald-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check"></i> Your Configured Settings
+            </span>
+            <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider bg-slate-900 px-2 py-0.5 rounded-full border border-slate-800">Ready to Launch</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-bold">Educator:</span>
+              <strong class="text-white text-xs">${escapeHtml(name)}</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-bold">School:</span>
+              <strong class="text-white text-xs">${escapeHtml(school)}</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-bold">Curriculum Subject(s):</span>
+              <strong class="text-indigo-300 text-xs">${escapeHtml(subjects.join(", "))}</strong>
+            </div>
+            <div>
+              <span class="text-slate-400 block text-[10px] uppercase font-bold">Class Streams:</span>
+              <strong class="text-emerald-300 text-xs">${escapeHtml(classes.join(", "))}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Final Confirmation Requirement -->
+        <label for="onboardingConfirmReady" class="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-50/80 hover:bg-emerald-100/70 border border-emerald-200 transition cursor-pointer select-none has-[:checked]:border-emerald-600 has-[:checked]:ring-1 has-[:checked]:ring-emerald-500">
+          <input
+            type="checkbox"
+            id="onboardingConfirmReady"
+            class="mt-1 rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+            ${onboardingDraftProfile.confirmed_ready ? "checked" : ""}
+          />
+          <div class="text-xs">
+            <span class="font-bold text-emerald-950 block">I confirm my curriculum profile and institutional settings. <span class="text-rose-500">*</span></span>
+            <span class="text-slate-500 text-[11px] block mt-0.5">Check to activate your console and start managing continuous assessments.</span>
+          </div>
+        </label>
+
+        <!-- Live Step Requirement Indicator Box -->
+        <div id="onboardingStepRequirementStatus" class="flex items-center gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+          <i class="fa-solid fa-circle-exclamation text-amber-600 text-sm"></i>
+          <span>Check the confirmation box above to activate your console.</span>
+        </div>
+
+        <button
+          type="button"
+          id="onboardingSlideFinishBtn"
+          disabled
+          class="w-full py-3 px-4 rounded-2xl bg-slate-300 opacity-40 cursor-not-allowed text-white font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2"
+        >
+          <i class="fa-solid fa-rocket"></i>
+          <span>Save Configuration &amp; Open My Console</span>
+        </button>
+      </div>
+    `;
+
+    const confirmCb = document.getElementById("onboardingConfirmReady") as HTMLInputElement | null;
+    const updateConfirm = () => {
+      saveDraftFromCurrentStep(5);
+      updateOnboardingNextButtonState();
+    };
+    confirmCb?.addEventListener("change", updateConfirm);
+    confirmCb?.addEventListener("click", updateConfirm);
+
+    document.getElementById("onboardingSlideFinishBtn")?.addEventListener("click", () => {
+      finishTeacherOnboarding();
+    });
+  }
+
+  // Reactively evaluate and apply initial active/disabled state for current step
+  updateOnboardingNextButtonState();
+}
+
 async function renderAdminOverviewStats(isHotReload = false) {
   if (!isHotReload) {
     state.allLearners = await fetchAllLearners();
@@ -4319,10 +5906,20 @@ async function renderAdminOverviewStats(isHotReload = false) {
     state.notifications = await fetchNotifications();
   }
 
-  // Filter students (exclude primary admin account)
-  const students = (state.allLearners || []).filter(
-    (l) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
-  );
+  // Filter students based on educator's assigned classes and active class stream filter
+  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+  const activeClass = state.selectedClass || "ALL";
+
+  const students = (state.allLearners || []).filter((l) => {
+    if ((l.role || "learner") !== "learner") return false;
+    if ((l.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase()) return false;
+
+    const learnerClass = l.class_level || "";
+    if (activeClass !== "ALL") {
+      return learnerClass === activeClass;
+    }
+    return myClasses.some((c) => learnerClass.includes(c) || c.includes(learnerClass));
+  });
 
   // 1. Online Learners KPI (active heartbeat in last 90 seconds)
   const onlineCount = students.filter(isLearnerOnline).length;
@@ -4335,18 +5932,32 @@ async function renderAdminOverviewStats(isHotReload = false) {
 
   // 2. Registered Learners KPI
   if (kpiTotalStudents) kpiTotalStudents.textContent = String(students.length);
-  const count9A = students.filter((l) => (l.class_level || "").includes("9A") || (l.class_level || "").includes("3A")).length;
-  const count9B = students.filter((l) => (l.class_level || "").includes("9B") || (l.class_level || "").includes("3B")).length;
-  const otherCount = students.length - count9A - count9B;
+  const count9A = students.filter((l) => (l.class_level || "").includes("9A")).length;
+  const count9B = students.filter((l) => (l.class_level || "").includes("9B")).length;
+  const count7B = students.filter((l) => (l.class_level || "").includes("7B")).length;
+  const otherCount = students.length - count9A - count9B - count7B;
+
   if (kpiRegisteredSubtext) {
-    kpiRegisteredSubtext.textContent = `${count9A} in Basic 9A • ${count9B} in Basic 9B${otherCount > 0 ? ` • ${otherCount} other` : ""}`;
+    const parts = [];
+    if (count9A > 0 || myClasses.includes("Basic 9A")) parts.push(`${count9A} in 9A`);
+    if (count9B > 0 || myClasses.includes("Basic 9B")) parts.push(`${count9B} in 9B`);
+    if (count7B > 0 || myClasses.includes("Basic 7B")) parts.push(`${count7B} in 7B`);
+    if (otherCount > 0) parts.push(`${otherCount} other`);
+    kpiRegisteredSubtext.textContent = parts.join(" • ") || "0 registered";
   }
 
-  // 3. Active Computing Assessments KPI
-  const availableAsmts = (state.assessments || []).filter((a) => a.status === "AVAILABLE");
+  // 3. Active Assessments KPI (scoped to educator's subject and class)
+  const activeSub = state.selectedSubject || "Computing";
+  const availableAsmts = (state.assessments || []).filter((a) => {
+    if (a.status !== "AVAILABLE") return false;
+    if (activeSub !== "ALL" && a.subject && a.subject !== activeSub) return false;
+    if (activeClass !== "ALL" && a.class_level && a.class_level !== activeClass) return false;
+    return true;
+  });
+
   if (kpiActiveAsmtCount) kpiActiveAsmtCount.textContent = String(availableAsmts.length);
   const cats = availableAsmts.filter((a) => a.assessment_type === "CAT").length;
-  const projects = availableAsmts.filter((a) => a.assessment_type === "PROJECT_WORK").length;
+  const projects = availableAsmts.filter((a) => a.assessment_type === "PROJECT" || a.assessment_type === "PROJECT_WORK").length;
   const exams = availableAsmts.filter((a) => a.assessment_type === "EXAM").length;
   if (kpiActiveAsmtSubtext) {
     kpiActiveAsmtSubtext.textContent = `${cats} CATs • ${projects} Projects • ${exams} Exam`;
@@ -6469,7 +8080,18 @@ function renderAdminLearnersTable() {
 
   const searchQuery = (state.learnerSearchQuery || "").trim().toLowerCase();
 
+  const myClasses = state.currentStaffProfile?.classes || ["Basic 9A", "Basic 9B", "Basic 7B"];
+  const activeClass = state.selectedClass || "ALL";
+
   let filtered = state.allLearners.filter((l: any) => {
+    // Scope to educator's assigned classes so unassigned streams do not populate the view
+    if (activeClass !== "ALL") {
+      if (l.class_level !== activeClass && l.role === "learner") return false;
+    } else {
+      const inMyClass = myClasses.some((c) => (l.class_level || "").includes(c) || c.includes(l.class_level || ""));
+      if (l.role === "learner" && !inMyClass) return false;
+    }
+
     if (filterVal === "ONLINE" && !isLearnerOnline(l)) return false;
     if (filterVal === "TASK_DONE" && (!l.submissions || l.submissions.length === 0)) return false;
     if (filterVal === "TASK_PENDING" && (l.submissions && l.submissions.length > 0)) return false;
@@ -15436,4 +17058,75 @@ function attachEventListeners() {
 
   // Initialize Email and Push Notification listeners & modals
   initEmailAndPushListeners();
+
+  // Subject and Class Stream Filters
+  adminActiveSubjectSelect?.addEventListener("change", (e: any) => {
+    state.selectedSubject = e.target.value;
+    renderAdminOverviewStats(true);
+    renderAdminAssessmentConfigTable2();
+    renderQuestionsConfigView();
+    renderEmbeddedAnswerKeyView();
+  });
+
+  adminActiveClassSelect?.addEventListener("change", (e: any) => {
+    state.selectedClass = e.target.value;
+    renderAdminOverviewStats(true);
+    renderAdminLearnersTable();
+    renderAdminAssessmentConfigTable2();
+  });
+
+  // Educator Profile & School Editor
+  adminEditSchoolProfileBtn?.addEventListener("click", () => openEditProfileModal());
+  closeEditProfileModalBtn?.addEventListener("click", closeEditProfileModal);
+  cancelEditProfileBtn?.addEventListener("click", closeEditProfileModal);
+  adminEditProfileForm?.addEventListener("submit", handleEditProfileSubmit);
+
+  // Staff Navigation Tab
+  adminTabStaff?.addEventListener("click", () => navigateTo("/admin/staff"));
+
+  // Gatekeeper Staff Login Handlers
+  adminStaffCodeForm?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (adminStaffCodeInput?.value) {
+      authenticateAsTeacher(adminStaffCodeInput.value);
+    }
+  });
+
+  document.querySelectorAll(".admin-quick-teacher-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const email = btn.getAttribute("data-email") || PRIMARY_ADMIN_EMAIL;
+      authenticateAsTeacher(email);
+    });
+  });
+
+  // Task / Assessment Creator
+  adminTopCreateTestBtn?.addEventListener("click", openAdminCreateTaskModal);
+  closeCreateTaskModalBtn?.addEventListener("click", closeCreateTaskModal);
+  cancelCreateTaskBtn?.addEventListener("click", closeCreateTaskModal);
+  adminCreateTaskForm?.addEventListener("submit", handleAdminCreateTaskSubmit);
+
+  // Invite Teacher Handlers
+  adminInviteTeacherBtn?.addEventListener("click", openInviteTeacherModal);
+  adminRefreshStaffBtn?.addEventListener("click", renderAdminStaffTable);
+  closeInviteTeacherModalBtn?.addEventListener("click", closeInviteTeacherModal);
+  cancelInviteTeacherBtn?.addEventListener("click", closeInviteTeacherModal);
+  adminInviteTeacherForm?.addEventListener("submit", handleInviteTeacherSubmit);
+  copyInviteLinkBtn?.addEventListener("click", () => {
+    if (inviteResultLink?.value) {
+      navigator.clipboard.writeText(inviteResultLink.value).then(() => {
+        if (copyInviteLinkBtn) {
+          copyInviteLinkBtn.innerHTML = `<i class="fa-solid fa-check mr-1"></i> Copied!`;
+          setTimeout(() => {
+            copyInviteLinkBtn.innerHTML = `<i class="fa-solid fa-copy mr-1"></i> Copy`;
+          }, 2000);
+        }
+      });
+    }
+  });
+
+  // Teacher Onboarding Tour
+  adminTeacherOnboardingTourBtn?.addEventListener("click", () => openTeacherOnboardingModal(1));
+  closeTeacherOnboardingBtn?.addEventListener("click", closeTeacherOnboarding);
+  onboardingPrevBtn?.addEventListener("click", handleOnboardingPrev);
+  onboardingNextBtn?.addEventListener("click", handleOnboardingNext);
 }
