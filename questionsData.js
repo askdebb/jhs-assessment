@@ -938,15 +938,15 @@ export function getAssessmentQuestionPack(asmtId, classLevel = "Basic 9A", asmtT
   } else if (isClass9B && allPacks[`${asmtId}-9B`] && allPacks[`${asmtId}-9B`].questions?.length > 0) {
     // Check parallel 9B track custom pack
     resolvedPack = allPacks[`${asmtId}-9B`];
-  } else if (asmtId === "asmt-002") {
-    // 2. Direct Assessment ID resolution
-    resolvedPack = COMPUTING_CAT1_9B;
-  } else if (asmtId === "asmt-001") {
+  } else if (asmtId === "11111111-1111-1111-1111-111111111111" || asmtId === "asmt-001") {
+    // 2. Direct Assessment ID & UUID resolution
     resolvedPack = isClass9B ? COMPUTING_CAT1_9B : COMPUTING_CAT1_9A;
-  } else if (asmtId === "asmt-006" || asmtId === "asmt-005-9B") {
-    resolvedPack = COMPUTING_CAT2_9B;
-  } else if (asmtId === "asmt-005") {
+  } else if (asmtId === "22222222-2222-2222-2222-222222222222" || asmtId === "asmt-002") {
+    resolvedPack = COMPUTING_CAT1_9B;
+  } else if (asmtId === "33333333-3333-3333-3333-333333333333" || asmtId === "asmt-005") {
     resolvedPack = isClass9B ? COMPUTING_CAT2_9B : COMPUTING_CAT2_9A;
+  } else if (asmtId === "44444444-4444-4444-4444-444444444444" || asmtId === "asmt-006" || asmtId === "asmt-005-9B") {
+    resolvedPack = COMPUTING_CAT2_9B;
   } else if (cleanTitle.includes("cat 2") || cleanTitle.includes("cat2") || cleanTitle.includes("cat 3")) {
     // 3. Title & Subject based resolution
     resolvedPack = isClass9B ? COMPUTING_CAT2_9B : COMPUTING_CAT2_9A;
@@ -965,6 +965,40 @@ export function getAssessmentQuestionPack(asmtId, classLevel = "Basic 9A", asmtT
     time_limit_minutes: customConfig.time_limit_minutes || resolvedPack.time_limit_minutes || 15,
     questions: filterValidCurriculumQuestions(resolvedPack.questions || [])
   };
+}
+
+/**
+ * Resolves human-readable Assessment title for any ID/UUID
+ */
+export function resolveAssessmentTitle(asmtId, asmtObj = null, classLevel = "Basic 9A") {
+  if (asmtObj && asmtObj.title) return asmtObj.title;
+  const isClass9B = classLevel && (classLevel.includes("9B") || classLevel.includes("3B") || classLevel === "9B");
+
+  if (asmtId === "11111111-1111-1111-1111-111111111111" || asmtId === "asmt-001") {
+    return isClass9B ? "Computing CAT 1 (Basic 9B)" : "Computing CAT 1 (Basic 9A)";
+  }
+  if (asmtId === "22222222-2222-2222-2222-222222222222" || asmtId === "asmt-002") {
+    return "Computing CAT 1 (Basic 9B)";
+  }
+  if (asmtId === "33333333-3333-3333-3333-333333333333" || asmtId === "asmt-005") {
+    return isClass9B ? "Computing CAT 2 (Basic 9B)" : "Computing CAT 2 (Basic 9A)";
+  }
+  if (asmtId === "44444444-4444-4444-4444-444444444444" || asmtId === "asmt-006") {
+    return "Computing CAT 2 (Basic 9B)";
+  }
+  return asmtId || "Computing CAT 1";
+}
+
+/**
+ * Finds corresponding question pack based on question ID prefix
+ */
+export function findQuestionPackByQuestionId(qId) {
+  if (!qId || typeof qId !== "string") return null;
+  if (qId.startsWith("9A-CAT1-")) return COMPUTING_CAT1_9A;
+  if (qId.startsWith("9B-CAT1-")) return COMPUTING_CAT1_9B;
+  if (qId.startsWith("9A-CAT2-")) return COMPUTING_CAT2_9A;
+  if (qId.startsWith("9B-CAT2-")) return COMPUTING_CAT2_9B;
+  return null;
 }
 
 /**

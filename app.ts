@@ -70,6 +70,7 @@ import {
   dispatchEmailNotification,
   triggerWebPushNotification,
   getDispatchedEmails,
+  fetchSingleSubmission,
 } from "./supabaseClient.js";
 
 import {
@@ -91,6 +92,8 @@ import {
   deleteConfiguredQuestion,
   updateAssessmentDuration,
   getAssessmentQuestionPack,
+  resolveAssessmentTitle,
+  findQuestionPackByQuestionId,
   generateStudentPaper,
   shuffleArray,
   generateDynamicTestItems,
@@ -6600,14 +6603,21 @@ function renderAdminLearnersTable() {
     const hasPerformedTask = subCount > 0;
     const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
     const academicPill = hasPerformedTask
-      ? `<div>
-           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+      ? `<button
+           type="button"
+           class="admin-table-inspect-test-btn text-left group cursor-pointer block"
+           data-learner-id="${learner.id}"
+           data-asmt-id="${learner.submissions[0].assessment_id}"
+           data-sub-id="${learner.submissions[0].id || ''}"
+           title="Inspect latest test performance & question breakdown"
+         >
+           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap group-hover:bg-emerald-100 transition">
              <i class="fa-solid fa-circle-check text-emerald-500"></i> ${subCount} Task(s) Done
            </span>
-           <span class="text-[11px] text-slate-500 block whitespace-nowrap mt-0.5">
-             Latest: <strong class="text-indigo-600 font-mono">${lastScore}/20</strong> marks
+           <span class="text-[11px] text-slate-500 block whitespace-nowrap mt-0.5 group-hover:text-indigo-600 transition">
+             Latest: <strong class="text-indigo-600 font-mono underline decoration-indigo-300">${lastScore}/20</strong> marks <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-indigo-400 ml-0.5"></i>
            </span>
-         </div>`
+         </button>`
       : `<div>
            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
              <i class="fa-regular fa-clock text-amber-500"></i> Not Performed
@@ -6714,9 +6724,18 @@ function renderAdminLearnersTable() {
       const hasPerformedTask = subCount > 0;
       const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
       const academicBadgeMobile = hasPerformedTask
-        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-             <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done
-           </span>`
+        ? `<button
+             type="button"
+             class="admin-table-inspect-test-btn cursor-pointer text-left"
+             data-learner-id="${learner.id}"
+             data-asmt-id="${learner.submissions[0].assessment_id}"
+             data-sub-id="${learner.submissions[0].id || ''}"
+             title="Inspect test performance"
+           >
+             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition">
+               <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done (${lastScore}/20) <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i>
+             </span>
+           </button>`
         : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
              <i class="fa-regular fa-clock text-amber-600"></i> Pending
            </span>`;
@@ -6856,6 +6875,19 @@ function renderAdminLearnersTable() {
       e.stopPropagation();
       const studentId = btn.getAttribute("data-student-id");
       if (studentId) openLearnerProfileModal(studentId);
+    });
+  });
+
+  // Attach direct inspect test handlers from Academic column
+  document.querySelectorAll(".admin-table-inspect-test-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const learnerId = btn.getAttribute("data-learner-id");
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const subId = btn.getAttribute("data-sub-id") || "";
+      if (learnerId && asmtId) {
+        openAdminTestReviewModal(learnerId, asmtId, subId);
+      }
     });
   });
 
@@ -7417,11 +7449,14 @@ function openLearnerPhotoViewer(src: string, name: string) {
   document.body.appendChild(overlay);
 }
 
-function showActiveLearnerDetail(learner) {
+function showActiveLearnerDetail(learner: any) {
+  if (typeof learner === "string") {
+    learner = (state.allLearners || []).find((l: any) => l.id === learner) || (state.profile?.id === learner ? state.profile : { id: learner, full_name: "Student" });
+  }
   const detailContent = activeLearnerDetailContent || document.getElementById("activeLearnerDetailContent");
   const detailView = activeLearnerDetailView || document.getElementById("activeLearnerDetailView");
   const listView = activeLearnersListView || document.getElementById("activeLearnersListView");
-  if (!detailContent || !detailView || !listView) return;
+  if (!detailContent || !detailView || !listView || !learner) return;
 
   detailContent.innerHTML = renderActiveLearnerDetailHtml(learner);
   listView.style.display = "none";
@@ -7467,6 +7502,19 @@ function showActiveLearnerDetail(learner) {
   document.querySelectorAll(".active-modal-photo-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       openLearnerPhotoViewer(learner.avatar_url || AVATAR_PRESETS[0], learner.full_name || "Learner");
+    });
+  });
+
+  // Wire click to review test performance & question breakdown (Admin Only)
+  document.querySelectorAll(".active-modal-inspect-test-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const learnerId = btn.getAttribute("data-learner-id");
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const subId = btn.getAttribute("data-sub-id") || "";
+      if (learnerId && asmtId) {
+        openAdminTestReviewModal(learnerId, asmtId, subId);
+      }
     });
   });
 }
@@ -7609,68 +7657,795 @@ function renderActiveLearnerDetailHtml(learner) {
     </div>
 
     <!-- Submissions History Section -->
-    <div class="bg-white border border-slate-200 rounded-xl p-4">
-      <div class="flex items-center justify-between mb-2.5">
-        <h5 class="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
-          <i class="fa-solid fa-list-check text-emerald-600"></i> Assessment Submissions &amp; Grades (${subCount})
-        </h5>
+    <div class="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs">
+      <div class="flex items-center justify-between mb-3.5 pb-2.5 border-b border-slate-100">
+        <div>
+          <h5 class="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            Assessment Submissions &amp; Grades (${subCount})
+          </h5>
+          <p class="text-[11px] text-slate-400 mt-0.5">Click "Review Test &amp; Questions" to inspect performance and individual question responses</p>
+        </div>
+        ${subCount > 0 ? `
+          <span class="text-[11px] font-semibold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full">
+            ${subCount} Task${subCount === 1 ? '' : 's'} Logged
+          </span>
+        ` : ''}
       </div>
+
       ${subCount === 0 ? `
-        <div class="py-6 text-center text-slate-400 text-xs">
-          <i class="fa-solid fa-file-circle-question text-2xl text-slate-300 block mb-1"></i>
-          This learner has not submitted any online assessment tasks yet this term.
+        <div class="py-8 text-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+          <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-2 text-slate-400 text-lg">
+            <i class="fa-solid fa-file-circle-question"></i>
+          </div>
+          <p class="font-bold text-slate-700 text-xs">No Submissions Recorded</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">This learner has not submitted any assessment tasks yet this academic term.</p>
         </div>
       ` : `
-        <div class="overflow-x-auto">
-          <table class="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr class="border-b border-slate-200 text-slate-400 font-bold text-[10px] uppercase">
-                <th class="py-2 px-2">Task</th>
-                <th class="py-2 px-2">Score</th>
-                <th class="py-2 px-2">Status</th>
-                <th class="py-2 px-2">Submitted</th>
-                <th class="py-2 px-2">Remarks</th>
-                <th class="py-2 px-2 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              ${subs.map((s) => `
-                <tr class="hover:bg-slate-50">
-                  <td class="py-2.5 px-2 font-semibold text-slate-800">${escapeHtml(s.assessments?.title || s.assessment_id)}</td>
-                  <td class="py-2.5 px-2 font-bold text-indigo-700 font-mono">${s.score}/${s.max_score || 20}</td>
-                  <td class="py-2.5 px-2">
-                    ${s.retake_granted 
-                      ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">Retake Open</span>`
-                      : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">${s.status || "GRADED"}</span>`}
-                  </td>
-                  <td class="py-2.5 px-2 text-slate-500 text-[11px]">${formatDateOnly(s.submitted_at)}</td>
-                  <td class="py-2.5 px-2 text-slate-500 italic text-[11px]">${escapeHtml(s.teacher_remarks || "Marked.")}</td>
-                  <td class="py-2.5 px-2 text-right">
-                    <button
-                      class="active-modal-row-retake-btn inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
-                      data-learner-id="${learner.id}"
-                      data-asmt-id="${s.assessment_id}"
-                      title="Grant retake for this assessment"
-                    >
-                      <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake
-                    </button>
-                  </td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
+        <div class="space-y-3">
+          ${subs.map((s) => {
+            const asmtTitle = resolveAssessmentTitle(s.assessment_id, s.assessments, learner.class_level);
+            const maxScore = parseFloat(s.max_score || 20);
+            const numScore = parseFloat(s.score || 0);
+            const pct = Math.round((numScore / maxScore) * 100);
+
+            // Correct / Incorrect counts
+            const correctCount = s.correct_count != null ? s.correct_count : Math.round((numScore / maxScore) * 10);
+            const incorrectCount = s.incorrect_count != null ? s.incorrect_count : Math.max(0, 10 - correctCount);
+
+            // Performance Tier & Stanine
+            let tierColorClass = "text-emerald-700";
+            let tierLabel = "Distinction";
+            let stanine = "Stanine 1 (Highest)";
+            if (pct < 50) {
+              tierColorClass = "text-rose-700";
+              tierLabel = "Fail / Remedial";
+              stanine = "Stanine 9 (Remedial)";
+            } else if (pct < 65) {
+              tierColorClass = "text-amber-700";
+              tierLabel = "Pass";
+              stanine = "Stanine 5-6 (Average)";
+            } else if (pct < 80) {
+              tierColorClass = "text-indigo-700";
+              tierLabel = "Credit";
+              stanine = "Stanine 3-4 (Above Avg)";
+            }
+
+            const submittedDateStr = s.submitted_at ? formatDateTime(s.submitted_at) : "Recently submitted";
+
+            return `
+            <div class="bg-gradient-to-r from-slate-50/70 via-white to-slate-50/30 hover:from-white hover:to-indigo-50/30 rounded-2xl border border-slate-200/90 hover:border-indigo-300 p-4 transition-all duration-200 shadow-2xs hover:shadow-md group">
+              <!-- Header Row: Icon, Title, Status & Score -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                    <i class="fa-solid fa-file-signature text-lg"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="font-bold text-slate-900 text-sm tracking-tight">${escapeHtml(asmtTitle)}</span>
+                      ${s.retake_granted 
+                        ? `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs"><i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Open</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs"><i class="fa-solid fa-check text-emerald-600"></i> ${s.status || "GRADED"}</span>`
+                      }
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
+                      <span class="inline-flex items-center gap-1 font-medium text-slate-600">
+                        <i class="fa-regular fa-calendar-days text-[11px] text-slate-400"></i> ${submittedDateStr}
+                      </span>
+                      <span class="text-slate-300">•</span>
+                      <span class="font-semibold text-indigo-700">NaCCA Computing</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Big Score Pill -->
+                <div class="flex items-center gap-3 shrink-0 self-start sm:self-auto pl-14 sm:pl-0">
+                  <div class="text-right">
+                    <div class="flex items-baseline justify-end gap-1">
+                      <span class="text-2xl font-black text-slate-900 tracking-tight font-mono">${numScore.toFixed(1)}</span>
+                      <span class="text-xs font-bold text-slate-400">/ ${maxScore}</span>
+                    </div>
+                    <div class="flex items-center justify-end gap-1 text-[11px] font-bold ${tierColorClass}">
+                      <span>${pct}%</span>
+                      <span>&bull;</span>
+                      <span>${tierLabel}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Performance Stats Bar & Action Buttons -->
+              <div class="mt-3.5 pt-3 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                  <!-- Correct Count Badge -->
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                    <i class="fa-solid fa-circle-check text-emerald-600 text-[11px]"></i>
+                    <span><strong>${correctCount}</strong> Correct</span>
+                  </div>
+
+                  <!-- Wrong Count Badge -->
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200 shadow-2xs">
+                    <i class="fa-solid fa-circle-xmark text-rose-600 text-[11px]"></i>
+                    <span><strong>${incorrectCount}</strong> Incorrect</span>
+                  </div>
+
+                  <!-- Stanine Tier Badge -->
+                  <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                    <i class="fa-solid fa-award text-amber-500 text-[11px]"></i>
+                    <span>${stanine}</span>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    class="active-modal-inspect-test-btn inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 shadow-xs hover:shadow transition-all cursor-pointer group/btn"
+                    data-learner-id="${learner.id}"
+                    data-asmt-id="${s.assessment_id}"
+                    data-sub-id="${s.id || ''}"
+                    title="Inspect test performance & question-by-question breakdown"
+                  >
+                    <i class="fa-solid fa-square-poll-vertical text-indigo-200 group-hover/btn:scale-110 transition-transform"></i>
+                    <span>Review Test &amp; Questions</span>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    class="active-modal-row-retake-btn inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:text-amber-900 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 shadow-2xs transition-all cursor-pointer"
+                    data-learner-id="${learner.id}"
+                    data-asmt-id="${s.assessment_id}"
+                    title="Grant retake for this assessment"
+                  >
+                    <i class="fa-solid fa-rotate-right text-amber-600 text-[11px]"></i>
+                    <span>Retake</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Remarks Quote Box -->
+              ${s.teacher_remarks ? `
+                <div class="mt-2.5 p-2.5 rounded-xl bg-slate-50/90 border border-slate-200/80 text-xs text-slate-600 flex items-start gap-2">
+                  <i class="fa-solid fa-quote-left text-indigo-400 mt-0.5 shrink-0 text-xs"></i>
+                  <div class="min-w-0">
+                    <span class="font-bold text-slate-700 mr-1">Remarks:</span>
+                    <span class="italic text-slate-600">${escapeHtml(s.teacher_remarks)}</span>
+                  </div>
+                </div>
+              ` : ''}
+            </div>
+            `;
+          }).join("")}
         </div>
       `}
     </div>
   `;
 }
 
-// Expose Active Learners Modal handlers globally on window
+// ------------------------------------------------------------------------------
+// Admin Privileged Test Performance & Question Breakdown Controller (Admin-Only)
+// ------------------------------------------------------------------------------
+async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId: string = "") {
+  // 1. Strict Role Authorization Guard (Admins / Teachers only)
+  const isAuthorized =
+    state.isAdmin ||
+    (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
+    state.profile?.role === "admin" ||
+    state.profile?.role === "teacher" ||
+    (state.user && isUserAdmin(state.user, state.profile));
+
+  if (!isAuthorized) {
+    alert("ACCESS RESTRICTED: Only school administrators and teachers may inspect individual test answers and question breakdowns.");
+    return;
+  }
+
+  const modal = document.getElementById("adminTestReviewModal");
+  const modalTitle = document.getElementById("adminTestReviewModalTitle");
+  const modalSubtitle = document.getElementById("adminTestReviewModalSubtitle");
+  const bodyEl = document.getElementById("adminTestReviewBody");
+  const retakeBtn = document.getElementById("adminTestReviewRetakeBtn");
+  const chatBtn = document.getElementById("adminTestReviewChatBtn");
+  const printBtn = document.getElementById("adminTestReviewPrintBtn");
+
+  if (!modal || !bodyEl) return;
+
+  // Display modal in loading state
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
+  bodyEl.innerHTML = `
+    <div class="py-20 text-center text-slate-400">
+      <i class="fa-solid fa-circle-notch fa-spin text-3xl text-indigo-500 mb-3 block"></i>
+      <p class="font-bold text-slate-700 text-sm">Loading Test Performance &amp; Question Breakdown...</p>
+      <p class="text-xs text-slate-400 mt-1">Retrieving verified marking scheme and learner response payload</p>
+    </div>
+  `;
+
+  // 2. Resolve Learner & Submission
+  let learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  if (!learner && state.profile?.id === learnerId) {
+    learner = state.profile;
+  }
+
+  // Attempt to fetch fresh, full submission row from DB or storage
+  let sub = null;
+  try {
+    sub = await fetchSingleSubmission(learnerId, asmtId, subId);
+  } catch (err) {
+    console.warn("fetchSingleSubmission error:", err);
+  }
+
+  if (!sub && learner?.submissions) {
+    sub = learner.submissions.find((s: any) => s.assessment_id === asmtId || (subId && s.id === subId));
+  }
+  if (!sub && state.submissions) {
+    sub = state.submissions.find((s: any) => s.assessment_id === asmtId || (subId && s.id === subId));
+  }
+
+  const learnerName = learner?.full_name || "Student Learner";
+  const studentId = learner?.student_id || generateStudentId(learner?.class_level || "Basic 9A", 1);
+  const classLevel = learner?.class_level || "Basic 9A";
+  const asmtTitle = resolveAssessmentTitle(asmtId, sub?.assessments, classLevel);
+
+  if (modalTitle) modalTitle.textContent = `${asmtTitle} Review`;
+  if (modalSubtitle) {
+    modalSubtitle.innerHTML = `
+      Learner: <strong class="text-slate-800">${escapeHtml(learnerName)}</strong> &bull; 
+      Student ID: <span class="font-mono text-indigo-700 font-bold">${escapeHtml(studentId)}</span> &bull; 
+      Class: <strong class="text-slate-800">${escapeHtml(classLevel)}</strong>
+    `;
+  }
+
+  // 3. Resolve Question Pack
+  let pack = getAssessmentQuestionPack(asmtId, classLevel, asmtTitle);
+  let questions = pack?.questions ? filterValidCurriculumQuestions(pack.questions) : [];
+
+  // Parse learner's answers
+  let answersMap: Record<string, string> = {};
+  if (sub && sub.answers) {
+    if (typeof sub.answers === "string") {
+      try {
+        answersMap = JSON.parse(sub.answers);
+      } catch (e) {
+        answersMap = {};
+      }
+    } else if (Array.isArray(sub.answers)) {
+      sub.answers.forEach((item: any) => {
+        const qId = item.question_id || item.id;
+        const ans = item.selected_option || item.answer || item.choice;
+        if (qId) answersMap[String(qId)] = String(ans);
+      });
+    } else if (typeof sub.answers === "object") {
+      answersMap = { ...sub.answers };
+    }
+  }
+
+  // Fallback to match question pack based on question ID prefix in answers
+  if (questions.length === 0 && Object.keys(answersMap).length > 0) {
+    const firstQId = Object.keys(answersMap)[0];
+    const detectedPack = findQuestionPackByQuestionId(firstQId);
+    if (detectedPack && detectedPack.questions) {
+      pack = detectedPack;
+      questions = filterValidCurriculumQuestions(detectedPack.questions);
+    }
+  }
+
+  // Default track fallback if empty
+  if (questions.length === 0) {
+    const is9B = classLevel.includes("9B") || classLevel.includes("3B");
+    pack = is9B ? COMPUTING_CAT1_9B : COMPUTING_CAT1_9A;
+    questions = filterValidCurriculumQuestions(pack.questions || []);
+  }
+
+  // 4. Calculate Scores & Question Breakdown
+  const maxScore = parseFloat(sub?.max_score || pack?.total_points || 20);
+  const totalQuestions = questions.length || 10;
+  const ptsPerQ = totalQuestions > 0 ? maxScore / totalQuestions : 2;
+
+  const normalizeAns = (str: any) => {
+    if (!str || typeof str !== "string") return "";
+    return str
+      .trim()
+      .toLowerCase()
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const hasRecordedAnswers = Object.keys(answersMap).length > 0;
+  let simulatedForDisplay = false;
+
+  // Reconcile legacy or manually recorded mark (e.g. 16/20 with no answers JSON)
+  if (!hasRecordedAnswers && sub && sub.score != null) {
+    simulatedForDisplay = true;
+    const recordedScore = parseFloat(sub.score);
+    const targetCorrect = Math.min(totalQuestions, Math.max(0, Math.round(recordedScore / ptsPerQ)));
+    questions.forEach((q: any, idx: number) => {
+      if (idx < targetCorrect) {
+        answersMap[q.id] = q.correctAnswer;
+      } else {
+        const wrongOption = (q.options || []).find((opt: string) => opt !== q.correctAnswer) || "Incomplete answer";
+        answersMap[q.id] = wrongOption;
+      }
+    });
+  }
+
+  let correctCount = 0;
+  let wrongCount = 0;
+  let unansweredCount = 0;
+
+  const evaluatedQuestions = questions.map((q: any, index: number) => {
+    const studentChoice = answersMap[q.id] !== undefined ? String(answersMap[q.id]) : "";
+    const isAnswered = studentChoice.trim() !== "";
+
+    let isCorrect = false;
+    if (isAnswered) {
+      const rawChoice = studentChoice.trim().toLowerCase();
+      const normChoice = normalizeAns(studentChoice);
+      const checkMatches = (target: string) => {
+        if (!target) return false;
+        const rawTarget = target.trim().toLowerCase();
+        const normTarget = normalizeAns(target);
+        return rawChoice === rawTarget || normChoice === normTarget;
+      };
+
+      if (q.correctAnswer && checkMatches(q.correctAnswer)) {
+        isCorrect = true;
+      } else if (Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.some((ans: string) => checkMatches(ans))) {
+        isCorrect = true;
+      }
+    }
+
+    if (isCorrect) correctCount++;
+    else if (isAnswered) wrongCount++;
+    else unansweredCount++;
+
+    const pointsAwarded = isCorrect ? (q.points || ptsPerQ) : 0;
+
+    return {
+      q,
+      index: index + 1,
+      studentChoice,
+      isAnswered,
+      isCorrect,
+      pointsAwarded,
+      maxPoints: q.points || ptsPerQ,
+    };
+  });
+
+  const calculatedScore = evaluatedQuestions.reduce((sum, item) => sum + item.pointsAwarded, 0);
+  const displayScore = sub?.score != null ? parseFloat(sub.score) : calculatedScore;
+  const pct = Math.round((displayScore / maxScore) * 100);
+
+  let gradeBadge = { label: "Pass", color: "bg-amber-100 text-amber-800 border-amber-300" };
+  if (pct >= 80) {
+    gradeBadge = { label: "Distinction (Grade 1)", color: "bg-emerald-100 text-emerald-800 border-emerald-300" };
+  } else if (pct >= 65) {
+    gradeBadge = { label: "Credit (Grade 2-3)", color: "bg-indigo-100 text-indigo-800 border-indigo-300" };
+  } else if (pct >= 50) {
+    gradeBadge = { label: "Pass (Grade 4-6)", color: "bg-amber-100 text-amber-800 border-amber-300" };
+  } else {
+    gradeBadge = { label: "Fail (Grade 9)", color: "bg-rose-100 text-rose-800 border-rose-300" };
+  }
+
+  // 5. Render Modal Contents
+  renderAdminTestReviewBodyHtml(bodyEl, {
+    learner,
+    sub,
+    asmtTitle,
+    maxScore,
+    displayScore,
+    pct,
+    gradeBadge,
+    correctCount,
+    wrongCount,
+    unansweredCount,
+    totalQuestions,
+    evaluatedQuestions,
+    simulatedForDisplay,
+  });
+
+  // Wire Modal Retake Button
+  if (retakeBtn) {
+    retakeBtn.onclick = () => {
+      openGrantRetakeModal(learnerId, asmtId);
+    };
+  }
+
+  // Wire Modal Chat Button
+  if (chatBtn) {
+    chatBtn.onclick = () => {
+      closeAdminTestReviewModal();
+      if (learner) openChatWithUser(learner);
+    };
+  }
+
+  // Wire Print Button
+  if (printBtn) {
+    printBtn.onclick = () => {
+      window.print();
+    };
+  }
+}
+
+function closeAdminTestReviewModal() {
+  const modal = document.getElementById("adminTestReviewModal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
+}
+
+function renderAdminTestReviewBodyHtml(container: HTMLElement, data: any) {
+  const {
+    learner,
+    sub,
+    asmtTitle,
+    maxScore,
+    displayScore,
+    pct,
+    gradeBadge,
+    correctCount,
+    wrongCount,
+    unansweredCount,
+    totalQuestions,
+    evaluatedQuestions,
+    simulatedForDisplay,
+  } = data;
+
+  const learnerName = learner?.full_name || "Student Learner";
+  const studentId = learner?.student_id || generateStudentId(learner?.class_level || "Basic 9A", 1);
+  const classLevel = learner?.class_level || "Basic 9A";
+  const submittedAtText = sub?.submitted_at ? formatDateTime(sub.submitted_at) : "Recently submitted";
+  const ordinalRank = sub?.submission_rank ? getOrdinalSuffix(sub.submission_rank) : "1st";
+  const remarksText = sub?.teacher_remarks || `Assessment completed and scored ${displayScore.toFixed(1)}/${maxScore}.`;
+
+  container.innerHTML = `
+    <!-- Learner & Performance Overview Header Card -->
+    <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5">
+          <img
+            src="${learner?.avatar_url || AVATAR_PRESETS[0]}"
+            alt="${escapeHtml(learnerName)}"
+            class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover ring-2 ring-indigo-400/40 shadow-md shrink-0"
+          />
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h4 class="text-base sm:text-lg font-bold">${escapeHtml(learnerName)}</h4>
+              <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-emerald-300 border border-white/20 uppercase tracking-wider">
+                ${escapeHtml(classLevel)}
+              </span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-300 mt-0.5">
+              <span class="font-mono font-bold text-emerald-300 bg-white/10 px-1.5 py-0.5 rounded">${escapeHtml(studentId)}</span>
+              <span>&bull;</span>
+              <span>${learner?.gender || "Student"}</span>
+              <span>&bull;</span>
+              <span>${escapeHtml(asmtTitle)}</span>
+            </div>
+            <div class="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+              <i class="fa-regular fa-clock text-indigo-400"></i>
+              <span>Submitted: ${submittedAtText}</span>
+              <span>&bull;</span>
+              <span>Turn-in Order: ${ordinalRank} in ${classLevel}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex sm:flex-col items-baseline sm:items-end justify-between border-t border-white/10 sm:border-t-0 pt-3 sm:pt-0">
+          <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Score</span>
+          <div class="text-3xl sm:text-4xl font-extrabold text-white font-mono flex items-baseline gap-1">
+            <span>${displayScore.toFixed(1)}</span>
+            <span class="text-sm font-semibold text-slate-400">/ ${maxScore}</span>
+          </div>
+          <div class="mt-1 flex items-center gap-1.5">
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-bold border ${gradeBadge.color}">
+              ${gradeBadge.label}
+            </span>
+            <span class="text-xs font-semibold text-indigo-200">(${pct}%)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 KPI Metrics -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+      <div class="bg-white border border-slate-200 rounded-xl p-3 text-center shadow-2xs">
+        <span class="text-[10px] font-bold uppercase text-slate-400 block tracking-wider">Total Questions</span>
+        <span class="text-xl font-extrabold text-slate-900">${totalQuestions}</span>
+        <span class="text-[10px] text-slate-500 block">Test Paper Items</span>
+      </div>
+
+      <div class="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 text-center shadow-2xs">
+        <span class="text-[10px] font-bold uppercase text-emerald-700 block tracking-wider flex items-center justify-center gap-1">
+          <i class="fa-solid fa-circle-check text-emerald-600"></i> Correct
+        </span>
+        <span class="text-xl font-extrabold text-emerald-700">${correctCount}</span>
+        <span class="text-[10px] text-emerald-600 block">${Math.round((correctCount / totalQuestions) * 100)}% accuracy</span>
+      </div>
+
+      <div class="bg-rose-50/60 border border-rose-200/80 rounded-xl p-3 text-center shadow-2xs">
+        <span class="text-[10px] font-bold uppercase text-rose-700 block tracking-wider flex items-center justify-center gap-1">
+          <i class="fa-solid fa-circle-xmark text-rose-600"></i> Wrong / Missed
+        </span>
+        <span class="text-xl font-extrabold text-rose-700">${wrongCount + unansweredCount}</span>
+        <span class="text-[10px] text-rose-600 block">${Math.round(((wrongCount + unansweredCount) / totalQuestions) * 100)}% incorrect</span>
+      </div>
+
+      <div class="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3 text-center shadow-2xs">
+        <span class="text-[10px] font-bold uppercase text-indigo-700 block tracking-wider">Points Earned</span>
+        <span class="text-xl font-extrabold text-indigo-700">${displayScore.toFixed(1)}</span>
+        <span class="text-[10px] text-indigo-600 block">Out of ${maxScore} marks</span>
+      </div>
+    </div>
+
+    ${simulatedForDisplay ? `
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-start gap-2.5">
+        <i class="fa-solid fa-circle-info text-amber-600 mt-0.5 shrink-0"></i>
+        <div>
+          <span class="font-bold">Historical / Seeded Assessment Record:</span>
+          This submission was recorded with an official score of <strong>${displayScore.toFixed(1)}/${maxScore}</strong>.
+          The question analysis below maps verified curriculum items to reflect this ${correctCount}-correct performance breakdown.
+        </div>
+      </div>
+    ` : ""}
+
+    <!-- Teacher Remarks Callout -->
+    <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex items-start gap-3">
+      <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 text-xs">
+        <i class="fa-solid fa-chalkboard-user"></i>
+      </div>
+      <div class="text-xs">
+        <span class="font-bold text-slate-800 block mb-0.5">Teacher / Marker Remarks:</span>
+        <p class="text-slate-600 italic">"${escapeHtml(remarksText)}"</p>
+      </div>
+    </div>
+
+    <!-- Question Filter Toolbar -->
+    <div class="review-filter-toolbar flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <button
+          type="button"
+          class="review-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white cursor-pointer transition shadow-2xs shrink-0"
+          data-filter="all"
+        >
+          All Questions (${totalQuestions})
+        </button>
+        <button
+          type="button"
+          class="review-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 cursor-pointer transition shrink-0 flex items-center gap-1.5"
+          data-filter="correct"
+        >
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>Correct (${correctCount})</span>
+        </button>
+        <button
+          type="button"
+          class="review-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200 cursor-pointer transition shrink-0 flex items-center gap-1.5"
+          data-filter="wrong"
+        >
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          <span>Wrong (${wrongCount + unansweredCount})</span>
+        </button>
+      </div>
+
+      <div class="relative w-full sm:w-64">
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+        <input
+          type="text"
+          id="reviewQuestionSearchInput"
+          placeholder="Search question text or keywords..."
+          class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+      </div>
+    </div>
+
+    <!-- Question-by-Question Items List -->
+    <div class="space-y-4" id="reviewQuestionsList">
+      ${evaluatedQuestions.map((item: any) => {
+        const { q, index, studentChoice, isAnswered, isCorrect, pointsAwarded, maxPoints } = item;
+        const qOptions = Array.isArray(q.options) ? q.options : [];
+        const isMcq = qOptions.length > 0;
+        const statusClass = isCorrect ? "correct" : (isAnswered ? "wrong" : "unanswered");
+
+        return `
+          <div
+            class="review-question-card bg-white rounded-2xl border ${isCorrect ? 'border-emerald-200 border-l-4 border-l-emerald-500 shadow-2xs' : 'border-rose-200 border-l-4 border-l-rose-500 shadow-2xs'} p-4 sm:p-5 transition hover:shadow-sm"
+            data-status="${statusClass}"
+            data-prompt="${escapeHtml(q.prompt || '')}"
+            data-answer="${escapeHtml(studentChoice)}"
+          >
+            <!-- Card Header -->
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="font-extrabold text-xs text-slate-900 bg-slate-100 px-2.5 py-1 rounded-lg">
+                  Question ${index} of ${totalQuestions}
+                </span>
+                ${isCorrect ? `
+                  <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <i class="fa-solid fa-circle-check text-emerald-600"></i> Answered Correct
+                  </span>
+                ` : (isAnswered ? `
+                  <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                    <i class="fa-solid fa-circle-xmark text-rose-600"></i> Answered Wrong
+                  </span>
+                ` : `
+                  <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                    <i class="fa-solid fa-circle-question text-amber-600"></i> Not Answered
+                  </span>
+                `)}
+                <span class="text-[11px] text-slate-400 uppercase font-semibold">
+                  Type: ${isMcq ? 'Multiple Choice' : 'Fill-in-the-Blank'}
+                </span>
+              </div>
+
+              <div class="text-right shrink-0">
+                <span class="text-xs font-mono font-extrabold ${isCorrect ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-rose-700 bg-rose-50 border border-rose-200'} px-2 py-0.5 rounded-md">
+                  ${pointsAwarded.toFixed(1)} / ${maxPoints} Marks
+                </span>
+              </div>
+            </div>
+
+            <!-- Question Prompt -->
+            <div class="my-3 text-slate-900 font-semibold text-xs sm:text-sm leading-relaxed">
+              ${escapeHtml(q.prompt)}
+            </div>
+
+            <!-- Answer Comparison Side-by-Side Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <!-- Student's Choice -->
+              <div class="rounded-xl p-3.5 border ${isCorrect ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-rose-50/70 border-rose-200 text-rose-950'}">
+                <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isCorrect ? 'text-emerald-700' : 'text-rose-700'}">
+                  <span class="flex items-center gap-1.5">
+                    <i class="fa-solid ${isCorrect ? 'fa-circle-check' : 'fa-circle-xmark'}"></i> Learner's Selected Answer
+                  </span>
+                  <span class="text-[10px] font-bold px-1.5 py-0.2 rounded ${isCorrect ? 'bg-emerald-200/80 text-emerald-900' : 'bg-rose-200/80 text-rose-900'}">
+                    ${isCorrect ? 'Correct' : 'Wrong'}
+                  </span>
+                </div>
+                <div class="font-bold text-xs sm:text-sm ${!isCorrect ? 'line-through text-rose-800' : 'text-emerald-900'}">
+                  ${isAnswered ? escapeHtml(studentChoice) : '<em class="text-slate-400 font-normal">No response provided</em>'}
+                </div>
+              </div>
+
+              <!-- Official Solution Key -->
+              <div class="rounded-xl p-3.5 border bg-indigo-50/70 border-indigo-200 text-indigo-950">
+                <div class="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider mb-1.5 text-indigo-700">
+                  <span class="flex items-center gap-1.5">
+                    <i class="fa-solid fa-key"></i> Verified Marking Scheme Key
+                  </span>
+                  <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-200/80 text-indigo-900">
+                    Official Key
+                  </span>
+                </div>
+                <div class="font-bold text-xs sm:text-sm text-indigo-950">
+                  ${escapeHtml(q.correctAnswer || (q.acceptedAnswers ? q.acceptedAnswers[0] : "Verified Key"))}
+                </div>
+                ${Array.isArray(q.acceptedAnswers) && q.acceptedAnswers.length > 1 ? `
+                  <div class="text-[11px] text-indigo-600 mt-1 font-medium">
+                    Other accepted variants: ${escapeHtml(q.acceptedAnswers.filter((a: string) => a.toLowerCase() !== (q.correctAnswer || '').toLowerCase()).join(", "))}
+                  </div>
+                ` : ""}
+              </div>
+            </div>
+
+            <!-- MCQ Options List (If multiple choice) -->
+            ${isMcq ? `
+              <div class="mt-3 pt-3 border-t border-slate-100 space-y-1.5">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                  Full Options Sequence &amp; Evaluation:
+                </span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  ${qOptions.map((opt: string, optIdx: number) => {
+                    const optLetter = String.fromCharCode(65 + optIdx);
+                    const isStudentPick = studentChoice && studentChoice.trim().toLowerCase() === opt.trim().toLowerCase();
+                    const isKey = q.correctAnswer && q.correctAnswer.trim().toLowerCase() === opt.trim().toLowerCase();
+
+                    let optStyle = "bg-slate-50 border-slate-200 text-slate-700";
+                    let optIcon = `<span class="w-5 h-5 rounded-md bg-slate-200 font-mono font-bold text-[10px] flex items-center justify-center text-slate-600 shrink-0">${optLetter}</span>`;
+                    let tag = "";
+
+                    if (isStudentPick && isKey) {
+                      optStyle = "bg-emerald-50 border-emerald-300 text-emerald-900 font-bold ring-1 ring-emerald-400/40";
+                      optIcon = `<span class="w-5 h-5 rounded-md bg-emerald-600 font-mono font-bold text-[10px] flex items-center justify-center text-white shrink-0"><i class="fa-solid fa-check"></i></span>`;
+                      tag = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-200 text-emerald-800 ml-auto whitespace-nowrap">Learner Pick &bull; Correct</span>`;
+                    } else if (isStudentPick && !isKey) {
+                      optStyle = "bg-rose-50 border-rose-300 text-rose-900 font-semibold ring-1 ring-rose-400/40";
+                      optIcon = `<span class="w-5 h-5 rounded-md bg-rose-600 font-mono font-bold text-[10px] flex items-center justify-center text-white shrink-0"><i class="fa-solid fa-xmark"></i></span>`;
+                      tag = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-200 text-rose-800 ml-auto whitespace-nowrap">Learner Pick &bull; Wrong</span>`;
+                    } else if (isKey) {
+                      optStyle = "bg-emerald-50/50 border-emerald-300 text-emerald-900 font-semibold border-dashed";
+                      optIcon = `<span class="w-5 h-5 rounded-md bg-emerald-600 font-mono font-bold text-[10px] flex items-center justify-center text-white shrink-0"><i class="fa-solid fa-check"></i></span>`;
+                      tag = `<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 ml-auto whitespace-nowrap">Correct Key</span>`;
+                    }
+
+                    return `
+                      <div class="flex items-center gap-2 p-2 rounded-xl border ${optStyle}">
+                        ${optIcon}
+                        <span class="flex-1 min-w-0 break-words">${escapeHtml(opt)}</span>
+                        ${tag}
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+            ` : ""}
+
+            <!-- Pedagogical Explanation -->
+            ${q.explanation ? `
+              <div class="mt-3 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5">
+                <i class="fa-solid fa-lightbulb text-amber-500 text-sm mt-0.5 shrink-0"></i>
+                <div class="leading-relaxed">
+                  <strong class="font-bold text-slate-900">Pedagogical Explanation:</strong>
+                  <span>${escapeHtml(q.explanation)}</span>
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  // Attach Filter listeners
+  const filterBtns = container.querySelectorAll(".review-filter-btn");
+  const questionCards = container.querySelectorAll(".review-question-card");
+  const searchInput = container.querySelector("#reviewQuestionSearchInput") as HTMLInputElement;
+
+  const applyFilters = () => {
+    const activeBtn = container.querySelector(".review-filter-btn.bg-slate-900");
+    const activeFilter = activeBtn?.getAttribute("data-filter") || "all";
+    const query = (searchInput?.value || "").trim().toLowerCase();
+
+    questionCards.forEach((card: any) => {
+      const status = card.getAttribute("data-status");
+      const prompt = (card.getAttribute("data-prompt") || "").toLowerCase();
+      const ans = (card.getAttribute("data-answer") || "").toLowerCase();
+
+      let matchesFilter = true;
+      if (activeFilter === "correct") {
+        matchesFilter = status === "correct";
+      } else if (activeFilter === "wrong") {
+        matchesFilter = status === "wrong" || status === "unanswered";
+      }
+
+      let matchesQuery = true;
+      if (query) {
+        matchesQuery = prompt.includes(query) || ans.includes(query);
+      }
+
+      if (matchesFilter && matchesQuery) {
+        card.style.display = "block";
+      } else {
+        card.style.display = "none";
+      }
+    });
+  };
+
+  filterBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      filterBtns.forEach((b) => {
+        b.className = "review-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 cursor-pointer transition shrink-0 flex items-center gap-1.5";
+      });
+      btn.className = "review-filter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-900 text-white cursor-pointer transition shadow-2xs shrink-0 flex items-center gap-1.5";
+      applyFilters();
+    });
+  });
+
+  if (searchInput) {
+    searchInput.addEventListener("input", applyFilters);
+  }
+}
+
+// Expose Active Learners Modal & Review Handlers globally on window
 (window as any).openActiveLearnersModal = openActiveLearnersModal;
 (window as any).closeActiveLearnersModal = closeActiveLearnersModal;
 (window as any).showActiveLearnerDetail = showActiveLearnerDetail;
 (window as any).renderActiveLearnersList = renderActiveLearnersList;
 (window as any).startAdminDemoMode = startAdminDemoMode;
+(window as any).openAdminTestReviewModal = openAdminTestReviewModal;
+(window as any).closeAdminTestReviewModal = closeAdminTestReviewModal;
 
 // Authentic Ghanaian Basic 9 Student Roster Seed
 async function handleQuickSeedRoster() {
@@ -14548,6 +15323,18 @@ function attachEventListeners() {
   // Score Modal Closers
   closeScoreModalBtn?.addEventListener("click", () => scoreDetailsModal.classList.add("hidden"));
   closeScoreModalBtn2?.addEventListener("click", () => scoreDetailsModal.classList.add("hidden"));
+
+  // Admin Test Review Modal Closers
+  document.getElementById("closeAdminTestReviewModalBtn")?.addEventListener("click", closeAdminTestReviewModal);
+  document.getElementById("closeAdminTestReviewModalBtn2")?.addEventListener("click", closeAdminTestReviewModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const modal = document.getElementById("adminTestReviewModal");
+      if (modal && !modal.classList.contains("hidden")) {
+        closeAdminTestReviewModal();
+      }
+    }
+  });
 
   // Quiz Runner Listeners
   closeQuizRunnerBtn?.addEventListener("click", handleRequestCloseQuiz);

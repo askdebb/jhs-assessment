@@ -326,7 +326,7 @@ export async function fetchAllLearners() {
   try {
     const res = await supabase
       .from("learners")
-      .select("*, submissions(id, score, max_score, status, assessment_id, submitted_at)")
+      .select("*, submissions(id, score, max_score, correct_count, incorrect_count, answers, submission_rank, status, teacher_remarks, retake_granted, retake_reason, retake_granted_at, previous_scores, assessment_id, submitted_at, assessments(id, title, subject, class_level, max_score, weight))")
       .order("created_at", { ascending: false });
     learnersData = res.data;
     fetchError = res.error;
@@ -499,6 +499,10 @@ export async function fetchLearnerSubmissions(learnerId) {
       status,
       submitted_at,
       teacher_remarks,
+      retake_granted,
+      retake_reason,
+      retake_granted_at,
+      previous_scores,
       assessments (
         id,
         title,
@@ -519,6 +523,64 @@ export async function fetchLearnerSubmissions(learnerId) {
   }
 
   return data || [];
+}
+
+export async function fetchSingleSubmission(learnerId, assessmentId, submissionId = null) {
+  const supabase = getAdminSupabase() || getSupabase();
+  if (supabase) {
+    try {
+      let query = supabase
+        .from("submissions")
+        .select(`
+          id,
+          assessment_id,
+          learner_id,
+          score,
+          max_score,
+          correct_count,
+          incorrect_count,
+          answers,
+          submission_rank,
+          status,
+          teacher_remarks,
+          retake_granted,
+          retake_reason,
+          retake_granted_at,
+          previous_scores,
+          submitted_at,
+          assessments (
+            id,
+            title,
+            subject,
+            class_level,
+            assessment_type,
+            max_score,
+            weight,
+            deadline
+          )
+        `);
+
+      if (submissionId) {
+        query = query.eq("id", submissionId);
+      } else {
+        query = query.eq("learner_id", learnerId).eq("assessment_id", assessmentId);
+      }
+
+      const { data, error } = await query.maybeSingle();
+      if (!error && data) return data;
+    } catch (e) {
+      console.warn("fetchSingleSubmission error:", e);
+    }
+  }
+
+  const fallback = getFallbackSubmissions();
+  return (
+    fallback.find(
+      (s) =>
+        (submissionId && s.id === submissionId) ||
+        (s.learner_id === learnerId && s.assessment_id === assessmentId)
+    ) || null
+  );
 }
 
 export async function fetchAllSubmissions() {
