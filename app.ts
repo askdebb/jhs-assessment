@@ -2470,6 +2470,19 @@ function renderAssessmentCards() {
     return true;
   });
 
+  // Deduplicate assessments by ID and normalized title to ensure no repeated cards appear in UI
+  const seenCardIds = new Set<string>();
+  const seenCardKeys = new Set<string>();
+  filtered = filtered.filter((asmt) => {
+    if (!asmt || !asmt.id) return false;
+    if (seenCardIds.has(asmt.id)) return false;
+    const key = `${(asmt.subject || "").trim().toLowerCase()}|${(asmt.class_level || "").trim().toLowerCase()}|${(asmt.title || "").trim().toLowerCase()}`;
+    if (seenCardKeys.has(key)) return false;
+    seenCardIds.add(asmt.id);
+    seenCardKeys.add(key);
+    return true;
+  });
+
   if (filtered.length === 0) {
     assessmentGrid.innerHTML = `
       <div class="col-span-full text-center py-12 text-slate-400">
@@ -4028,27 +4041,25 @@ async function handleRoute() {
 
     // Handle direct invitation link e.g. /admin?invite=CODE
     const urlParams = new URLSearchParams(window.location.search);
-    const inviteParam = urlParams.get("invite") || urlParams.get("code");
+    const inviteParam = urlParams.get("invite") || urlParams.get("code") || sessionStorage.getItem("jhs_pending_invite_code");
+    let pendingInvitedStaff: any = null;
     if (inviteParam) {
+      sessionStorage.setItem("jhs_pending_invite_code", inviteParam.trim());
       const staffList = getInvitedTeachers();
-      const matched = staffList.find(t => (t.invitation_code || "").toLowerCase() === inviteParam.trim().toLowerCase());
-      if (matched) {
-        state.user = { id: matched.id, email: matched.email, user_metadata: { full_name: matched.full_name, role: matched.role || "teacher" } };
-        state.profile = { id: matched.id, full_name: matched.full_name, email: matched.email, role: matched.role || "teacher", class_level: matched.classes?.[0] || "Basic 9A" };
-        state.isAdmin = true;
-        state.currentStaffProfile = matched;
-        state.selectedSubject = matched.subjects?.[0] || "Computing";
-        state.selectedClass = "ALL";
-        localStorage.setItem("jhs_demo_session", JSON.stringify(state.user));
-        localStorage.setItem("jhs_active_learner", JSON.stringify(state.profile));
-        localStorage.setItem("jhs_view_mode", "admin");
+      pendingInvitedStaff = staffList.find(t => (t.invitation_code || "").toLowerCase() === inviteParam.trim().toLowerCase());
+      if (pendingInvitedStaff && state.user?.email) {
+        // If teacher is signed in with Google, associate their Google email with this invited profile
+        if (!pendingInvitedStaff.email || pendingInvitedStaff.email.includes("example.com") || pendingInvitedStaff.email.trim() === "") {
+          pendingInvitedStaff.email = state.user.email.toLowerCase().trim();
+          saveInvitedTeacher(pendingInvitedStaff);
+        }
       }
     }
 
     // Role-Based Gatekeeper: Authorized for Primary Admin & Registered Invited Teachers
     const userEmail = (state.user?.email || "").toLowerCase().trim();
     const isPrimaryAdmin = userEmail === PRIMARY_ADMIN_EMAIL.toLowerCase();
-    const staffProfile = getStaffProfileByEmail(userEmail) || (isPrimaryAdmin ? DEFAULT_STAFF[0] : null);
+    const staffProfile = getStaffProfileByEmail(userEmail) || pendingInvitedStaff || (isPrimaryAdmin ? DEFAULT_STAFF[0] : null);
     const isStaffAuthorized = isEmailAuthorizedStaff(userEmail) || staffProfile !== null || state.profile?.role === "admin" || state.profile?.role === "teacher";
     const isAuthorizedAdmin = Boolean(state.user && (isPrimaryAdmin || isStaffAuthorized));
 
@@ -4064,6 +4075,15 @@ async function handleRoute() {
       adminGatekeeperSection?.classList.remove("hidden");
       adminGatekeeperSection?.classList.add("flex");
 
+      const inviteBanner = document.getElementById("adminInviteBanner");
+      const inviteBannerText = document.getElementById("adminInviteBannerText");
+      if (pendingInvitedStaff && inviteBanner && inviteBannerText) {
+        inviteBanner.classList.remove("hidden");
+        inviteBannerText.innerHTML = `Welcome <strong>${escapeHtml(pendingInvitedStaff.full_name)}</strong>! Sign in with your Google Account to complete your onboarding orientation for ${escapeHtml(pendingInvitedStaff.school_name || "Adjiringanor AdMA JHS")}.`;
+      } else if (inviteBanner) {
+        inviteBanner.classList.add("hidden");
+      }
+
       const gatekeeperError = document.getElementById("adminGatekeeperError");
       const gatekeeperErrorMsg = document.getElementById("adminGatekeeperErrorMsg");
       const gatekeeperGoogleBtnText = document.getElementById("adminGatekeeperGoogleBtnText");
@@ -4075,10 +4095,10 @@ async function handleRoute() {
       if (isRealUser && currentEmail && !isEmailAuthorizedStaff(currentEmail)) {
         if (gatekeeperError) gatekeeperError.classList.remove("hidden");
         if (gatekeeperErrorMsg) {
-          gatekeeperErrorMsg.innerHTML = `<strong>${escapeHtml(currentEmail)}</strong> is not registered as a teacher or admin. Please sign in with your authorized educator email or enter your invite code.`;
+          gatekeeperErrorMsg.innerHTML = `<strong>${escapeHtml(currentEmail)}</strong> is not registered as an authorized educator. Please sign in with your invited Gmail address or open your official invitation link.`;
         }
         if (gatekeeperGoogleBtnText) {
-          gatekeeperGoogleBtnText.textContent = "Choose another Google Account";
+          gatekeeperGoogleBtnText.textContent = "Sign in with another Google Account";
         }
       } else {
         if (gatekeeperError) gatekeeperError.classList.add("hidden");
@@ -7508,6 +7528,7 @@ async function handleGrantRetakeSubmit(e: Event) {
   try {
     await grantSubmissionRetake(learnerId, asmtId, reason, "Master Debrah (Admin)");
     state.submissions = await fetchAllSubmissions();
+    state.allLearners = await fetchAllLearners();
 
     if (inAppChecked) {
       try {
@@ -8269,28 +8290,76 @@ function renderAdminLearnersTable() {
     const subCount = learner.submissions?.length || 0;
     const hasPerformedTask = subCount > 0;
     const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
-    const academicPill = hasPerformedTask
+
+    const activeRetakeSub = (learner.submissions || []).find((s: any) => s.retake_granted === true) ||
+                           (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.retake_granted === true);
+    const hasActiveRetake = Boolean(activeRetakeSub);
+
+    let academicPill = "";
+    if (hasActiveRetake && activeRetakeSub) {
+      academicPill = `
+        <button
+          type="button"
+          class="admin-table-inspect-test-btn text-left group cursor-pointer block"
+          data-learner-id="${learner.id}"
+          data-asmt-id="${activeRetakeSub.assessment_id}"
+          data-sub-id="${activeRetakeSub.id || ''}"
+          title="Retake is currently active and unlocked for this learner. Click to inspect."
+        >
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs whitespace-nowrap animate-pulse group-hover:bg-amber-200 transition">
+            <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Active
+          </span>
+          <span class="text-[11px] text-amber-700 font-semibold block whitespace-nowrap mt-0.5 group-hover:underline">
+            Previous: <strong class="font-mono">${activeRetakeSub.score}/20</strong> marks (Unlocked)
+          </span>
+        </button>
+      `;
+    } else if (hasPerformedTask) {
+      academicPill = `
+        <button
+          type="button"
+          class="admin-table-inspect-test-btn text-left group cursor-pointer block"
+          data-learner-id="${learner.id}"
+          data-asmt-id="${learner.submissions[0].assessment_id}"
+          data-sub-id="${learner.submissions[0].id || ''}"
+          title="Inspect latest test performance & question breakdown"
+        >
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap group-hover:bg-emerald-100 transition">
+            <i class="fa-solid fa-circle-check text-emerald-500"></i> ${subCount} Task(s) Done
+          </span>
+          <span class="text-[11px] text-slate-500 block whitespace-nowrap mt-0.5 group-hover:text-indigo-600 transition">
+            Latest: <strong class="text-indigo-600 font-mono underline decoration-indigo-300">${lastScore}/20</strong> marks <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-indigo-400 ml-0.5"></i>
+          </span>
+        </button>
+      `;
+    } else {
+      academicPill = `
+        <div>
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+            <i class="fa-regular fa-clock text-amber-500"></i> Not Performed
+          </span>
+          <span class="text-[10px] text-slate-400 block whitespace-nowrap mt-0.5 italic">No submissions yet</span>
+        </div>
+      `;
+    }
+
+    const retakeBtnHtml = hasActiveRetake
       ? `<button
-           type="button"
-           class="admin-table-inspect-test-btn text-left group cursor-pointer block"
-           data-learner-id="${learner.id}"
-           data-asmt-id="${learner.submissions[0].assessment_id}"
-           data-sub-id="${learner.submissions[0].id || ''}"
-           title="Inspect latest test performance & question breakdown"
+           class="admin-retake-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition cursor-pointer ring-2 ring-amber-400/50 shadow-xs"
+           data-student-id="${learner.id}"
+           title="Retake is currently active and unlocked for this student. Click to adjust note or re-open."
          >
-           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap group-hover:bg-emerald-100 transition">
-             <i class="fa-solid fa-circle-check text-emerald-500"></i> ${subCount} Task(s) Done
-           </span>
-           <span class="text-[11px] text-slate-500 block whitespace-nowrap mt-0.5 group-hover:text-indigo-600 transition">
-             Latest: <strong class="text-indigo-600 font-mono underline decoration-indigo-300">${lastScore}/20</strong> marks <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-indigo-400 ml-0.5"></i>
-           </span>
+           <i class="fa-solid fa-rotate-right text-amber-700"></i>
+           <span>Retake Active</span>
          </button>`
-      : `<div>
-           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
-             <i class="fa-regular fa-clock text-amber-500"></i> Not Performed
-           </span>
-           <span class="text-[10px] text-slate-400 block whitespace-nowrap mt-0.5 italic">No submissions yet</span>
-         </div>`;
+      : `<button
+           class="admin-retake-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
+           data-student-id="${learner.id}"
+           title="Authorize Assessment Retake for this learner"
+         >
+           <i class="fa-solid fa-rotate-right text-amber-600"></i>
+           <span>Retake</span>
+         </button>`;
 
     const roleBadge = learner.role === "admin"
       ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
@@ -8329,14 +8398,7 @@ function renderAdminLearnersTable() {
         <td class="py-3.5 px-4">${academicPill}</td>
         <td class="py-3.5 px-4 text-right">
           <div class="flex items-center justify-end gap-1.5">
-            <button
-              class="admin-retake-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
-              data-student-id="${learner.id}"
-              title="Authorize Assessment Retake for this learner"
-            >
-              <i class="fa-solid fa-rotate-right text-amber-600"></i>
-              <span>Retake</span>
-            </button>
+            ${retakeBtnHtml}
             <button
               class="admin-record-student-mark-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer"
               data-student-id="${learner.id}"
@@ -8390,22 +8452,40 @@ function renderAdminLearnersTable() {
       const subCount = learner.submissions?.length || 0;
       const hasPerformedTask = subCount > 0;
       const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
-      const academicBadgeMobile = hasPerformedTask
+
+      const activeRetakeSub = (learner.submissions || []).find((s: any) => s.retake_granted === true) ||
+                             (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.retake_granted === true);
+      const hasActiveRetake = Boolean(activeRetakeSub);
+
+      const academicBadgeMobile = hasActiveRetake && activeRetakeSub
         ? `<button
              type="button"
              class="admin-table-inspect-test-btn cursor-pointer text-left"
              data-learner-id="${learner.id}"
-             data-asmt-id="${learner.submissions[0].assessment_id}"
-             data-sub-id="${learner.submissions[0].id || ''}"
-             title="Inspect test performance"
+             data-asmt-id="${activeRetakeSub.assessment_id}"
+             data-sub-id="${activeRetakeSub.id || ''}"
+             title="Retake is currently active and unlocked"
            >
-             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition">
-               <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done (${lastScore}/20) <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i>
+             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+               <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Active (${activeRetakeSub.score}/20)
              </span>
            </button>`
-        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-             <i class="fa-regular fa-clock text-amber-600"></i> Pending
-           </span>`;
+        : (hasPerformedTask
+            ? `<button
+                 type="button"
+                 class="admin-table-inspect-test-btn cursor-pointer text-left"
+                 data-learner-id="${learner.id}"
+                 data-asmt-id="${learner.submissions[0].assessment_id}"
+                 data-sub-id="${learner.submissions[0].id || ''}"
+                 title="Inspect test performance"
+               >
+                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition">
+                   <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done (${lastScore}/20) <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i>
+                 </span>
+               </button>`
+            : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                 <i class="fa-regular fa-clock text-amber-600"></i> Pending
+               </span>`);
 
       const roleBadge = learner.role === "admin"
         ? `<span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">Admin</span>`
@@ -8479,12 +8559,12 @@ function renderAdminLearnersTable() {
             </button>
             <button
               type="button"
-              class="admin-retake-student-btn py-2 px-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
+              class="admin-retake-student-btn py-2 px-1.5 rounded-xl text-xs font-bold ${hasActiveRetake ? 'bg-amber-100 text-amber-900 border border-amber-300 ring-1 ring-amber-400' : 'bg-amber-50 text-amber-800 border border-amber-200'} hover:bg-amber-100 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
               data-student-id="${learner.id}"
-              title="Authorize Retake"
+              title="${hasActiveRetake ? 'Retake is currently active and unlocked' : 'Authorize Retake'}"
             >
               <i class="fa-solid fa-rotate-right text-xs text-amber-600"></i>
-              <span class="text-[10px]">Retake</span>
+              <span class="text-[10px]">${hasActiveRetake ? 'Retake Open' : 'Retake'}</span>
             </button>
             <div class="flex items-center gap-1">
               <button

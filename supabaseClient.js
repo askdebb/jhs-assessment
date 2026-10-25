@@ -564,17 +564,38 @@ export async function fetchAssessments() {
     return getFallbackAssessments();
   }
 
-  // Combine database assessments with local fallback assessments ensuring no duplicates
-  const fallback = getFallbackAssessments();
-  const map = new Map();
-  fallback.forEach((a) => {
-    if (a && a.id) map.set(a.id, a);
-  });
-  data.forEach((a) => {
-    if (a && a.id) map.set(a.id, { ...map.get(a.id), ...a });
-  });
+  // Supabase database is active and authoritative
+  // Only merge custom locally created assessments that aren't already represented in Supabase
+  const localRaw = typeof localStorage !== "undefined" ? localStorage.getItem("jhs_local_assessments") : null;
+  let customLocal = [];
+  if (localRaw) {
+    try {
+      const parsed = JSON.parse(localRaw);
+      if (Array.isArray(parsed)) {
+        // Only keep user-created custom items (not the hardcoded mock items)
+        customLocal = parsed.filter((a) => a && a.id && !a.id.startsWith("asmt-"));
+      }
+    } catch (e) {}
+  }
 
-  return Array.from(map.values());
+  // Deduplicate by ID and by normalized key (subject + class_level + title)
+  const deduped = [];
+  const seenIds = new Set();
+  const seenKeys = new Set();
+
+  for (const asmt of [...data, ...customLocal]) {
+    if (!asmt || !asmt.id) continue;
+    if (seenIds.has(asmt.id)) continue;
+
+    const key = `${(asmt.subject || "").trim().toLowerCase()}|${(asmt.class_level || "").trim().toLowerCase()}|${(asmt.title || "").trim().toLowerCase()}`;
+    if (seenKeys.has(key)) continue;
+
+    seenIds.add(asmt.id);
+    seenKeys.add(key);
+    deduped.push(asmt);
+  }
+
+  return deduped;
 }
 
 export async function fetchLearnerSubmissions(learnerId) {
