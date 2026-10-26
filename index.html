@@ -4333,122 +4333,125 @@
     <!-- ================================================================= -->
     <!-- MODAL 8: EXTEND ASSESSMENT PERIOD MODAL                            -->
     <!-- ================================================================= -->
-    <div id="extendPeriodModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden">
-      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full my-auto overflow-hidden p-6 space-y-5">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-          <div class="flex items-center gap-2.5">
-            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg">
+    <div id="extendPeriodModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto hidden animate-in fade-in duration-200">
+      <div class="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-lg w-full flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden my-auto">
+        <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center text-lg shrink-0">
               <i class="fa-solid fa-clock-rotate-left"></i>
             </div>
-            <div>
-              <h3 class="font-bold text-base text-slate-900">Configure Validity Period &amp; Duration</h3>
-              <p id="extendModalAsmtTitle" class="text-xs text-slate-500 font-medium truncate max-w-[220px]">Computing CAT 1</p>
+            <div class="min-w-0">
+              <h3 class="font-bold text-base text-slate-900 truncate">Configure Validity Period &amp; Duration</h3>
+              <p id="extendModalAsmtTitle" class="text-xs text-slate-500 font-medium truncate max-w-[260px]">Computing CAT 1</p>
             </div>
           </div>
-          <button id="closeExtendPeriodBtn" type="button" class="text-slate-400 hover:text-slate-600 p-1 cursor-pointer">
+          <button id="closeExtendPeriodBtn" type="button" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer shrink-0">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
         </div>
 
-        <input type="hidden" id="extendModalAsmtId" value="" />
+        <div class="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 overscroll-contain">
+          <input type="hidden" id="extendModalAsmtId" value="" />
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <span class="text-[11px] text-slate-500 block mb-1">Current Deadline:</span>
-            <div id="extendModalCurrentDeadline" class="font-mono text-xs font-bold text-slate-800 bg-slate-100 py-1.5 px-2.5 rounded-lg border border-slate-200 truncate">
-              Calculating...
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <span class="text-[11px] text-slate-500 block mb-1">Current Deadline:</span>
+              <div id="extendModalCurrentDeadline" class="font-mono text-xs font-bold text-slate-800 bg-slate-100 py-1.5 px-2.5 rounded-lg border border-slate-200 truncate">
+                Calculating...
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">Sitting Duration (Mins)</label>
+              <input
+                type="number"
+                id="extendDurationInput"
+                min="5"
+                max="180"
+                step="5"
+                value="15"
+                class="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
           </div>
+
+          <!-- Validity Opening Time (Unlock) -->
           <div>
-            <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">Sitting Duration (Mins)</label>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Validity Opening / Unlock Time (Optional)</label>
             <input
-              type="number"
-              id="extendDurationInput"
-              min="5"
-              max="180"
-              step="5"
-              value="15"
-              class="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              type="datetime-local"
+              id="extendUnlockDatetimeInput"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+          </div>
+
+          <!-- Quick Extension Presets -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Quick Deadline Extension Presets</label>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="1">
+                +1 Hour
+              </button>
+              <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="24">
+                +24 Hours
+              </button>
+              <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="72">
+                +3 Days
+              </button>
+              <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="168">
+                +1 Week
+              </button>
+            </div>
+          </div>
+
+          <!-- Custom Datetime Picker -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Or Pick Custom Expiration Deadline</label>
+            <input
+              type="datetime-local"
+              id="extendCustomDatetimeInput"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <!-- Targeted Reopening & Submission Protection Info Box -->
+          <div id="extendModalTargetAudienceInfo"></div>
+
+          <!-- Status & Sync Options -->
+          <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2.5">
+            <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 select-none">
+              <input
+                type="checkbox"
+                id="extendModalActivateCheckbox"
+                checked
+                class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+              />
+              <span id="extendModalActivateCheckboxLabel">Turn ON / Make Available to learners now</span>
+            </label>
+            <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-600 select-none">
+              <input
+                type="checkbox"
+                id="extendModalSyncTrackCheckbox"
+                checked
+                class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
+              />
+              <span id="extendModalSyncTrackCheckboxLabel">Also apply this deadline &amp; duration to parallel track</span>
+            </label>
           </div>
         </div>
 
-        <!-- Validity Opening Time (Unlock) -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Validity Opening / Unlock Time (Optional)</label>
-          <input
-            type="datetime-local"
-            id="extendUnlockDatetimeInput"
-            class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-
-        <!-- Quick Extension Presets -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Quick Deadline Extension Presets</label>
-          <div class="grid grid-cols-2 gap-2">
-            <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="1">
-              +1 Hour
-            </button>
-            <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="24">
-              +24 Hours (1 Day)
-            </button>
-            <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="72">
-              +3 Days
-            </button>
-            <button type="button" class="quick-extend-btn py-2 px-3 rounded-xl border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-xs font-bold text-slate-700 transition cursor-pointer" data-hours="168">
-              +1 Week
-            </button>
-          </div>
-        </div>
-
-        <!-- Custom Datetime Picker -->
-        <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Or Pick Custom Expiration Deadline</label>
-          <input
-            type="datetime-local"
-            id="extendCustomDatetimeInput"
-            class="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-
-        <!-- Targeted Reopening & Submission Protection Info Box -->
-        <div id="extendModalTargetAudienceInfo"></div>
-
-        <!-- Status & Sync Options -->
-        <div class="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2">
-          <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 select-none">
-            <input
-              type="checkbox"
-              id="extendModalActivateCheckbox"
-              checked
-              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-            />
-            <span id="extendModalActivateCheckboxLabel">Turn ON / Make Available to learners now</span>
-          </label>
-          <label class="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-600 select-none">
-            <input
-              type="checkbox"
-              id="extendModalSyncTrackCheckbox"
-              checked
-              class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
-            />
-            <span id="extendModalSyncTrackCheckboxLabel">Also apply this deadline &amp; duration to parallel track</span>
-          </label>
-        </div>
-
-        <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+        <!-- Sticky Fixed Modal Footer -->
+        <div class="p-3.5 sm:p-4 border-t border-slate-100 bg-slate-50/90 flex items-center justify-end gap-2.5 shrink-0 rounded-b-3xl">
           <button
             id="cancelExtendPeriodBtn"
             type="button"
-            class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+            class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/70 transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             id="saveExtendPeriodBtn"
             type="button"
-            class="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition cursor-pointer"
+            class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition cursor-pointer active:scale-95"
           >
             <i class="fa-solid fa-calendar-check"></i> Save Validity &amp; Duration
           </button>
