@@ -67,6 +67,8 @@ import {
   deleteCallRecording,
   deleteBulkCallRecordings,
   grantSubmissionRetake,
+  cancelSubmissionRetake,
+  updateSubmissionScore,
   dispatchEmailNotification,
   triggerWebPushNotification,
   getDispatchedEmails,
@@ -2460,13 +2462,15 @@ function renderAssessmentCards() {
       return false;
     }
     const sub = subMap.get(asmt.id);
+    const hasActiveRetake = Boolean(sub && sub.retake_granted === true);
+    const hasCompletedAndLocked = Boolean(sub && sub.status === "GRADED" && !hasActiveRetake);
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
     const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
-    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired;
+    const isAvailableForLearner = asmt.status === "AVAILABLE" && !isScheduled && !isExpired && !hasCompletedAndLocked;
 
-    if (filterStatus === "AVAILABLE") return isAvailable;
+    if (filterStatus === "AVAILABLE") return isAvailableForLearner || hasActiveRetake;
     if (filterStatus === "CLOSED") return asmt.status === "CLOSED" || isScheduled || isExpired;
-    if (filterStatus === "GRADED") return sub && sub.status === "GRADED";
+    if (filterStatus === "GRADED") return hasCompletedAndLocked || (sub && sub.status === "GRADED");
     return true;
   });
 
@@ -2495,9 +2499,11 @@ function renderAssessmentCards() {
 
   assessmentGrid.innerHTML = filtered.map((asmt) => {
     const sub = subMap.get(asmt.id);
+    const hasActiveRetake = Boolean(sub && sub.retake_granted === true);
+    const hasCompletedAndLocked = Boolean(sub && sub.status === "GRADED" && !hasActiveRetake);
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
     const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
-    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired;
+    const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired && !hasCompletedAndLocked;
     const hasScore = sub && sub.status === "GRADED";
     const duration = asmt.time_limit_minutes || 15;
 
@@ -2507,16 +2513,16 @@ function renderAssessmentCards() {
 
     // Status Pill
     let statusBadge = "";
-    if (sub && sub.retake_granted === true) {
+    if (hasActiveRetake) {
       statusBadge = `
         <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse shadow-2xs">
           <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Authorized
         </span>
       `;
-    } else if (hasScore) {
+    } else if (hasCompletedAndLocked) {
       statusBadge = `
-        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-          <i class="fa-solid fa-lock text-indigo-500"></i> Graded &amp; Locked
+        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <i class="fa-solid fa-lock text-emerald-600"></i> Graded &amp; Locked (${sub.score}/${asmt.max_score || 20})
         </span>
       `;
     } else if (isExpired) {
@@ -2798,7 +2804,7 @@ function startAssessmentQuiz(asmtId) {
 
   const existingSub = state.submissions.find((s) => s.assessment_id === asmtId && s.status === "GRADED");
   if (existingSub && !existingSub.retake_granted) {
-    alert("You have already completed and submitted this assessment. Re-takes are locked to maintain assessment integrity.");
+    alert(`Your assessment submission for "${asmt.title}" is already completed and safely locked with ${existingSub.score}/${asmt.max_score || 20} marks.\n\nReopening this test applies strictly to students who haven't submitted or who were authorized for a retake. Your score remains securely recorded.`);
     return;
   }
 
@@ -3324,17 +3330,36 @@ async function handleConfirmAbandonQuiz() {
   const existingSubs = (state.submissions || []).filter((s) => s.assessment_id === quiz.asmtId);
   const rankNum = existingSubs.length + 1;
 
+  const priorSub = (state.submissions || []).find((s) => s.assessment_id === quiz.asmtId);
+  let priorValidScore: number | null = null;
+  if (priorSub && priorSub.score != null && parseFloat(priorSub.score) > 0) {
+    priorValidScore = parseFloat(priorSub.score);
+  } else if (priorSub?.previous_scores && Array.isArray(priorSub.previous_scores)) {
+    const validPrev = priorSub.previous_scores.filter((p: any) => p && p.score != null && parseFloat(p.score) > 0);
+    if (validPrev.length > 0) {
+      const best = validPrev.reduce((m: any, c: any) => parseFloat(c.score) > parseFloat(m.score) ? c : m, validPrev[0]);
+      priorValidScore = parseFloat(best.score);
+    }
+  }
+
+  const finalScore = priorValidScore != null ? priorValidScore : 0;
+  const remarks = priorValidScore != null
+    ? `Retake sitting cancelled early by learner. Previous official mark (${priorValidScore}/${maxScore}) preserved.`
+    : `Assessment sitting terminated early by learner. Graded as FAILED (0.0/${maxScore}) with penalty applied for abandoning test sitting.`;
+
   try {
+    const totalQ = quiz.paper ? quiz.paper.length : 10;
+    const calcCorrect = priorValidScore != null ? Math.round(priorValidScore / (maxScore / totalQ)) : 0;
     await saveAssessmentSubmission({
       assessment_id: quiz.asmtId,
       learner_id: learnerId,
-      score: 0,
+      score: finalScore,
       max_score: maxScore,
-      correct_count: 0,
-      incorrect_count: totalQuestions,
-      answers: quiz.answers || {},
+      correct_count: calcCorrect,
+      incorrect_count: totalQ - calcCorrect,
+      answers: quiz.answers || priorSub?.answers || {},
       submission_rank: rankNum,
-      teacher_remarks: `Assessment sitting terminated early by learner. Graded as FAILED (0.0/${maxScore}) with penalty applied for abandoning test sitting.`,
+      teacher_remarks: remarks,
     });
 
     state.submissions = await fetchLearnerSubmissions(learnerId);
@@ -3342,31 +3367,51 @@ async function handleConfirmAbandonQuiz() {
     console.error("Failed to record failed assessment:", err);
   }
 
-  // Switch to result screen showing Failed (0 Marks)
+  // Switch to result screen showing preserved score or Failed
   if (quizActiveBody) quizActiveBody.classList.add("hidden");
   if (quizActiveFooter) quizActiveFooter.classList.add("hidden");
   if (quizResultScreen) quizResultScreen.classList.remove("hidden");
 
-  if (quizResultScore) quizResultScore.textContent = "0.0";
+  if (quizResultScore) quizResultScore.textContent = finalScore.toFixed(1);
   if (quizResultMax) quizResultMax.textContent = `/ ${maxScore}`;
-  if (quizResultPct) quizResultPct.textContent = "0.0%";
-  if (quizCorrectCount) quizCorrectCount.textContent = "0";
-  if (quizIncorrectCount) quizIncorrectCount.textContent = `${totalQuestions}`;
-  if (quizResultRankText) quizResultRankText.textContent = `Turn-in Order: ${getOrdinalSuffix(rankNum)} (Terminated sitting)`;
+  const pctNum = Math.round((finalScore / maxScore) * 100);
+  if (quizResultPct) quizResultPct.textContent = `${pctNum}%`;
+  const totalQ = quiz.paper ? quiz.paper.length : 10;
+  const calcCorrect = priorValidScore != null ? Math.round(priorValidScore / (maxScore / totalQ)) : 0;
+  if (quizCorrectCount) quizCorrectCount.textContent = `${calcCorrect}`;
+  if (quizIncorrectCount) quizIncorrectCount.textContent = `${totalQ - calcCorrect}`;
+  if (quizResultRankText) {
+    quizResultRankText.textContent = priorValidScore != null
+      ? `Retake Sitting Closed (Previous score of ${priorValidScore}/${maxScore} preserved)`
+      : `Turn-in Order: ${getOrdinalSuffix(rankNum)} (Terminated sitting)`;
+  }
 
   if (quizResultGradeBadge) {
-    quizResultGradeBadge.className = "px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300";
-    quizResultGradeBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Grade: F9 (Fail / Sitting Abandoned)`;
+    if (priorValidScore != null) {
+      quizResultGradeBadge.className = "px-3 py-1 rounded-full text-xs font-black bg-indigo-100 text-indigo-800 border border-indigo-300";
+      quizResultGradeBadge.innerHTML = `<i class="fa-solid fa-shield-check mr-1"></i> Grade: Preserved (${finalScore}/${maxScore})`;
+    } else {
+      quizResultGradeBadge.className = "px-3 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300";
+      quizResultGradeBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Grade: F9 (Fail / Sitting Abandoned)`;
+    }
   }
 
   updateKpiMetrics();
   renderAssessmentCards();
 
-  showPushToast(
-    "Assessment Sitting Terminated",
-    "Test was closed before completion. Graded as FAILED (0 Marks / F9) and recorded on your academic profile.",
-    "error"
-  );
+  if (priorValidScore != null) {
+    showPushToast(
+      "Sitting Cancelled",
+      `Retake sitting was exited early. Your prior mark of ${priorValidScore}/${maxScore} was safely preserved.`,
+      "info"
+    );
+  } else {
+    showPushToast(
+      "Assessment Sitting Terminated",
+      "Test was closed before completion. Graded as FAILED (0 Marks / F9) and recorded on your academic profile.",
+      "error"
+    );
+  }
 }
 
 function closeQuizRunner() {
@@ -7360,8 +7405,45 @@ async function notifyAssessmentActivated(asmtId: string) {
   if (!asmt) return;
 
   const targetClass = asmt.class_level || "ALL";
-  const title = `🚀 ${asmt.title} is Now LIVE & Active!`;
-  const message = `Master Debrah (Admin) has activated ${asmt.title} (${asmt.subject}). You can now log into your learner dashboard and take this continuous assessment task. Time limit: ${asmt.time_limit_minutes || 15} minutes.`;
+
+  // Fetch latest submissions to accurately segment completed vs unsubmitted vs retake
+  let allSubs: any[] = [];
+  try {
+    allSubs = await fetchAllSubmissions();
+  } catch (e) {
+    allSubs = state.submissions || [];
+  }
+
+  const learners = state.allLearners || [];
+  const classLearners = learners.filter((l: any) => {
+    if (targetClass !== "ALL" && l.class_level && l.class_level !== targetClass) return false;
+    return (l.role || "learner") === "learner";
+  });
+
+  // TARGET ONLY:
+  // 1. Learners who have NOT submitted yet for this assessment, OR
+  // 2. Learners who have retake_granted === true
+  // Learners who have completed submissions without retake remain safely locked and are NOT notified!
+  const targetLearners = classLearners.filter((learner: any) => {
+    const sub = allSubs.find((s: any) => s.learner_id === learner.id && s.assessment_id === asmtId);
+    if (sub && sub.status === "GRADED" && !sub.retake_granted) {
+      return false; // Completed and locked
+    }
+    return true;
+  });
+
+  const completedCount = classLearners.filter((learner: any) => {
+    const sub = allSubs.find((s: any) => s.learner_id === learner.id && s.assessment_id === asmtId);
+    return sub && sub.status === "GRADED" && !sub.retake_granted;
+  }).length;
+
+  const isReopenedSitting = completedCount > 0;
+  const title = isReopenedSitting
+    ? `🚀 ${asmt.title} is Active for Pending & Retake Students`
+    : `🚀 ${asmt.title} is Now LIVE & Active!`;
+  const message = isReopenedSitting
+    ? `Master Debrah (Admin) has opened ${asmt.title} (${asmt.subject}) for students who haven't submitted and those authorized to retake. (${completedCount} completed submission(s) remain safely locked). Time limit: ${asmt.time_limit_minutes || 15} minutes.`
+    : `Master Debrah (Admin) has activated ${asmt.title} (${asmt.subject}). You can now log into your learner dashboard and take this continuous assessment task. Time limit: ${asmt.time_limit_minutes || 15} minutes.`;
 
   // 1. In-App Notification (Saved to DB & LocalStore)
   try {
@@ -7379,35 +7461,39 @@ async function notifyAssessmentActivated(asmtId: string) {
   }
 
   // 2. Identify target learners for email dispatch
-  const learners = state.allLearners || [];
-
-  const targetLearners = learners.filter((l: any) => {
-    if (targetClass !== "ALL" && l.class_level && l.class_level !== targetClass) return false;
-    return (l.role || "learner") === "learner";
-  });
-
   let dispatchedEmailCount = 0;
   for (const learner of targetLearners) {
     const studentEmail = learner.email || `${learner.full_name.toLowerCase().replace(/[^a-z]/g, "")}@ghana-edu.gov.gh`;
+    const learnerSub = allSubs.find((s: any) => s.learner_id === learner.id && s.assessment_id === asmtId);
+    const isRetake = Boolean(learnerSub && learnerSub.retake_granted === true);
+
     await dispatchEmailNotification({
       to: studentEmail,
       recipientName: learner.full_name,
-      subject: `🚨 Assessment Activated: ${asmt.title} is Now Open!`,
-      heading: `${asmt.title} is Now LIVE`,
-      previewText: `Master Debrah has opened ${asmt.title}. Time limit: ${asmt.time_limit_minutes || 15} mins.`,
+      subject: isRetake
+        ? `🔄 Retake Active: ${asmt.title} is Now Open!`
+        : `🚨 Assessment Open: ${asmt.title} (Pending Submission)`,
+      heading: isRetake ? `${asmt.title} Retake Active` : `${asmt.title} is Now Open`,
+      previewText: isRetake
+        ? `Master Debrah has approved and opened your retake sitting for ${asmt.title}.`
+        : `Master Debrah has opened ${asmt.title}. Time limit: ${asmt.time_limit_minutes || 15} mins.`,
       bodyHtml: `
         <p>Dear <strong>${escapeHtml(learner.full_name)}</strong>,</p>
-        <p>Your continuous assessment task <strong>${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject)}) for <strong>${escapeHtml(learner.class_level || asmt.class_level || "Basic 9")}</strong> has been officially activated by <strong>Master Debrah (Admin)</strong>.</p>
+        <p>${
+          isRetake
+            ? `Your authorized retake sitting for <strong>${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject)}) has been officially activated by <strong>Master Debrah (Admin)</strong>.`
+            : `Your continuous assessment task <strong>${escapeHtml(asmt.title)}</strong> (${escapeHtml(asmt.subject)}) for <strong>${escapeHtml(learner.class_level || asmt.class_level || "Basic 9")}</strong> is open for your submission.`
+        }</p>
         <div style="background:#f8fafc;border-left:4px solid #4f46e5;padding:12px;margin:16px 0;border-radius:6px;">
           <p style="margin:0 0 6px 0;"><strong>Track:</strong> ${escapeHtml(asmt.subject)}</p>
           <p style="margin:0 0 6px 0;"><strong>Time Allowed:</strong> ${asmt.time_limit_minutes || 15} minutes</p>
           <p style="margin:0 0 6px 0;"><strong>Total Marks:</strong> ${asmt.max_score || 20} marks</p>
           <p style="margin:0;"><strong>Term Weight:</strong> ${asmt.weight ? parseFloat(asmt.weight) : 20}%</p>
         </div>
-        <p>Please log into your learner portal immediately to complete this assessment before the deadline.</p>
+        <p>Please log into your learner portal immediately to complete this assessment before the validity period expires.</p>
       `,
       actionUrl: window.location.origin + "/learner",
-      actionText: "Open Portal & Start CAT",
+      actionText: isRetake ? "Open Portal & Start Retake" : "Open Portal & Start CAT",
       senderName: "Master Debrah (Admin)",
       senderEmail: PRIMARY_ADMIN_EMAIL,
       meta: { asmtId: asmt.id, classLevel: targetClass }
@@ -7416,19 +7502,23 @@ async function notifyAssessmentActivated(asmtId: string) {
   }
 
   // 3. Browser Web Push Notification + Audio Chime
-  await triggerWebPushNotification(`🚀 Assessment Activated: ${asmt.title}`, {
-    body: `The CAT is now active for ${targetClass === "ALL" ? "all students" : targetClass}. Tap to start.`,
-    url: "/learner"
-  });
-  playNotificationChime();
+  if (targetLearners.length > 0) {
+    await triggerWebPushNotification(`🚀 Assessment Active: ${asmt.title}`, {
+      body: `Open for ${targetLearners.length} pending / retake student(s) (${completedCount} completed submissions locked).`,
+      url: "/learner"
+    });
+    playNotificationChime();
+  }
 
-  showActivationBroadcastToast(asmt.title, targetClass, dispatchedEmailCount);
+  showActivationBroadcastToast(asmt.title, `${targetClass} (${targetLearners.length} targeted, ${completedCount} locked)`, dispatchedEmailCount);
 }
 
 function updateRetakeStatusBox(learnerId: string) {
   const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
   const statusText = document.getElementById("retakeExistingStatusText");
   const scoreBadge = document.getElementById("retakeExistingScoreBadge");
+  const revokeBtn = document.getElementById("revokeRetakeBtn");
+  const submitBtn = document.getElementById("submitGrantRetakeBtn");
   if (!asmtSelect || !statusText || !scoreBadge) return;
 
   const asmtId = asmtSelect.value;
@@ -7439,15 +7529,35 @@ function updateRetakeStatusBox(learnerId: string) {
       statusText.textContent = `Retake already active: Teacher previously authorized a second sitting.`;
       scoreBadge.className = "font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-300";
       scoreBadge.textContent = `Retake Pending (${sub.score}/${sub.max_score || 20})`;
+      if (revokeBtn) revokeBtn.classList.remove("hidden");
+      if (submitBtn) {
+        submitBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Update Reason &amp; Re-notify`;
+      }
     } else {
       statusText.textContent = `Completed sitting recorded on ${formatDateOnly(sub.submitted_at)}. Re-take will grant a fresh attempt.`;
       scoreBadge.className = "font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200";
       scoreBadge.textContent = `Score: ${sub.score} / ${sub.max_score || 20}`;
+      if (revokeBtn) revokeBtn.classList.add("hidden");
+      if (submitBtn) {
+        submitBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Authorize Retake &amp; Notify`;
+      }
+    }
+  } else if (sub && sub.retake_granted) {
+    statusText.textContent = `Retake already active: Student has an open authorized retake sitting.`;
+    scoreBadge.className = "font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-300";
+    scoreBadge.textContent = `Retake Open`;
+    if (revokeBtn) revokeBtn.classList.remove("hidden");
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Update Reason &amp; Re-notify`;
     }
   } else {
     statusText.textContent = `No completed submission found for this student. Retake authorization will unlock an open attempt.`;
     scoreBadge.className = "font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200";
     scoreBadge.textContent = `Unattempted`;
+    if (revokeBtn) revokeBtn.classList.add("hidden");
+    if (submitBtn) {
+      submitBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Authorize Retake &amp; Notify`;
+    }
   }
 }
 
@@ -7472,6 +7582,9 @@ function openGrantRetakeModal(learnerId: string, preselectedAsmtId: string | nul
   if (numberEl) numberEl.textContent = learner.student_id || generateStudentId(learner.class_level, 1);
   if (emailEl) emailEl.textContent = learner.email || "student@ghana-edu.gov.gh";
 
+  const activeRetake = (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.retake_granted === true);
+  const targetAsmtId = preselectedAsmtId || (activeRetake ? activeRetake.assessment_id : null);
+
   const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
   if (asmtSelect) {
     const learnerClass = learner.class_level || "Basic 9A";
@@ -7482,10 +7595,11 @@ function openGrantRetakeModal(learnerId: string, preselectedAsmtId: string | nul
 
     asmtSelect.innerHTML = availableAsmts.map((a: any) => {
       const existingSub = (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.assessment_id === a.id);
-      const isSelected = preselectedAsmtId ? a.id === preselectedAsmtId : false;
-      const statusNote = existingSub
-        ? `[Scored: ${existingSub.score}/${a.max_score || 20}]`
-        : `[Unattempted]`;
+      const isSelected = targetAsmtId ? a.id === targetAsmtId : false;
+      const isRetakeActive = existingSub && existingSub.retake_granted === true;
+      const statusNote = isRetakeActive
+        ? `[Retake Active - Scored: ${existingSub.score}/${a.max_score || 20}]`
+        : (existingSub ? `[Scored: ${existingSub.score}/${a.max_score || 20}]` : `[Unattempted]`);
       return `<option value="${a.id}" ${isSelected ? 'selected' : ''}>${escapeHtml(a.title)} ${statusNote}</option>`;
     }).join("");
   }
@@ -7498,6 +7612,107 @@ function openGrantRetakeModal(learnerId: string, preselectedAsmtId: string | nul
   }
 
   modal.classList.remove("hidden");
+}
+
+async function handleCancelRetakeAction() {
+  const idInput = document.getElementById("retakeStudentId") as HTMLInputElement | null;
+  const asmtSelect = document.getElementById("adminRetakeAsmtSelect") as HTMLSelectElement | null;
+  const revokeBtn = document.getElementById("revokeRetakeBtn") as HTMLButtonElement | null;
+
+  const learnerId = idInput?.value;
+  const asmtId = asmtSelect?.value;
+  if (!learnerId || !asmtId) return;
+
+  const learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  const asmt = (state.assessments || []).find((a: any) => a.id === asmtId);
+  const sub = (state.submissions || []).find((s: any) => s.learner_id === learnerId && s.assessment_id === asmtId);
+  const displayScore = sub ? (typeof sub.score === "number" ? sub.score : parseFloat(sub.score) || 0) : 0;
+  const maxScore = asmt?.max_score || sub?.max_score || 20;
+
+  const learnerName = learner?.full_name || "this student";
+  const asmtTitle = asmt?.title || "this assessment";
+
+  if (!confirm(`Are you sure you want to cancel the retake authorization for ${learnerName} on "${asmtTitle}"?\n\nThe student will no longer be able to retake this test, and their existing score of ${displayScore}/${maxScore} marks will remain safely locked and official.`)) {
+    return;
+  }
+
+  if (revokeBtn) {
+    revokeBtn.disabled = true;
+    revokeBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Cancelling...`;
+  }
+
+  try {
+    await cancelSubmissionRetake(learnerId, asmtId, "Master Debrah (Admin)");
+
+    const inAppChecked = (document.getElementById("retakeNotifyInApp") as HTMLInputElement | null)?.checked ?? true;
+    const emailChecked = (document.getElementById("retakeNotifyEmail") as HTMLInputElement | null)?.checked ?? true;
+
+    if (inAppChecked) {
+      try {
+        await sendNotification({
+          title: `🔒 Retake Closed: ${asmtTitle}`,
+          message: `Master Debrah (Admin) has closed / cancelled the retake sitting for ${asmtTitle}. Your official score of ${displayScore}/${maxScore} remains securely recorded and locked.`,
+          target_class: learner?.class_level || "ALL",
+          type: "ANNOUNCEMENT",
+          sender_name: "Master Debrah (Admin)",
+        });
+        state.notifications = await fetchNotifications(state.profile?.class_level || "ALL");
+        renderNotifications();
+      } catch (notifErr) {
+        console.warn("Retake cancellation in-app notification error:", notifErr);
+      }
+    }
+
+    if (emailChecked && learner) {
+      try {
+        const studentEmail = learner.email || `${learner.full_name.toLowerCase().replace(/[^a-z]/g, "")}@ghana-edu.gov.gh`;
+        await dispatchEmailNotification({
+          to: studentEmail,
+          recipientName: learner.full_name,
+          subject: `🔒 Retake Closed: ${asmtTitle} - Ghana JHS Assessment Portal`,
+          heading: `Retake Closed for ${asmtTitle}`,
+          previewText: `The retake authorization for ${asmtTitle} has been closed.`,
+          bodyHtml: `
+            <p>Dear <strong>${escapeHtml(learner.full_name)}</strong>,</p>
+            <p>The retake sitting previously authorized for <strong>${escapeHtml(asmtTitle)}</strong> has been <strong>closed</strong> by Master Debrah (Admin).</p>
+            <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:12px;margin:16px 0;border-radius:6px;">
+              <p style="margin:0 0 6px 0;color:#166534;"><strong>Official Recorded Score:</strong> ${displayScore} / ${maxScore} marks</p>
+              <p style="margin:0;color:#15803d;">Your completed assessment is safely recorded in the official school grade book.</p>
+            </div>
+            <p>You can review your completed paper and question-by-question marker feedback anytime from your dashboard.</p>
+          `,
+          actionUrl: window.location.origin + "/learner",
+          actionText: "View My Assessment Scores",
+          senderName: "Master Debrah (Admin)",
+          senderEmail: PRIMARY_ADMIN_EMAIL,
+          meta: { type: "RETAKE_CANCELLED", learnerId, asmtId }
+        });
+      } catch (emailErr) {
+        console.warn("Retake cancellation email error:", emailErr);
+      }
+    }
+
+    // Refresh state
+    state.submissions = await fetchAllSubmissions();
+    state.allLearners = await fetchAllLearners();
+
+    document.getElementById("adminGrantRetakeModal")?.classList.add("hidden");
+
+    renderAdminLearnersTable();
+    renderAssessmentCards();
+    updateKpiMetrics();
+    updateActiveTestBanner();
+
+    alert(`✅ Retake Cancelled: The retake authorization for ${learnerName} on "${asmtTitle}" has been cancelled. Their score of ${displayScore}/${maxScore} is safely locked.`);
+  } catch (err) {
+    console.error("Failed to cancel retake:", err);
+    alert("An error occurred while cancelling the retake. Please try again.");
+  } finally {
+    if (revokeBtn) {
+      revokeBtn.disabled = false;
+      revokeBtn.innerHTML = `<i class="fa-solid fa-ban text-rose-600"></i> Cancel Retake Permission`;
+    }
+  }
 }
 
 async function handleGrantRetakeSubmit(e: Event) {
@@ -7748,6 +7963,7 @@ function initEmailAndPushListeners() {
   document.getElementById("cancelGrantRetakeBtn")?.addEventListener("click", () => {
     document.getElementById("adminGrantRetakeModal")?.classList.add("hidden");
   });
+  document.getElementById("revokeRetakeBtn")?.addEventListener("click", handleCancelRetakeAction);
   document.getElementById("adminGrantRetakeForm")?.addEventListener("submit", handleGrantRetakeSubmit);
   document.getElementById("adminRetakeAsmtSelect")?.addEventListener("change", () => {
     const idInput = document.getElementById("retakeStudentId") as HTMLInputElement | null;
@@ -7925,6 +8141,40 @@ function openExtendPeriodModal(asmtId: string) {
     syncLabel.textContent = `Also apply to parallel track (${otherTrack})`;
   }
 
+  // Calculate and display live protection metrics
+  const targetClass = asmt.class_level || "Basic 9A";
+  const classLearners = (state.allLearners || []).filter((l: any) =>
+    (l.role || "learner") === "learner" && (!l.class_level || l.class_level === targetClass || targetClass === "ALL")
+  );
+  const classSubs = (state.submissions || []).filter((s: any) => s.assessment_id === asmtId);
+  const completedSubs = classSubs.filter((s: any) => s.status === "GRADED" && !s.retake_granted);
+  const retakeSubs = classSubs.filter((s: any) => s.retake_granted === true);
+  const unsubmittedCount = Math.max(0, classLearners.length - classSubs.length);
+
+  const targetAudienceInfo = document.getElementById("extendModalTargetAudienceInfo");
+  if (targetAudienceInfo) {
+    targetAudienceInfo.innerHTML = `
+      <div class="p-3 bg-indigo-50/80 border border-indigo-200 rounded-2xl text-xs space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5 font-bold text-indigo-950">
+            <i class="fa-solid fa-shield-halved text-indigo-600"></i>
+            <span>Targeted Reopening Standard</span>
+          </div>
+          <span class="text-[10px] font-bold bg-white px-2 py-0.5 rounded-full text-indigo-700 border border-indigo-200">
+            ${escapeHtml(targetClass)}
+          </span>
+        </div>
+        <p class="text-indigo-900 leading-relaxed text-[11px]">
+          Activating opens this test <strong>strictly</strong> for <strong>${unsubmittedCount}</strong> unsubmitted student(s) and <strong>${retakeSubs.length}</strong> student(s) with authorized retakes.
+        </p>
+        <div class="flex items-center gap-2 text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-1 rounded-xl border border-emerald-200/90">
+          <i class="fa-solid fa-lock text-emerald-600"></i>
+          <span>${completedSubs.length} completed submission(s) will remain safely graded &amp; locked.</span>
+        </div>
+      </div>
+    `;
+  }
+
   extendPeriodModal.classList.remove("hidden");
 }
 
@@ -8028,6 +8278,19 @@ function getAdminLearnersPageSize(): number {
   // Width >= 1536px (2xl): 10 rows per page
   // Width < 1536px (lg to xl, e.g. 1024px - 1535px, and smaller): 5 rows per page
   return window.innerWidth >= 1536 ? 10 : 5;
+}
+
+function getLearnerDisplayScore(sub: any): number {
+  if (!sub) return 0;
+  const current = typeof sub.score === "number" ? sub.score : (parseFloat(sub.score) || 0);
+  if (current > 0) return current;
+  if (Array.isArray(sub.previous_scores) && sub.previous_scores.length > 0) {
+    for (const prev of sub.previous_scores) {
+      const pScore = typeof prev.score === "number" ? prev.score : (parseFloat(prev.score) || 0);
+      if (pScore > 0) return pScore;
+    }
+  }
+  return 0;
 }
 
 function renderAdminLearnersTable() {
@@ -8287,13 +8550,18 @@ function renderAdminLearnersTable() {
            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Offline (${formatTimeAgo(learner.last_seen)})
          </span>`;
 
-    const subCount = learner.submissions?.length || 0;
+    const learnerSubs = (learner.submissions && learner.submissions.length > 0)
+      ? learner.submissions
+      : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
+    const subCount = learnerSubs.length;
     const hasPerformedTask = subCount > 0;
-    const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
+    const latestSub = hasPerformedTask ? learnerSubs[0] : null;
+    const lastScore = hasPerformedTask ? getLearnerDisplayScore(latestSub) : null;
 
-    const activeRetakeSub = (learner.submissions || []).find((s: any) => s.retake_granted === true) ||
+    const activeRetakeSub = learnerSubs.find((s: any) => s.retake_granted === true) ||
                            (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.retake_granted === true);
     const hasActiveRetake = Boolean(activeRetakeSub);
+    const retakePrevScore = hasActiveRetake ? getLearnerDisplayScore(activeRetakeSub) : 0;
 
     let academicPill = "";
     if (hasActiveRetake && activeRetakeSub) {
@@ -8310,18 +8578,18 @@ function renderAdminLearnersTable() {
             <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Active
           </span>
           <span class="text-[11px] text-amber-700 font-semibold block whitespace-nowrap mt-0.5 group-hover:underline">
-            Previous: <strong class="font-mono">${activeRetakeSub.score}/20</strong> marks (Unlocked)
+            Previous: <strong class="font-mono">${retakePrevScore}/20</strong> marks (Unlocked)
           </span>
         </button>
       `;
-    } else if (hasPerformedTask) {
+    } else if (hasPerformedTask && latestSub) {
       academicPill = `
         <button
           type="button"
           class="admin-table-inspect-test-btn text-left group cursor-pointer block"
           data-learner-id="${learner.id}"
-          data-asmt-id="${learner.submissions[0].assessment_id}"
-          data-sub-id="${learner.submissions[0].id || ''}"
+          data-asmt-id="${latestSub.assessment_id}"
+          data-sub-id="${latestSub.id || ''}"
           title="Inspect latest test performance & question breakdown"
         >
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap group-hover:bg-emerald-100 transition">
@@ -8347,7 +8615,8 @@ function renderAdminLearnersTable() {
       ? `<button
            class="admin-retake-student-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition cursor-pointer ring-2 ring-amber-400/50 shadow-xs"
            data-student-id="${learner.id}"
-           title="Retake is currently active and unlocked for this student. Click to adjust note or re-open."
+           data-asmt-id="${activeRetakeSub?.assessment_id || ''}"
+           title="Retake is currently active and unlocked for this student. Click to manage or cancel."
          >
            <i class="fa-solid fa-rotate-right text-amber-700"></i>
            <span>Retake Active</span>
@@ -8449,13 +8718,18 @@ function renderAdminLearnersTable() {
              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> ${formatTimeAgo(learner.last_seen)}
            </span>`;
 
-      const subCount = learner.submissions?.length || 0;
+      const learnerSubs = (learner.submissions && learner.submissions.length > 0)
+        ? learner.submissions
+        : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
+      const subCount = learnerSubs.length;
       const hasPerformedTask = subCount > 0;
-      const lastScore = hasPerformedTask ? learner.submissions[0].score : null;
+      const latestSub = hasPerformedTask ? learnerSubs[0] : null;
+      const lastScore = hasPerformedTask ? getLearnerDisplayScore(latestSub) : null;
 
-      const activeRetakeSub = (learner.submissions || []).find((s: any) => s.retake_granted === true) ||
+      const activeRetakeSub = learnerSubs.find((s: any) => s.retake_granted === true) ||
                              (state.submissions || []).find((s: any) => s.learner_id === learner.id && s.retake_granted === true);
       const hasActiveRetake = Boolean(activeRetakeSub);
+      const retakePrevScore = hasActiveRetake ? getLearnerDisplayScore(activeRetakeSub) : 0;
 
       const academicBadgeMobile = hasActiveRetake && activeRetakeSub
         ? `<button
@@ -8467,16 +8741,16 @@ function renderAdminLearnersTable() {
              title="Retake is currently active and unlocked"
            >
              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
-               <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Active (${activeRetakeSub.score}/20)
+               <i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Active (${retakePrevScore}/20)
              </span>
            </button>`
-        : (hasPerformedTask
+        : (hasPerformedTask && latestSub
             ? `<button
                  type="button"
                  class="admin-table-inspect-test-btn cursor-pointer text-left"
                  data-learner-id="${learner.id}"
-                 data-asmt-id="${learner.submissions[0].assessment_id}"
-                 data-sub-id="${learner.submissions[0].id || ''}"
+                 data-asmt-id="${latestSub.assessment_id}"
+                 data-sub-id="${latestSub.id || ''}"
                  title="Inspect test performance"
                >
                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition">
@@ -8561,7 +8835,8 @@ function renderAdminLearnersTable() {
               type="button"
               class="admin-retake-student-btn py-2 px-1.5 rounded-xl text-xs font-bold ${hasActiveRetake ? 'bg-amber-100 text-amber-900 border border-amber-300 ring-1 ring-amber-400' : 'bg-amber-50 text-amber-800 border border-amber-200'} hover:bg-amber-100 transition cursor-pointer flex flex-col items-center justify-center gap-0.5 active:scale-95"
               data-student-id="${learner.id}"
-              title="${hasActiveRetake ? 'Retake is currently active and unlocked' : 'Authorize Retake'}"
+              data-asmt-id="${activeRetakeSub?.assessment_id || ''}"
+              title="${hasActiveRetake ? 'Retake is currently active and unlocked. Click to manage or cancel.' : 'Authorize Retake'}"
             >
               <i class="fa-solid fa-rotate-right text-xs text-amber-600"></i>
               <span class="text-[10px]">${hasActiveRetake ? 'Retake Open' : 'Retake'}</span>
@@ -8596,7 +8871,8 @@ function renderAdminLearnersTable() {
   document.querySelectorAll(".admin-retake-student-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       const studentId = btn.getAttribute("data-student-id");
-      if (studentId) openGrantRetakeModal(studentId);
+      const asmtId = btn.getAttribute("data-asmt-id") || null;
+      if (studentId) openGrantRetakeModal(studentId, asmtId);
     });
   });
 
@@ -9761,7 +10037,16 @@ async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId
   });
 
   const calculatedScore = evaluatedQuestions.reduce((sum, item) => sum + item.pointsAwarded, 0);
-  const displayScore = sub?.score != null ? parseFloat(sub.score) : calculatedScore;
+  let displayScore = sub?.score != null ? parseFloat(sub.score) : calculatedScore;
+  if (displayScore === 0 && Array.isArray(sub?.previous_scores) && sub.previous_scores.length > 0) {
+    for (const prev of sub.previous_scores) {
+      const pScore = typeof prev.score === "number" ? prev.score : parseFloat(prev.score) || 0;
+      if (pScore > 0) {
+        displayScore = pScore;
+        break;
+      }
+    }
+  }
   const pct = Math.round((displayScore / maxScore) * 100);
 
   let gradeBadge = { label: "Pass", color: "bg-amber-100 text-amber-800 border-amber-300" };
@@ -9792,11 +10077,73 @@ async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId
     simulatedForDisplay,
   });
 
+  // Wire Restore Historical Attempt Score Buttons
+  bodyEl.querySelectorAll(".admin-restore-attempt-btn").forEach((btn: Element) => {
+    btn.addEventListener("click", async () => {
+      const subId = btn.getAttribute("data-sub-id");
+      const targetScore = parseFloat(btn.getAttribute("data-score") || "0");
+      const correctVal = btn.getAttribute("data-correct");
+      const incorrectVal = btn.getAttribute("data-incorrect");
+      const remarksVal = btn.getAttribute("data-remarks") || `Score verified and restored from attempt history (${targetScore}/${maxScore}).`;
+
+      if (!subId) return;
+      if (!confirm(`Are you sure you want to restore this attempt's score of ${targetScore}/${maxScore} as the official mark for ${learner?.full_name || 'this student'}?`)) {
+        return;
+      }
+
+      const buttonEl = btn as HTMLButtonElement;
+      buttonEl.disabled = true;
+      buttonEl.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Restoring...`;
+
+      const updates: any = {
+        score: targetScore,
+        status: "GRADED",
+        teacher_remarks: remarksVal,
+      };
+      if (correctVal) updates.correct_count = parseInt(correctVal, 10);
+      if (incorrectVal) updates.incorrect_count = parseInt(incorrectVal, 10);
+
+      await updateSubmissionScore(subId, updates);
+
+      // Refresh state
+      state.submissions = await fetchAllSubmissions();
+      state.allLearners = await fetchAllLearners();
+      renderAdminLearnersTable();
+      renderAdminAssessmentConfigTable();
+      renderAdminAssessmentConfigTable2();
+      updateKpiMetrics();
+
+      // Re-open review modal with updated data
+      openAdminTestReviewModal(learnerId, asmtId, subId);
+    });
+  });
+
   // Wire Modal Retake Button
   if (retakeBtn) {
-    retakeBtn.onclick = () => {
-      openGrantRetakeModal(learnerId, asmtId);
-    };
+    const isRetakeActive = Boolean(sub && sub.retake_granted === true);
+    if (isRetakeActive) {
+      retakeBtn.className = "inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition cursor-pointer shadow-xs";
+      retakeBtn.innerHTML = `<i class="fa-solid fa-ban"></i> <span>Cancel Retake</span>`;
+      retakeBtn.onclick = async () => {
+        if (!confirm(`Cancel the active retake for ${learner?.full_name || 'this student'} on "${asmtTitle}"?\n\nTheir current score (${displayScore}/${maxScore}) will remain safely locked and official.`)) {
+          return;
+        }
+        await cancelSubmissionRetake(learnerId, asmtId, "Master Debrah (Admin)");
+        state.submissions = await fetchAllSubmissions();
+        state.allLearners = await fetchAllLearners();
+        renderAdminLearnersTable();
+        renderAssessmentCards();
+        updateKpiMetrics();
+        updateActiveTestBanner();
+        openAdminTestReviewModal(learnerId, asmtId, subId);
+      };
+    } else {
+      retakeBtn.className = "inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-xs";
+      retakeBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> <span>Authorize Retake</span>`;
+      retakeBtn.onclick = () => {
+        openGrantRetakeModal(learnerId, asmtId);
+      };
+    }
   }
 
   // Wire Modal Chat Button
@@ -9937,6 +10284,72 @@ function renderAdminTestReviewBodyHtml(container: HTMLElement, data: any) {
         </div>
       </div>
     ` : ""}
+
+    ${Array.isArray(sub?.previous_scores) && sub.previous_scores.length > 0 ? `
+      <div class="bg-indigo-50/70 border border-indigo-200 rounded-xl p-4 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs shadow-2xs">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+              <h5 class="text-xs font-bold text-slate-800">Sitting &amp; Attempt History</h5>
+              <span class="text-[10px] text-slate-500">Earlier test attempts recorded for this learner</span>
+            </div>
+          </div>
+          <span class="text-[10px] font-bold bg-white text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-200 shadow-2xs">
+            ${sub.previous_scores.length + 1} Total Sittings
+          </span>
+        </div>
+        <div class="space-y-2">
+          ${sub.previous_scores.map((prev: any, idx: number) => {
+            const prevScore = typeof prev.score === 'number' ? prev.score : (parseFloat(prev.score) || 0);
+            const prevDate = prev.submitted_at ? formatDateTime(prev.submitted_at) : 'Earlier sitting';
+            const prevPct = Math.round((prevScore / maxScore) * 100);
+            const isDiff = Math.abs(prevScore - displayScore) > 0.01;
+            return `
+              <div class="bg-white border border-indigo-100 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+                <div class="flex items-start gap-2.5 min-w-0">
+                  <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-800 font-bold text-xs flex items-center justify-center shrink-0">
+                    #${prev.attempt || (idx + 1)}
+                  </span>
+                  <div class="min-w-0 text-xs">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <strong class="text-slate-900 font-mono text-sm">${prevScore.toFixed(1)} / ${maxScore}</strong>
+                      <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                        ${prevPct}%
+                      </span>
+                      ${prev.correct_count != null ? `<span class="text-[10px] text-emerald-700 font-semibold"><i class="fa-solid fa-check"></i> ${prev.correct_count} correct</span>` : ''}
+                      ${prev.incorrect_count != null ? `<span class="text-[10px] text-rose-700 font-semibold"><i class="fa-solid fa-xmark"></i> ${prev.incorrect_count} incorrect</span>` : ''}
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">
+                      <i class="fa-regular fa-clock"></i> ${prevDate} &bull; ${escapeHtml(prev.teacher_remarks || 'Recorded attempt')}
+                    </div>
+                  </div>
+                </div>
+                ${isDiff && sub.id ? `
+                  <button
+                    type="button"
+                    class="admin-restore-attempt-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-2xs shrink-0 cursor-pointer"
+                    data-sub-id="${sub.id}"
+                    data-score="${prevScore}"
+                    data-correct="${prev.correct_count != null ? prev.correct_count : ''}"
+                    data-incorrect="${prev.incorrect_count != null ? prev.incorrect_count : ''}"
+                    data-remarks="${escapeHtml(prev.teacher_remarks || '')}"
+                  >
+                    <i class="fa-solid fa-arrow-rotate-left"></i> Restore This Mark (${prevScore.toFixed(1)})
+                  </button>
+                ` : `
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                    <i class="fa-solid fa-circle-check"></i> Active Score
+                  </span>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
 
     <!-- Teacher Remarks Callout -->
     <div class="bg-white border border-slate-200 rounded-xl p-3.5 flex items-start gap-3">
@@ -16384,6 +16797,18 @@ function updateActiveTestBanner() {
     if (a.unlock_time && new Date(a.unlock_time).getTime() > Date.now()) return false;
     if (userClass && a.class_level && a.class_level !== "ALL" && a.class_level !== userClass) {
       return false;
+    }
+    // Learner protection shield: If learner has already completed this assessment without retake, do not show active banner
+    if (!state.isAdmin && state.activeView !== "admin") {
+      const learnerId = state.profile?.id || state.user?.id;
+      const learnerEmail = (state.profile?.email || state.user?.email || "").toLowerCase();
+      const sub = (state.submissions || []).find((s: any) =>
+        s.assessment_id === a.id &&
+        (s.learner_id === learnerId || (s.email && s.email.toLowerCase() === learnerEmail))
+      );
+      if (sub && sub.status === "GRADED" && !sub.retake_granted) {
+        return false;
+      }
     }
     return true;
   });

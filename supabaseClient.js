@@ -1039,9 +1039,26 @@ export async function saveAssessmentSubmission(payload) {
     });
   }
 
+  // Grade integrity guard: If payload attempts to set 0 due to an abandoned sitting,
+  // but existing attempt had a genuine score > 0, preserve the genuine score
+  let resolvedScore = payload.score;
+  let resolvedRemarks = payload.teacher_remarks;
+  if (
+    resolvedScore === 0 &&
+    existingIdx >= 0 &&
+    parseFloat(localSubs[existingIdx].score) > 0 &&
+    payload.teacher_remarks &&
+    payload.teacher_remarks.includes("terminated early")
+  ) {
+    resolvedScore = localSubs[existingIdx].score;
+    resolvedRemarks = `Sitting closed early by learner. Previous official mark (${resolvedScore}/${payload.max_score || 20}) preserved.`;
+  }
+
   const newSub = {
     id: payload.id || (existingIdx >= 0 ? localSubs[existingIdx].id : "sub-" + Date.now()),
     ...payload,
+    score: resolvedScore,
+    teacher_remarks: resolvedRemarks,
     submitted_at: payload.submitted_at || new Date().toISOString(),
     status: "GRADED",
     retake_granted: false, // Reset retake flag once re-submitted
@@ -1078,7 +1095,7 @@ export async function saveAssessmentSubmission(payload) {
           {
             assessment_id: payload.assessment_id,
             learner_id: payload.learner_id,
-            score: payload.score,
+            score: resolvedScore,
             max_score: payload.max_score || 20,
             correct_count: payload.correct_count,
             incorrect_count: payload.incorrect_count,
@@ -1088,7 +1105,7 @@ export async function saveAssessmentSubmission(payload) {
             retake_granted: false,
             retake_reason: null,
             previous_scores: prevScores,
-            teacher_remarks: payload.teacher_remarks || "Completed online assessment via portal.",
+            teacher_remarks: resolvedRemarks || "Completed online assessment via portal.",
             submitted_at: newSub.submitted_at,
           },
           { onConflict: "assessment_id,learner_id" }
@@ -1103,6 +1120,39 @@ export async function saveAssessmentSubmission(payload) {
   }
 
   return newSub;
+}
+
+export async function updateSubmissionScore(subId, updates = {}) {
+  const localSubs = getFallbackSubmissions();
+  const sub = localSubs.find((s) => s.id === subId);
+  if (sub) {
+    Object.assign(sub, updates);
+    localStorage.setItem("jhs_local_submissions", JSON.stringify(localSubs));
+  }
+
+  const fallbackLearners = getFallbackAllLearners();
+  for (const lrn of fallbackLearners) {
+    if (lrn.submissions) {
+      const s = lrn.submissions.find((item) => item.id === subId);
+      if (s) Object.assign(s, updates);
+    }
+  }
+
+  const supabase = getSupabase();
+  if (supabase && subId) {
+    try {
+      const { data, error } = await supabase
+        .from("submissions")
+        .update(updates)
+        .eq("id", subId)
+        .select();
+      if (error) throw error;
+      return data;
+    } catch (e) {
+      console.warn("Supabase updateSubmissionScore error:", e);
+    }
+  }
+  return sub;
 }
 
 export async function grantSubmissionRetake(learnerId, asmtId, reason = "Teacher authorized 2nd attempt", teacherName = "Master Debrah (Admin)") {
@@ -1168,6 +1218,51 @@ export async function grantSubmissionRetake(learnerId, asmtId, reason = "Teacher
       if (!error && data) return data;
     } catch (e) {
       console.warn("Supabase grant retake error:", e);
+    }
+  }
+
+  return sub;
+}
+
+export async function cancelSubmissionRetake(learnerId, asmtId, teacherName = "Master Debrah (Admin)") {
+  const localSubs = getFallbackSubmissions();
+  let sub = localSubs.find((s) => s.learner_id === learnerId && s.assessment_id === asmtId);
+
+  if (sub) {
+    sub.retake_granted = false;
+    sub.retake_reason = null;
+    sub.status = "GRADED";
+  }
+  localStorage.setItem("jhs_local_submissions", JSON.stringify(localSubs));
+
+  // Also update in fallback learners roster
+  const fallbackLearners = getFallbackAllLearners();
+  const lrn = fallbackLearners.find((l) => l.id === learnerId);
+  if (lrn && lrn.submissions) {
+    const lrnSub = lrn.submissions.find((s) => s.assessment_id === asmtId || (sub && s.id === sub.id));
+    if (lrnSub) {
+      lrnSub.retake_granted = false;
+      lrnSub.retake_reason = null;
+      lrnSub.status = "GRADED";
+    }
+  }
+
+  const supabase = getAdminSupabase() || getSupabase();
+  if (supabase && learnerId && !learnerId.startsWith("demo-")) {
+    try {
+      const { data, error } = await supabase
+        .from("submissions")
+        .update({
+          retake_granted: false,
+          retake_reason: null,
+          status: "GRADED",
+        })
+        .eq("assessment_id", asmtId)
+        .eq("learner_id", learnerId)
+        .select();
+      if (!error && data) return data[0] || sub;
+    } catch (e) {
+      console.warn("Supabase cancel retake error:", e);
     }
   }
 
