@@ -4471,11 +4471,12 @@ function startAdminRealtimeEngine() {
   if (state.adminLivePollerInterval) {
     clearInterval(state.adminLivePollerInterval);
   }
+  // Fallback poller relaxed from 3.5s to 120s (2 minutes), strictly disabled when tab is hidden
   state.adminLivePollerInterval = setInterval(async () => {
-    if (state.activeView === "admin") {
+    if (state.activeView === "admin" && typeof document !== "undefined" && !document.hidden) {
       await performAdminHotReloadCheck();
     }
-  }, 3500);
+  }, 120000);
 }
 
 function stopAdminRealtimeEngine() {
@@ -4503,7 +4504,9 @@ function startUserPresenceHeartbeat() {
 
   setUserOnlineStatus(activeId, true);
 
+  // Learner presence heartbeat throttled to 60s and paused when tab is inactive to protect Supabase bandwidth
   state.learnerPresenceInterval = setInterval(async () => {
+    if (typeof document !== "undefined" && document.hidden) return;
     const currentId = (state.isAdmin && state.activeView === "admin")
       ? ADMIN_CONTACT.id
       : (state.profile?.id || state.user?.id);
@@ -4511,7 +4514,7 @@ function startUserPresenceHeartbeat() {
     if (currentId && !String(currentId).startsWith("demo-")) {
       await setUserOnlineStatus(currentId, true);
     }
-  }, 20000);
+  }, 60000);
 }
 
 const startLearnerPresenceHeartbeat = startUserPresenceHeartbeat;
@@ -17697,4 +17700,36 @@ function attachEventListeners() {
   closeTeacherOnboardingBtn?.addEventListener("click", closeTeacherOnboarding);
   onboardingPrevBtn?.addEventListener("click", handleOnboardingPrev);
   onboardingNextBtn?.addEventListener("click", handleOnboardingNext);
+
+  // Manual Supabase data refresh buttons
+  const handleManualDataRefresh = async () => {
+    const syncIcon = document.getElementById("adminManualSyncIcon");
+    const syncText = document.getElementById("adminManualSyncText");
+    const topIcon = document.getElementById("adminTopRefreshIcon");
+    if (syncIcon) syncIcon.classList.add("fa-spin");
+    if (topIcon) topIcon.classList.add("fa-spin");
+    if (syncText) syncText.textContent = "Syncing...";
+    try {
+      await performAdminHotReloadCheck();
+      showHotReloadIndicator();
+    } finally {
+      setTimeout(() => {
+        if (syncIcon) syncIcon.classList.remove("fa-spin");
+        if (topIcon) topIcon.classList.remove("fa-spin");
+        if (syncText) syncText.textContent = "Refresh Data";
+      }, 600);
+    }
+  };
+
+  document.getElementById("adminManualSyncBtn")?.addEventListener("click", handleManualDataRefresh);
+  document.getElementById("adminTopRefreshBtn")?.addEventListener("click", handleManualDataRefresh);
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && state.activeView === "admin") {
+        performAdminHotReloadCheck();
+      }
+    });
+  }
+
 }

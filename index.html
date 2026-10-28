@@ -975,6 +975,17 @@
 
               <!-- Right Tier 1 Quick Actions -->
               <div class="flex items-center gap-2">
+                <!-- Manual Data Sync Button -->
+                <button
+                  id="adminTopRefreshBtn"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200/90 shadow-2xs transition active:scale-95 cursor-pointer"
+                  title="Manually fetch latest data from Supabase"
+                >
+                  <i class="fa-solid fa-arrows-rotate text-indigo-600 text-xs" id="adminTopRefreshIcon"></i>
+                  <span>Refresh</span>
+                </button>
+
                 <!-- Orientation Tour Quick Launcher -->
                 <button
                   id="adminTeacherOnboardingTourBtn"
@@ -1190,8 +1201,19 @@
                 <i class="fa-solid fa-bolt text-amber-500 text-xs"></i> Hot-reloaded!
               </span>
             </div>
-            <div class="text-[11px] text-slate-400 font-mono" id="adminLastSyncTime">
-              Synced: Just now
+            <div class="flex items-center gap-2.5">
+              <button
+                id="adminManualSyncBtn"
+                type="button"
+                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white hover:bg-slate-50 text-indigo-700 border border-slate-200 shadow-2xs transition active:scale-95 cursor-pointer"
+                title="Manually fetch latest data from Supabase"
+              >
+                <i class="fa-solid fa-arrows-rotate text-indigo-600 text-[10px]" id="adminManualSyncIcon"></i>
+                <span id="adminManualSyncText">Refresh Data</span>
+              </button>
+              <div class="text-[11px] text-slate-400 font-mono" id="adminLastSyncTime">
+                Synced: Just now
+              </div>
             </div>
           </div>
 
