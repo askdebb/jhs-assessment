@@ -4527,20 +4527,97 @@ function startAdminRealtimeEngine() {
     state.adminRealtimeUnsub = null;
   }
 
-  state.adminRealtimeUnsub = subscribeToAdminRealtime(async (event) => {
-    console.log("Supabase Realtime event on admin:", event);
-    await performAdminHotReloadCheck();
+  // Targeted Realtime Dispatcher: Prevents massive multi-table re-fetching storms
+  state.adminRealtimeUnsub = subscribeToAdminRealtime(async (event: any) => {
+    if (!event) return;
+    const { source, payload } = event;
+    const eventType = payload?.eventType || payload?.event;
+
+    // 1. Presence / Online status updates on learners table:
+    // Update local state in-memory ONLY — ZERO network queries!
+    if (source === "learners") {
+      if (eventType === "UPDATE" && payload?.new) {
+        const updated = payload.new;
+        if (state.allLearners && Array.isArray(state.allLearners)) {
+          const idx = state.allLearners.findIndex((l: any) => l.id === updated.id);
+          if (idx !== -1) {
+            state.allLearners[idx] = { ...state.allLearners[idx], ...updated };
+          }
+        }
+        // Update online counters locally without re-querying Supabase
+        const students = (state.allLearners || []).filter(
+          (l: any) => (l.role || "learner") === "learner" && (l.email || "").toLowerCase() !== PRIMARY_ADMIN_EMAIL.toLowerCase()
+        );
+        const onlineCount = students.filter(isLearnerOnline).length;
+        if (adminLiveUsersBadge) adminLiveUsersBadge.textContent = String(onlineCount);
+        const kpiOnlineCount = document.getElementById("kpiOnlineCount");
+        if (kpiOnlineCount) kpiOnlineCount.textContent = String(onlineCount);
+        if (activeLearnersModal && !activeLearnersModal.classList.contains("hidden") && !activeLearnersListView?.classList.contains("hidden")) {
+          renderActiveLearnersList();
+        }
+        return; // Complete! Zero egress consumed.
+      }
+
+      // Only fetch learners if a new student enrolled (INSERT) or was deleted (DELETE)
+      try {
+        state.allLearners = await fetchAllLearners();
+        await renderAdminOverviewStats(true);
+        renderAdminLearnersTable();
+        showHotReloadIndicator();
+      } catch (err) {
+        console.warn("Learner realtime reload error:", err);
+      }
+      return;
+    }
+
+    // 2. Submissions update:
+    // Only fetch submissions (do NOT re-fetch assessments, notifications, or learners)
+    if (source === "submissions") {
+      try {
+        state.submissions = await fetchAllSubmissions();
+        await renderAdminOverviewStats(true);
+        renderAdminLearnersTable();
+        showHotReloadIndicator();
+      } catch (err) {
+        console.warn("Submission realtime reload error:", err);
+      }
+      return;
+    }
+
+    // 3. Assessments update:
+    if (source === "assessments") {
+      try {
+        state.assessments = await fetchAssessments();
+        await renderAdminOverviewStats(true);
+        showHotReloadIndicator();
+      } catch (err) {
+        console.warn("Assessment realtime reload error:", err);
+      }
+      return;
+    }
+
+    // 4. Notifications update:
+    if (source === "notifications") {
+      try {
+        state.notifications = await fetchNotifications();
+        await renderAdminOverviewStats(true);
+        showHotReloadIndicator();
+      } catch (err) {
+        console.warn("Notification realtime reload error:", err);
+      }
+      return;
+    }
   });
 
   if (state.adminLivePollerInterval) {
     clearInterval(state.adminLivePollerInterval);
   }
-  // Fallback poller relaxed from 3.5s to 120s (2 minutes), strictly disabled when tab is hidden
+  // Passive background safety check relaxed to 10 minutes (600,000 ms) because Realtime handles instant events
   state.adminLivePollerInterval = setInterval(async () => {
     if (state.activeView === "admin" && typeof document !== "undefined" && !document.hidden) {
       await performAdminHotReloadCheck();
     }
-  }, 120000);
+  }, 600000);
 }
 
 function stopAdminRealtimeEngine() {
@@ -4568,7 +4645,7 @@ function startUserPresenceHeartbeat() {
 
   setUserOnlineStatus(activeId, true);
 
-  // Learner presence heartbeat throttled to 60s and paused when tab is inactive to protect Supabase bandwidth
+  // Learner presence heartbeat throttled to 120s (2 minutes) and paused when tab is inactive to protect Supabase bandwidth
   state.learnerPresenceInterval = setInterval(async () => {
     if (typeof document !== "undefined" && document.hidden) return;
     const currentId = (state.isAdmin && state.activeView === "admin")
@@ -4578,7 +4655,7 @@ function startUserPresenceHeartbeat() {
     if (currentId && !String(currentId).startsWith("demo-")) {
       await setUserOnlineStatus(currentId, true);
     }
-  }, 60000);
+  }, 120000);
 }
 
 const startLearnerPresenceHeartbeat = startUserPresenceHeartbeat;
@@ -13018,16 +13095,31 @@ function showTypingIndicator(senderName: string, isTyping: boolean) {
   }
 }
 
-function handleFileSelect(e) {
+async function handleFileSelect(e) {
   const file = e.target.files?.[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    const dataUrl = event.target.result;
-    const isImg = file.type.startsWith("image/");
-    const isVid = file.type.startsWith("video/");
-    const isAud = file.type.startsWith("audio/");
+  const isImg = file.type.startsWith("image/");
+  const isVid = file.type.startsWith("video/");
+  const isAud = file.type.startsWith("audio/");
+
+  // Enforce bandwidth protection: compress images or reject large non-images (> 500 KB)
+  if (!isImg && file.size > 500 * 1024) {
+    alert("File exceeds the 500 KB limit. Please share a smaller file or Google Drive link to conserve bandwidth.");
+    if (chatFileInput) chatFileInput.value = "";
+    return;
+  }
+
+  let finalDataUrl = "";
+  if (isImg) {
+    try {
+      finalDataUrl = await resizeAndCompressImage(file, 640, 0.72);
+    } catch (e) {
+      // Fallback to FileReader
+    }
+  }
+
+  const proceedWithDataUrl = (dataUrl: string) => {
     currentAttachment = {
       file,
       dataUrl,
@@ -13056,7 +13148,16 @@ function handleFileSelect(e) {
       }
     }
   };
-  reader.readAsDataURL(file);
+
+  if (finalDataUrl) {
+    proceedWithDataUrl(finalDataUrl);
+  } else {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      proceedWithDataUrl(event.target.result as string);
+    };
+    reader.readAsDataURL(file);
+  }
 }
 
 function clearAttachment() {
@@ -13091,7 +13192,12 @@ async function startAudioRecording() {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       recordingAudioStream = stream;
-      mediaRecorder = new MediaRecorder(stream);
+      try {
+        // Optimize bitrate to 24 kbps to produce ultralight audio payloads (< 30 KB)
+        mediaRecorder = new MediaRecorder(stream, { audioBitsPerSecond: 24000 });
+      } catch (e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);
       };

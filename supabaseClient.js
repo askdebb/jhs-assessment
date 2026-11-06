@@ -484,7 +484,7 @@ export async function fetchAllLearners() {
   try {
     const res = await supabase
       .from("learners")
-      .select("*, submissions(id, score, max_score, correct_count, incorrect_count, answers, submission_rank, status, teacher_remarks, retake_granted, retake_reason, retake_granted_at, previous_scores, assessment_id, submitted_at, assessments(id, title, subject, class_level, max_score, weight))")
+      .select("*, submissions(id, assessment_id, score, max_score, correct_count, incorrect_count, submission_rank, status, teacher_remarks, retake_granted, retake_reason, retake_granted_at, previous_scores, submitted_at, assessments(id, title, subject, class_level, max_score, weight))")
       .order("created_at", { ascending: false });
     learnersData = res.data;
     fetchError = res.error;
@@ -750,7 +750,6 @@ export async function fetchLearnerSubmissions(learnerId) {
       max_score,
       correct_count,
       incorrect_count,
-      answers,
       submission_rank,
       status,
       submitted_at,
@@ -848,7 +847,25 @@ export async function fetchAllSubmissions() {
 
   const { data, error } = await supabase
     .from("submissions")
-    .select("*, assessments(id, title, subject, class_level, max_score, weight, assessment_type), learners(id, full_name, class_level, student_id)")
+    .select(`
+      id,
+      assessment_id,
+      learner_id,
+      score,
+      max_score,
+      correct_count,
+      incorrect_count,
+      submission_rank,
+      status,
+      teacher_remarks,
+      retake_granted,
+      retake_reason,
+      retake_granted_at,
+      previous_scores,
+      submitted_at,
+      assessments(id, title, subject, class_level, max_score, weight, assessment_type),
+      learners(id, full_name, class_level, student_id)
+    `)
     .order("submitted_at", { ascending: true });
 
   if (error) {
@@ -1706,8 +1723,8 @@ export async function fetchChatMessages() {
   const { data, error } = await supabase
     .from("chat_messages")
     .select("*")
-    .order("created_at", { ascending: true })
-    .limit(200);
+    .order("created_at", { ascending: false })
+    .limit(40);
 
   if (error || !data) {
     console.warn("Could not fetch remote chat messages:", error);
@@ -1715,9 +1732,12 @@ export async function fetchChatMessages() {
     return local ? JSON.parse(local) : getFallbackChatMessages();
   }
 
+  // Restore chronological order (oldest to newest) for UI thread rendering
+  const remoteMessages = [...data].reverse();
+
   // Merge with any local chats
   const local = localStorage.getItem("jhs_local_chats");
-  let combined = [...data];
+  let combined = [...remoteMessages];
   if (local) {
     try {
       const parsed = JSON.parse(local);
@@ -1918,7 +1938,7 @@ export async function sendChatMessage(chatPayload) {
     const { data, error } = await supabase
       .from("chat_messages")
       .insert(dbPayload)
-      .select()
+      .select("id")
       .single();
 
     if (error) {
@@ -2187,8 +2207,8 @@ export function isLearnerOnline(l) {
   if (l.is_online === false || l.is_online === "false") return false;
   if (!l.last_seen) return false;
   const diff = Date.now() - new Date(l.last_seen).getTime();
-  // Valid active presence window: 90 seconds (heartbeat interval is 25s)
-  return diff >= 0 && diff < 90000;
+  // Valid active presence window: 4 minutes (heartbeat interval is 2 minutes)
+  return diff >= 0 && diff < 240000;
 }
 
 export async function setUserOnlineStatus(userId, isOnline) {
