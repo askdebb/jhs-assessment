@@ -73,6 +73,8 @@ import {
   triggerWebPushNotification,
   getDispatchedEmails,
   fetchSingleSubmission,
+  resolveFirstSubmissionScore,
+  normalizeAndDeduplicateSubmissions,
   GHANA_JHS_SUBJECTS,
   DEFAULT_STAFF,
   getInvitedTeachers,
@@ -2268,12 +2270,43 @@ export function isAssessmentEligibleForLearnerClass(
 }
 
 function updateKpiMetrics() {
-  const graded = state.submissions.filter((s) => s.status === "GRADED" && s.score != null);
+  const learnerClass = state.profile?.class_level || "Basic 9A";
 
-  // Cumulative Average Score
-  if (graded.length > 0) {
-    const totalAchieved = graded.reduce((acc, s) => acc + (parseFloat(s.score) / parseFloat(s.max_score || 20)), 0);
-    const avgPct = Math.round((totalAchieved / graded.length) * 100);
+  // Filter assessments strictly for this learner's class stream
+  const myClassAssessments = state.assessments.filter((a) => {
+    return isAssessmentEligibleForLearnerClass(a.class_level, learnerClass);
+  });
+
+  // Group and deduplicate submissions strictly by unique assessment ID
+  // Every task done is evaluated EXACTLY ONCE, using its VERY FIRST data/score!
+  const uniqueGradedMap = new Map<string, any>();
+  for (const s of (state.submissions || [])) {
+    const aId = s.assessment_id || s.assessments?.id;
+    if (!aId) continue;
+    const isEvaluated = s.status === "GRADED" || s.status === "SUBMITTED" || s.score != null;
+    if (isEvaluated && !uniqueGradedMap.has(aId)) {
+      const firstData = resolveFirstSubmissionScore(s);
+      uniqueGradedMap.set(aId, {
+        ...s,
+        assessment_id: aId,
+        score: firstData.score,
+        max_score: firstData.max_score || s.max_score || 20,
+        submitted_at: firstData.submitted_at || s.submitted_at,
+        teacher_remarks: firstData.teacher_remarks || s.teacher_remarks,
+      });
+    }
+  }
+
+  const gradedTasks = Array.from(uniqueGradedMap.values());
+
+  // Cumulative Average Score: computed strictly over unique tasks done
+  if (gradedTasks.length > 0) {
+    const totalAchieved = gradedTasks.reduce((acc, s) => {
+      const max = parseFloat(s.max_score) || 20;
+      const sc = parseFloat(s.score) || 0;
+      return acc + (sc / max);
+    }, 0);
+    const avgPct = Math.round((totalAchieved / gradedTasks.length) * 100);
     dashAvgScore.textContent = `${avgPct}.0%`;
 
     if (dashAvgProgressBar) {
@@ -2298,16 +2331,25 @@ function updateKpiMetrics() {
   }
 
   // Calculate Overall Class Ranking across colleagues on cumulative assessments
-  const learnerClass = state.profile?.class_level || "Basic 9A";
   const totalStudents = getClassTotalStudents(learnerClass);
-  const myCumulativePoints = graded.reduce((sum, s) => sum + (parseFloat(s.score) || 0), 0);
+  const myCumulativePoints = gradedTasks.reduce((sum, s) => sum + (parseFloat(s.score) || 0), 0);
 
   let overallRank = 1;
   if (state.allLearners && state.allLearners.length > 0) {
     const classPeers = state.allLearners.filter((l) => (l.class_level || "Basic 9A") === learnerClass);
     const peerTotals = classPeers.map((p) => {
       const pSubs = p.submissions || [];
-      const pTotal = pSubs.reduce((sum, s) => sum + (parseFloat(s.score) || 0), 0);
+      const peerUniqueMap = new Map<string, number>();
+      for (const ps of pSubs) {
+        const aId = ps.assessment_id || ps.assessments?.id;
+        if (!aId) continue;
+        const isEval = ps.status === "GRADED" || ps.status === "SUBMITTED" || ps.score != null;
+        if (isEval && !peerUniqueMap.has(aId)) {
+          const firstData = resolveFirstSubmissionScore(ps);
+          peerUniqueMap.set(aId, firstData.score);
+        }
+      }
+      const pTotal = Array.from(peerUniqueMap.values()).reduce((sum, sc) => sum + sc, 0);
       return {
         id: p.id,
         total: p.id === (state.profile?.id || state.user?.id) ? myCumulativePoints : pTotal,
@@ -2322,26 +2364,24 @@ function updateKpiMetrics() {
     dashOverallRankText.textContent = `${overallOrdinal} of ${totalStudents} in ${learnerClass}`;
   }
 
-  // Filter assessments strictly for this learner's class stream
-  const myClassAssessments = state.assessments.filter((a) => {
-    return isAssessmentEligibleForLearnerClass(a.class_level, learnerClass);
-  });
-
-  // Completed Count
-  dashCompletedCount.textContent = state.submissions.length;
+  // Completed Count: unique tasks completed
+  dashCompletedCount.textContent = String(gradedTasks.length);
   dashTotalTests.textContent = `/ ${myClassAssessments.length} Tasks`;
   if (dashCompletedProgressBar && myClassAssessments.length > 0) {
-    const pct = Math.min(100, Math.round((state.submissions.length / myClassAssessments.length) * 100));
+    const pct = Math.min(100, Math.round((gradedTasks.length / myClassAssessments.length) * 100));
     dashCompletedProgressBar.style.width = `${pct}%`;
   }
 
-  // Available / Open Tasks Count (only unlocked items for student's class)
+  // Available / Open Tasks Count (only unlocked items for student's class that this student has NOT yet completed/locked)
   const openCount = myClassAssessments.filter((a) => {
     const isScheduled = a.unlock_time && new Date(a.unlock_time) > new Date();
     const isExpired = a.deadline && new Date(a.deadline) < new Date();
-    return a.status === "AVAILABLE" && !isScheduled && !isExpired;
+    const isCompleted = uniqueGradedMap.has(a.id);
+    const sub = (state.submissions || []).find((s) => (s.assessment_id === a.id || s.assessments?.id === a.id));
+    const hasActiveRetake = Boolean(sub && sub.retake_granted === true);
+    return a.status === "AVAILABLE" && !isScheduled && !isExpired && (!isCompleted || hasActiveRetake);
   }).length;
-  dashAvailableCount.textContent = openCount;
+  dashAvailableCount.textContent = String(openCount);
   const availBar = document.getElementById("dashAvailableProgressBar");
   if (availBar && myClassAssessments.length > 0) {
     const availPct = Math.min(100, Math.round((openCount / myClassAssessments.length) * 100));
@@ -2352,15 +2392,17 @@ function updateKpiMetrics() {
   const lastTestPct = document.getElementById("dashLastTestPct");
   const lastTestFeedbackPrompt = document.getElementById("dashLastTestFeedbackPrompt");
 
-  if (state.submissions.length > 0) {
-    const lastSub = state.submissions[0];
-    const asmt = lastSub.assessments || {};
+  if (gradedTasks.length > 0) {
+    const lastSub = gradedTasks[0];
+    const asmt = lastSub.assessments || (state.assessments || []).find((a) => a.id === lastSub.assessment_id) || {};
+    const firstData = resolveFirstSubmissionScore(lastSub);
     dashLastTestTitle.textContent = asmt.title || "Recent Assessment";
-    dashLastTestScore.textContent = `${lastSub.score} / ${lastSub.max_score || 20}`;
-    dashLastTestDate.textContent = formatDateTime(lastSub.submitted_at);
+    dashLastTestScore.textContent = `${firstData.score.toFixed(1)} / ${firstData.max_score || 20}`;
+    dashLastTestDate.textContent = formatDateTime(firstData.submitted_at || lastSub.submitted_at);
 
-    if (lastTestPct && lastSub.max_score) {
-      const pct = Math.round((parseFloat(lastSub.score) / parseFloat(lastSub.max_score)) * 100);
+    if (lastTestPct && (firstData.max_score || lastSub.max_score)) {
+      const maxSc = firstData.max_score || lastSub.max_score || 20;
+      const pct = Math.round((firstData.score / maxSc) * 100);
       lastTestPct.textContent = `(${pct}%)`;
       lastTestPct.classList.remove("hidden");
     }
@@ -2376,7 +2418,7 @@ function updateKpiMetrics() {
       dashLastTestRank.classList.remove("hidden");
     }
 
-    dashLastTestRemarks.textContent = lastSub.teacher_remarks ? `"${lastSub.teacher_remarks}"` : "Score recorded in school registry.";
+    dashLastTestRemarks.textContent = firstData.teacher_remarks || lastSub.teacher_remarks ? `"${firstData.teacher_remarks || lastSub.teacher_remarks}"` : "Score recorded in school registry.";
     lastTestCard.onclick = () => openScoreDetailsModal(lastSub);
   } else {
     dashLastTestTitle.textContent = "No Tests Submitted Yet";
@@ -2399,7 +2441,7 @@ function updateKpiMetrics() {
     const isExpired = a.deadline && new Date(a.deadline) < new Date();
     return a.status === "CLOSED" || isScheduled || isExpired;
   }).length;
-  countGraded.textContent = graded.length;
+  countGraded.textContent = gradedTasks.length;
 
   // Render AI Personalized Milestone Target Banner
   renderAiMilestoneQuestBanner();
@@ -2450,7 +2492,12 @@ function renderAssessmentCards() {
   const learnerClass = state.profile?.class_level || "Basic 9A";
 
   const subMap = new Map();
-  submissions.forEach((s) => subMap.set(s.assessment_id, s));
+  submissions.forEach((s) => {
+    const aId = s.assessment_id || s.assessments?.id;
+    if (aId && !subMap.has(aId)) {
+      subMap.set(aId, s);
+    }
+  });
 
   // Filter assessments based on student class stream eligibility & subject filter
   let filtered = assessments.filter((asmt) => {
@@ -2463,14 +2510,18 @@ function renderAssessmentCards() {
     }
     const sub = subMap.get(asmt.id);
     const hasActiveRetake = Boolean(sub && sub.retake_granted === true);
-    const hasCompletedAndLocked = Boolean(sub && sub.status === "GRADED" && !hasActiveRetake);
+    const hasCompletedAndLocked = Boolean(
+      sub &&
+      (sub.status === "GRADED" || sub.status === "SUBMITTED" || sub.score != null) &&
+      !hasActiveRetake
+    );
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
     const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
     const isAvailableForLearner = asmt.status === "AVAILABLE" && !isScheduled && !isExpired && !hasCompletedAndLocked;
 
     if (filterStatus === "AVAILABLE") return isAvailableForLearner || hasActiveRetake;
-    if (filterStatus === "CLOSED") return asmt.status === "CLOSED" || isScheduled || isExpired;
-    if (filterStatus === "GRADED") return hasCompletedAndLocked || (sub && sub.status === "GRADED");
+    if (filterStatus === "CLOSED") return (asmt.status === "CLOSED" || isScheduled || isExpired) && !hasCompletedAndLocked;
+    if (filterStatus === "GRADED") return hasCompletedAndLocked || (sub && (sub.status === "GRADED" || sub.status === "SUBMITTED" || sub.score != null));
     return true;
   });
 
@@ -2500,12 +2551,20 @@ function renderAssessmentCards() {
   assessmentGrid.innerHTML = filtered.map((asmt) => {
     const sub = subMap.get(asmt.id);
     const hasActiveRetake = Boolean(sub && sub.retake_granted === true);
-    const hasCompletedAndLocked = Boolean(sub && sub.status === "GRADED" && !hasActiveRetake);
+    const hasCompletedAndLocked = Boolean(
+      sub &&
+      (sub.status === "GRADED" || sub.status === "SUBMITTED" || sub.score != null) &&
+      !hasActiveRetake
+    );
     const isScheduled = asmt.unlock_time && new Date(asmt.unlock_time) > new Date();
     const isExpired = asmt.deadline && new Date(asmt.deadline) < new Date();
     const isAvailable = asmt.status === "AVAILABLE" && !isScheduled && !isExpired && !hasCompletedAndLocked;
-    const hasScore = sub && sub.status === "GRADED";
+    const hasScore = Boolean(sub && (sub.status === "GRADED" || sub.status === "SUBMITTED" || sub.score != null));
     const duration = asmt.time_limit_minutes || 15;
+
+    const firstScoreInfo = sub ? resolveFirstSubmissionScore(sub) : null;
+    const displayScore = firstScoreInfo ? firstScoreInfo.score.toFixed(1) : (sub?.score != null ? parseFloat(sub.score).toFixed(1) : "0.0");
+    const maxScore = firstScoreInfo?.max_score || asmt.max_score || 20;
 
     // Subject styles - Exclusively Computing
     const subjectClass = "bg-blue-50 text-blue-700 border-blue-200";
@@ -2522,7 +2581,7 @@ function renderAssessmentCards() {
     } else if (hasCompletedAndLocked) {
       statusBadge = `
         <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-          <i class="fa-solid fa-lock text-emerald-600"></i> Graded &amp; Locked (${sub.score}/${asmt.max_score || 20})
+          <i class="fa-solid fa-lock text-emerald-600"></i> Graded &amp; Locked (${displayScore}/${maxScore})
         </span>
       `;
     } else if (isExpired) {
@@ -2562,7 +2621,7 @@ function renderAssessmentCards() {
       `;
     }
 
-    // Action Button (with direct Google Forms CAT launch if applicable)
+    // Action Button
     let actionBtn = "";
     if (sub && sub.retake_granted === true) {
       actionBtn = `
@@ -2570,13 +2629,13 @@ function renderAssessmentCards() {
           <i class="fa-solid fa-rotate-right text-xs"></i> Start Assessment Retake
         </button>
         <button class="view-score-btn w-full mt-1.5 py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1" data-sub-id="${sub.id}">
-          <i class="fa-solid fa-clock-rotate-left text-[10px]"></i> View Previous Attempt (${sub.score}/${asmt.max_score})
+          <i class="fa-solid fa-clock-rotate-left text-[10px]"></i> View Previous Attempt (${displayScore}/${maxScore})
         </button>
       `;
-    } else if (hasScore) {
+    } else if (hasCompletedAndLocked || hasScore) {
       actionBtn = `
         <button class="view-score-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}">
-          <i class="fa-solid fa-file-lines text-indigo-600 text-xs"></i> View Score &amp; Feedback
+          <i class="fa-solid fa-file-lines text-indigo-600 text-xs"></i> View Score &amp; Feedback (${displayScore}/${maxScore})
         </button>
       `;
     } else if (isExpired) {
@@ -2802,9 +2861,15 @@ function startAssessmentQuiz(asmtId) {
   const asmt = state.assessments.find((a) => a.id === asmtId);
   if (!asmt) return;
 
-  const existingSub = state.submissions.find((s) => s.assessment_id === asmtId && s.status === "GRADED");
+  const existingSub = (state.submissions || []).find(
+    (s) => (s.assessment_id === asmtId || s.assessments?.id === asmtId) &&
+           (s.status === "GRADED" || s.status === "SUBMITTED" || s.score != null)
+  );
   if (existingSub && !existingSub.retake_granted) {
-    alert(`Your assessment submission for "${asmt.title}" is already completed and safely locked with ${existingSub.score}/${asmt.max_score || 20} marks.\n\nReopening this test applies strictly to students who haven't submitted or who were authorized for a retake. Your score remains securely recorded.`);
+    const firstScoreInfo = resolveFirstSubmissionScore(existingSub);
+    const displayScore = firstScoreInfo.score.toFixed(1);
+    const maxScore = firstScoreInfo.max_score || asmt.max_score || 20;
+    alert(`Your assessment submission for "${asmt.title}" is already completed and safely locked with ${displayScore}/${maxScore} marks.\n\nReopening this test applies strictly to students who haven't submitted or who were authorized for a retake. Your score remains securely recorded.`);
     return;
   }
 
@@ -3163,7 +3228,7 @@ async function handleQuizSubmit() {
   const pct = Math.round((score / maxScore) * 100);
 
   const learnerClass = state.profile?.class_level || "Basic 9A";
-  const existingSubs = (state.submissions || []).filter((s) => s.assessment_id === quiz.asmtId);
+  const existingSubs = (state.submissions || []).filter((s) => (s.assessment_id === quiz.asmtId || s.assessments?.id === quiz.asmtId));
   const rankNum = existingSubs.length + 1;
   const ordinalRank = getOrdinalSuffix(rankNum);
 
@@ -3327,18 +3392,17 @@ async function handleConfirmAbandonQuiz() {
   const totalQuestions = quiz.paper ? quiz.paper.length : 10;
   const maxScore = quiz.asmtMaxScore || 20;
   const learnerId = state.profile?.id || state.user?.id || "lrn-001";
-  const existingSubs = (state.submissions || []).filter((s) => s.assessment_id === quiz.asmtId);
+  const existingSubs = (state.submissions || []).filter((s) => (s.assessment_id === quiz.asmtId || s.assessments?.id === quiz.asmtId));
   const rankNum = existingSubs.length + 1;
 
-  const priorSub = (state.submissions || []).find((s) => s.assessment_id === quiz.asmtId);
+  const priorSub = (state.submissions || []).find((s) => (s.assessment_id === quiz.asmtId || s.assessments?.id === quiz.asmtId));
   let priorValidScore: number | null = null;
-  if (priorSub && priorSub.score != null && parseFloat(priorSub.score) > 0) {
-    priorValidScore = parseFloat(priorSub.score);
-  } else if (priorSub?.previous_scores && Array.isArray(priorSub.previous_scores)) {
-    const validPrev = priorSub.previous_scores.filter((p: any) => p && p.score != null && parseFloat(p.score) > 0);
-    if (validPrev.length > 0) {
-      const best = validPrev.reduce((m: any, c: any) => parseFloat(c.score) > parseFloat(m.score) ? c : m, validPrev[0]);
-      priorValidScore = parseFloat(best.score);
+  if (priorSub) {
+    const firstData = resolveFirstSubmissionScore(priorSub);
+    if (firstData.score > 0) {
+      priorValidScore = firstData.score;
+    } else if (priorSub.score != null && parseFloat(priorSub.score) > 0) {
+      priorValidScore = parseFloat(priorSub.score);
     }
   }
 
@@ -8285,15 +8349,8 @@ function getAdminLearnersPageSize(): number {
 
 function getLearnerDisplayScore(sub: any): number {
   if (!sub) return 0;
-  const current = typeof sub.score === "number" ? sub.score : (parseFloat(sub.score) || 0);
-  if (current > 0) return current;
-  if (Array.isArray(sub.previous_scores) && sub.previous_scores.length > 0) {
-    for (const prev of sub.previous_scores) {
-      const pScore = typeof prev.score === "number" ? prev.score : (parseFloat(prev.score) || 0);
-      if (pScore > 0) return pScore;
-    }
-  }
-  return 0;
+  const firstData = resolveFirstSubmissionScore(sub);
+  return firstData.score;
 }
 
 function renderAdminLearnersTable() {
@@ -8553,9 +8610,10 @@ function renderAdminLearnersTable() {
            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Offline (${formatTimeAgo(learner.last_seen)})
          </span>`;
 
-    const learnerSubs = (learner.submissions && learner.submissions.length > 0)
+    const rawSubs = (learner.submissions && learner.submissions.length > 0)
       ? learner.submissions
       : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
+    const learnerSubs = normalizeAndDeduplicateSubmissions(rawSubs, learner.id);
     const subCount = learnerSubs.length;
     const hasPerformedTask = subCount > 0;
     const latestSub = hasPerformedTask ? learnerSubs[0] : null;
@@ -8721,9 +8779,10 @@ function renderAdminLearnersTable() {
              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> ${formatTimeAgo(learner.last_seen)}
            </span>`;
 
-      const learnerSubs = (learner.submissions && learner.submissions.length > 0)
+      const rawSubs = (learner.submissions && learner.submissions.length > 0)
         ? learner.submissions
         : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
+      const learnerSubs = normalizeAndDeduplicateSubmissions(rawSubs, learner.id);
       const subCount = learnerSubs.length;
       const hasPerformedTask = subCount > 0;
       const latestSub = hasPerformedTask ? learnerSubs[0] : null;
@@ -16642,9 +16701,10 @@ async function downloadRecordingFile(rec: any) {
 // Modals & Score Details
 // ------------------------------------------------------------------------------
 function openScoreDetailsModal(submission) {
-  const asmt = submission.assessments || {};
-  const maxScore = parseFloat(submission.max_score || asmt.max_score || 20);
-  const scoreVal = parseFloat(submission.score || 0);
+  const asmt = submission.assessments || (state.assessments || []).find((a) => a.id === submission.assessment_id) || {};
+  const firstData = resolveFirstSubmissionScore(submission);
+  const maxScore = firstData.max_score || parseFloat(submission.max_score || asmt.max_score || 20);
+  const scoreVal = firstData.score;
   const pct = Math.round((scoreVal / maxScore) * 100);
 
   scoreModalTitle.textContent = asmt.title || "Assessment Score Card";
@@ -16664,7 +16724,7 @@ function openScoreDetailsModal(submission) {
     modalGradeLabel.className = "px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800";
   }
 
-  modalSubmittedDate.textContent = formatDateTime(submission.submitted_at);
+  modalSubmittedDate.textContent = formatDateTime(firstData.submitted_at || submission.submitted_at);
 
   const learnerClass = state.profile?.class_level || "Basic 9A";
   const totalStudents = getClassTotalStudents(learnerClass);
@@ -16805,11 +16865,13 @@ function updateActiveTestBanner() {
     if (!state.isAdmin && state.activeView !== "admin") {
       const learnerId = state.profile?.id || state.user?.id;
       const learnerEmail = (state.profile?.email || state.user?.email || "").toLowerCase();
-      const sub = (state.submissions || []).find((s: any) =>
-        s.assessment_id === a.id &&
-        (s.learner_id === learnerId || (s.email && s.email.toLowerCase() === learnerEmail))
-      );
-      if (sub && sub.status === "GRADED" && !sub.retake_granted) {
+      const sub = (state.submissions || []).find((s: any) => {
+        const aId = s.assessment_id || s.assessments?.id;
+        const lId = s.learner_id || s.learners?.id;
+        const sEmail = (s.email || s.learners?.email || "").toLowerCase();
+        return aId === a.id && (!lId || lId === learnerId || (learnerEmail && sEmail === learnerEmail));
+      });
+      if (sub && (sub.status === "GRADED" || sub.status === "SUBMITTED" || sub.score != null) && !sub.retake_granted) {
         return false;
       }
     }

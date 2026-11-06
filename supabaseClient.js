@@ -517,6 +517,11 @@ export async function fetchAllLearners() {
 
   // Pure real database records only; never fallback to cooked fake students
   const learners = (learnersData && learnersData.length > 0) ? learnersData : [];
+  for (const lrn of learners) {
+    if (lrn.submissions && Array.isArray(lrn.submissions)) {
+      lrn.submissions = normalizeAndDeduplicateSubmissions(lrn.submissions, lrn.id, supabase);
+    }
+  }
   const now = Date.now();
 
   // Auto-reconcile stale online status (e.g. closed browser without clean beforeunload)
@@ -598,16 +603,149 @@ export async function fetchAssessments() {
   return deduped;
 }
 
+// Helper: Strictly resolve the VERY FIRST attempt data/score for any submission.
+// Ensures assessment integrity: even if retakes or multiple sitting entries occurred,
+// the first authentic sitting's score remains the official recorded mark.
+export function resolveFirstSubmissionScore(sub) {
+  if (!sub) {
+    return {
+      score: 0,
+      max_score: 20,
+      pct: 0,
+      submitted_at: null,
+      teacher_remarks: "",
+      correct_count: 0,
+      incorrect_count: 0,
+      answers: null,
+    };
+  }
+
+  // If previous_scores array exists and has entries, the very first attempt is stored at index 0
+  if (sub.previous_scores && Array.isArray(sub.previous_scores) && sub.previous_scores.length > 0) {
+    const first = sub.previous_scores[0];
+    const scoreVal = typeof first.score === "number" ? first.score : (parseFloat(first.score) || 0);
+    const maxVal = typeof first.max_score === "number" ? first.max_score : (parseFloat(first.max_score || sub.max_score || 20) || 20);
+    return {
+      score: scoreVal,
+      max_score: maxVal,
+      pct: Math.round((scoreVal / maxVal) * 100),
+      submitted_at: first.submitted_at || sub.submitted_at,
+      teacher_remarks: first.teacher_remarks || sub.teacher_remarks,
+      correct_count: first.correct_count != null ? first.correct_count : sub.correct_count,
+      incorrect_count: first.incorrect_count != null ? first.incorrect_count : sub.incorrect_count,
+      answers: first.answers || sub.answers,
+    };
+  }
+
+  const scoreVal = typeof sub.score === "number" ? sub.score : (parseFloat(sub.score) || 0);
+  const maxVal = typeof sub.max_score === "number" ? sub.max_score : (parseFloat(sub.max_score || 20) || 20);
+  return {
+    score: scoreVal,
+    max_score: maxVal,
+    pct: Math.round((scoreVal / maxVal) * 100),
+    submitted_at: sub.submitted_at,
+    teacher_remarks: sub.teacher_remarks,
+    correct_count: sub.correct_count,
+    incorrect_count: sub.incorrect_count,
+    answers: sub.answers,
+  };
+}
+
+// Normalizes and deduplicates submissions:
+// 1. Ensures assessment_id and learner_id are always populated.
+// 2. Groups submissions so each unique assessment appears EXACTLY ONCE per learner.
+// 3. Evaluates and locks in the learner's VERY FIRST score for that task.
+// 4. Asynchronously repairs any database row that was previously overwritten by a later retake.
+export function normalizeAndDeduplicateSubmissions(subs, defaultLearnerId = null, supabase = null) {
+  if (!Array.isArray(subs)) return [];
+
+  // Sort by submitted_at ASCENDING so earlier attempts come first
+  const sorted = [...subs].sort((a, b) => {
+    const timeA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+    const timeB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+    return timeA - timeB;
+  });
+
+  const dedupedMap = new Map();
+
+  for (const s of sorted) {
+    if (!s) continue;
+    const asmtId = s.assessment_id || s.assessments?.id;
+    if (!asmtId) continue;
+    const learnerId = s.learner_id || s.learners?.id || defaultLearnerId;
+
+    const key = learnerId ? `${learnerId}_${asmtId}` : asmtId;
+
+    // Resolve the very first data/score
+    const firstData = resolveFirstSubmissionScore(s);
+
+    // If recorded score differs from the very first sitting, enforce the first score
+    const currentScore = typeof s.score === "number" ? s.score : (parseFloat(s.score) || 0);
+    if (s.score != null && Math.abs(currentScore - firstData.score) > 0.001) {
+      s.score = firstData.score;
+      s.max_score = firstData.max_score;
+      if (firstData.correct_count != null) s.correct_count = firstData.correct_count;
+      if (firstData.incorrect_count != null) s.incorrect_count = firstData.incorrect_count;
+      if (firstData.answers != null) s.answers = firstData.answers;
+      if (firstData.submitted_at) s.submitted_at = firstData.submitted_at;
+      if (firstData.teacher_remarks) s.teacher_remarks = firstData.teacher_remarks;
+
+      // Asynchronously sync back to live Supabase database
+      if (supabase && s.id) {
+        try {
+          supabase
+            .from("submissions")
+            .update({
+              score: firstData.score,
+              max_score: firstData.max_score,
+              correct_count: s.correct_count,
+              incorrect_count: s.incorrect_count,
+              submitted_at: s.submitted_at,
+              teacher_remarks: s.teacher_remarks,
+            })
+            .eq("id", s.id)
+            .then(() => {});
+        } catch (e) {}
+      }
+    }
+
+    s.assessment_id = asmtId;
+    if (learnerId) s.learner_id = learnerId;
+
+    if (!dedupedMap.has(key)) {
+      dedupedMap.set(key, s);
+    } else {
+      // Keep earliest sitting's canonical score; preserve active retake authorization if present
+      const existing = dedupedMap.get(key);
+      if (s.retake_granted === true && !existing.retake_granted) {
+        existing.retake_granted = true;
+        existing.retake_reason = s.retake_reason;
+        existing.retake_granted_at = s.retake_granted_at;
+      }
+    }
+  }
+
+  // Return sorted with recent submissions first for UI display convenience
+  return Array.from(dedupedMap.values()).sort((a, b) => {
+    const timeA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+    const timeB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+    return timeB - timeA;
+  });
+}
+
 export async function fetchLearnerSubmissions(learnerId) {
   const supabase = getAdminSupabase() || getSupabase();
   if (!supabase || !learnerId) {
-    return [];
+    const fallback = getFallbackSubmissions().filter((s) => s.learner_id === learnerId);
+    return normalizeAndDeduplicateSubmissions(fallback, learnerId);
   }
 
   const { data, error } = await supabase
     .from("submissions")
     .select(`
       id,
+      assessment_id,
+      learner_id,
       score,
       max_score,
       correct_count,
@@ -633,14 +771,15 @@ export async function fetchLearnerSubmissions(learnerId) {
       )
     `)
     .eq("learner_id", learnerId)
-    .order("submitted_at", { ascending: false });
+    .order("submitted_at", { ascending: true });
 
   if (error) {
     console.warn("Supabase fetchLearnerSubmissions error:", error);
-    return [];
+    const fallback = getFallbackSubmissions().filter((s) => s.learner_id === learnerId);
+    return normalizeAndDeduplicateSubmissions(fallback, learnerId);
   }
 
-  return data || [];
+  return normalizeAndDeduplicateSubmissions(data || [], learnerId, supabase);
 }
 
 export async function fetchSingleSubmission(learnerId, assessmentId, submissionId = null) {
@@ -704,20 +843,20 @@ export async function fetchSingleSubmission(learnerId, assessmentId, submissionI
 export async function fetchAllSubmissions() {
   const supabase = getAdminSupabase() || getSupabase();
   if (!supabase) {
-    return [];
+    return normalizeAndDeduplicateSubmissions(getFallbackSubmissions());
   }
 
   const { data, error } = await supabase
     .from("submissions")
     .select("*, assessments(id, title, subject, class_level, max_score, weight, assessment_type), learners(id, full_name, class_level, student_id)")
-    .order("submitted_at", { ascending: false });
+    .order("submitted_at", { ascending: true });
 
   if (error) {
     console.warn("Supabase fetchAllSubmissions error:", error);
-    return [];
+    return normalizeAndDeduplicateSubmissions(getFallbackSubmissions());
   }
 
-  return data || [];
+  return normalizeAndDeduplicateSubmissions(data || [], null, supabase);
 }
 
 // -------------------------------------------------------------
@@ -1024,8 +1163,18 @@ export async function saveAssessmentSubmission(payload) {
   // Always update local cache
   const localSubs = getFallbackSubmissions();
   const existingIdx = localSubs.findIndex(
-    (s) => s.assessment_id === payload.assessment_id && s.learner_id === payload.learner_id
+    (s) => (s.assessment_id === payload.assessment_id || s.assessments?.id === payload.assessment_id) &&
+           (s.learner_id === payload.learner_id)
   );
+
+  const existingSub = existingIdx >= 0 ? localSubs[existingIdx] : null;
+  const isAlreadyDone = existingSub && (existingSub.status === "GRADED" || existingSub.status === "SUBMITTED" || existingSub.score != null);
+
+  // Strict Lock Guard: If learner has already completed and was evaluated/scored,
+  // and no teacher retake was authorized, block submission & preserve locked first score
+  if (isAlreadyDone && !existingSub.retake_granted) {
+    return existingSub;
+  }
 
   const prevScores = existingIdx >= 0 && localSubs[existingIdx].previous_scores
     ? [...localSubs[existingIdx].previous_scores]
@@ -1035,7 +1184,11 @@ export async function saveAssessmentSubmission(payload) {
       score: localSubs[existingIdx].score,
       max_score: localSubs[existingIdx].max_score || 20,
       submitted_at: localSubs[existingIdx].submitted_at,
-      retake_reason: localSubs[existingIdx].retake_reason || null
+      retake_reason: localSubs[existingIdx].retake_reason || null,
+      correct_count: localSubs[existingIdx].correct_count,
+      incorrect_count: localSubs[existingIdx].incorrect_count,
+      answers: localSubs[existingIdx].answers,
+      teacher_remarks: localSubs[existingIdx].teacher_remarks,
     });
   }
 
@@ -1052,6 +1205,11 @@ export async function saveAssessmentSubmission(payload) {
   ) {
     resolvedScore = localSubs[existingIdx].score;
     resolvedRemarks = `Sitting closed early by learner. Previous official mark (${resolvedScore}/${payload.max_score || 20}) preserved.`;
+  }
+
+  // Ensure any historical first score is preserved as canonical
+  if (prevScores.length > 0 && prevScores[0].score != null) {
+    resolvedScore = prevScores[0].score;
   }
 
   const newSub = {

@@ -36,6 +36,19 @@ DELETE FROM auth.users
 WHERE email LIKE '%@ghana-edu.gov.gh' 
   AND email != 'computing.b9@gmail.com';
 
+-- 8. Ensure unique constraint exists on submissions(assessment_id, learner_id)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'submissions_assessment_id_learner_id_key'
+    ) THEN
+        ALTER TABLE public.submissions ADD CONSTRAINT submissions_assessment_id_learner_id_key UNIQUE (assessment_id, learner_id);
+    END IF;
+EXCEPTION
+    WHEN duplicate_table THEN NULL;
+    WHEN duplicate_object THEN NULL;
+END $$;
+
 -- Verification query
 SELECT 'learners' AS table_name, count(*) FROM public.learners
 UNION ALL

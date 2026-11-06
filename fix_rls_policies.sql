@@ -63,6 +63,19 @@ CREATE POLICY "Allow all for submissions"
     USING (true)
     WITH CHECK (true);
 
+-- Ensure unique constraint exists on submissions(assessment_id, learner_id) to maintain single canonical score
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'submissions_assessment_id_learner_id_key'
+    ) THEN
+        ALTER TABLE public.submissions ADD CONSTRAINT submissions_assessment_id_learner_id_key UNIQUE (assessment_id, learner_id);
+    END IF;
+EXCEPTION
+    WHEN duplicate_table THEN NULL;
+    WHEN duplicate_object THEN NULL;
+END $$;
+
 -- 4. Data API Grants (October 30 Supabase Policy Compliance)
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
