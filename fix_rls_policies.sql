@@ -63,6 +63,16 @@ CREATE POLICY "Allow all for submissions"
     USING (true)
     WITH CHECK (true);
 
+-- Remove any duplicate (assessment_id, learner_id) rows while keeping the very first submitted sitting
+DELETE FROM public.submissions s1
+USING public.submissions s2
+WHERE s1.assessment_id = s2.assessment_id
+  AND s1.learner_id = s2.learner_id
+  AND (
+    s1.submitted_at > s2.submitted_at
+    OR (s1.submitted_at = s2.submitted_at AND s1.id::text > s2.id::text)
+  );
+
 -- Ensure unique constraint exists on submissions(assessment_id, learner_id) to maintain single canonical score
 DO $$
 BEGIN

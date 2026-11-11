@@ -1022,13 +1022,14 @@ async function startApplication() {
   // Listen for Supabase realtime OAuth events (e.g. login redirect completion)
   onAuthChange(async (event, session) => {
     if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-      if (session?.user && (!state.user || state.user.id !== session.user.id)) {
+      if (session?.user && (!state.user || state.user.id !== session.user.id) && !isCheckingAuthSession) {
         await checkAuthSession();
       }
     } else if (event === "SIGNED_OUT") {
       state.user = null;
       state.profile = null;
       state.isAdmin = false;
+      state.submissions = [];
       await handleRoute();
     }
   });
@@ -1104,7 +1105,11 @@ function hideAuthLoader() {
 // ------------------------------------------------------------------------------
 // Auth & Session Management
 // ------------------------------------------------------------------------------
+let isCheckingAuthSession = false;
+
 async function checkAuthSession() {
+  if (isCheckingAuthSession) return;
+  isCheckingAuthSession = true;
   try {
     // Check for OAuth error redirected from Supabase / Google
     const urlParams = new URLSearchParams(window.location.search);
@@ -1159,7 +1164,7 @@ async function checkAuthSession() {
 
     if (user) {
       state.user = user;
-      profile = await fetchLearnerProfile(user.id);
+      profile = await fetchLearnerProfile(user.id, user.email);
 
       // Determine Admin Status via Email or Profile Role
       state.isAdmin = isUserAdmin(user, profile);
@@ -1253,6 +1258,8 @@ async function checkAuthSession() {
     sessionStorage.removeItem("jhs_google_auth_in_progress");
     hideAuthLoader();
     await handleRoute();
+  } finally {
+    isCheckingAuthSession = false;
   }
 }
 
@@ -2628,13 +2635,13 @@ function renderAssessmentCards() {
         <button class="start-quiz-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5" data-asmt-id="${asmt.id}" data-is-retake="true">
           <i class="fa-solid fa-rotate-right text-xs"></i> Start Assessment Retake
         </button>
-        <button class="view-score-btn w-full mt-1.5 py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1" data-sub-id="${sub.id}">
+        <button class="view-score-btn w-full mt-1.5 py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1" data-sub-id="${sub.id}" data-asmt-id="${asmt.id}">
           <i class="fa-solid fa-clock-rotate-left text-[10px]"></i> View Previous Attempt (${displayScore}/${maxScore})
         </button>
       `;
     } else if (hasCompletedAndLocked || hasScore) {
       actionBtn = `
-        <button class="view-score-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}">
+        <button class="view-score-btn w-full py-2 px-3 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all cursor-pointer flex items-center justify-center gap-1.5" data-sub-id="${sub.id}" data-asmt-id="${asmt.id}">
           <i class="fa-solid fa-file-lines text-indigo-600 text-xs"></i> View Score &amp; Feedback (${displayScore}/${maxScore})
         </button>
       `;
@@ -2749,7 +2756,7 @@ function renderAssessmentCards() {
               ? `
               <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-emerald-800 mb-4">
                 <span class="flex items-center gap-1.5"><i class="fa-solid fa-trophy text-emerald-600"></i> Your Score:</span>
-                <span class="text-sm font-extrabold text-emerald-700">${sub.score} / ${asmt.max_score}</span>
+                <span class="text-sm font-extrabold text-emerald-700">${displayScore} / ${maxScore}</span>
               </div>
             `
               : ""
@@ -2790,7 +2797,12 @@ function renderAssessmentCards() {
         return;
       }
       const subId = btn.getAttribute("data-sub-id");
-      const sub = state.submissions.find((s) => s.id === subId);
+      const asmtId = btn.getAttribute("data-asmt-id");
+      const sub = (state.submissions || []).find(
+        (s) =>
+          (subId && s.id === subId) ||
+          (asmtId && (s.assessment_id === asmtId || s.assessments?.id === asmtId))
+      );
       if (sub) openScoreDetailsModal(sub);
     });
   });
@@ -2850,7 +2862,7 @@ function startAssessmentLiveCountdowns() {
 // ------------------------------------------------------------------------------
 // In-Portal Secure Assessment / Quiz Runner (Anti-Cheat & Blind Progression)
 // ------------------------------------------------------------------------------
-function startAssessmentQuiz(asmtId) {
+async function startAssessmentQuiz(asmtId) {
   if (!state.isAdmin && !hasRegisteredDob(state.profile)) {
     alert("⚠️ Action Required: You must register your Date of Birth in your profile before you can take assessments.");
     showOnboardingModal(state.user, state.profile);
@@ -2861,10 +2873,26 @@ function startAssessmentQuiz(asmtId) {
   const asmt = state.assessments.find((a) => a.id === asmtId);
   if (!asmt) return;
 
-  const existingSub = (state.submissions || []).find(
+  const learnerId = state.profile?.id || state.user?.id || "lrn-001";
+
+  let existingSub = (state.submissions || []).find(
     (s) => (s.assessment_id === asmtId || s.assessments?.id === asmtId) &&
            (s.status === "GRADED" || s.status === "SUBMITTED" || s.score != null)
   );
+
+  // Double-check live database in case user already submitted from another tab/device
+  if (!existingSub && learnerId && !String(learnerId).startsWith("demo-")) {
+    try {
+      const dbSub = await fetchSingleSubmission(learnerId, asmtId);
+      if (dbSub && (dbSub.status === "GRADED" || dbSub.status === "SUBMITTED" || dbSub.score != null)) {
+        existingSub = dbSub;
+        state.submissions = normalizeAndDeduplicateSubmissions([...(state.submissions || []), dbSub], learnerId);
+        updateKpiMetrics();
+        renderAssessmentCards();
+      }
+    } catch (e) {}
+  }
+
   if (existingSub && !existingSub.retake_granted) {
     const firstScoreInfo = resolveFirstSubmissionScore(existingSub);
     const displayScore = firstScoreInfo.score.toFixed(1);
@@ -3186,6 +3214,11 @@ async function handleQuizSubmit() {
   }
 
   quiz.isSubmitting = true;
+  const origSubmitHtml = quizSubmitBtn ? quizSubmitBtn.innerHTML : "";
+  if (quizSubmitBtn) {
+    quizSubmitBtn.setAttribute("disabled", "true");
+    quizSubmitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Saving &amp; Locking Score...</span>`;
+  }
 
   if (state.quizTimerInterval) {
     clearInterval(state.quizTimerInterval);
@@ -3220,12 +3253,12 @@ async function handleQuizSubmit() {
     }
   });
 
-  const totalQuestions = quiz.paper.length;
+  const totalQuestions = quiz.paper.length || 1;
   const incorrectCount = totalQuestions - correctCount;
   const maxScore = quiz.asmtMaxScore || 20;
   // Compute marks scaled to max_score (e.g., 2 marks per question out of 10 items = 20)
-  const score = (correctCount / totalQuestions) * maxScore;
-  const pct = Math.round((score / maxScore) * 100);
+  const rawScore = Math.round(((correctCount / totalQuestions) * maxScore) * 100) / 100;
+  const rawPct = Math.round((rawScore / maxScore) * 100);
 
   const learnerClass = state.profile?.class_level || "Basic 9A";
   const existingSubs = (state.submissions || []).filter((s) => (s.assessment_id === quiz.asmtId || s.assessments?.id === quiz.asmtId));
@@ -3233,19 +3266,72 @@ async function handleQuizSubmit() {
   const ordinalRank = getOrdinalSuffix(rankNum);
 
   const learnerId = state.profile?.id || state.user?.id || "lrn-001";
-  await saveAssessmentSubmission({
-    assessment_id: quiz.asmtId,
-    learner_id: learnerId,
-    score: score,
-    max_score: maxScore,
-    correct_count: correctCount,
-    incorrect_count: incorrectCount,
-    answers: quiz.answers,
-    submission_rank: rankNum,
-    teacher_remarks: `Scored ${score.toFixed(1)}/${maxScore} (${pct}%) on ${quiz.asmtTitle}. Completed with ${correctCount} correct and ${incorrectCount} incorrect.`,
-  });
+  let savedSub = null;
+  try {
+    savedSub = await saveAssessmentSubmission({
+      assessment_id: quiz.asmtId,
+      learner_id: learnerId,
+      score: rawScore,
+      max_score: maxScore,
+      correct_count: correctCount,
+      incorrect_count: incorrectCount,
+      answers: quiz.answers,
+      submission_rank: rankNum,
+      teacher_remarks: `Scored ${rawScore.toFixed(1)}/${maxScore} (${rawPct}%) on ${quiz.asmtTitle}. Completed with ${correctCount} correct and ${incorrectCount} incorrect.`,
+      _learnerMeta: {
+        full_name: state.profile?.full_name || state.user?.user_metadata?.full_name || "Portal Learner",
+        email: state.profile?.email || state.user?.email || "",
+        class_level: learnerClass,
+        student_id: state.profile?.student_id || null,
+        gender: state.profile?.gender || "Male",
+        role: state.profile?.role || (state.isAdmin ? "admin" : "learner"),
+      },
+    });
+  } catch (err) {
+    console.error("saveAssessmentSubmission unexpected error:", err);
+  }
 
-  state.submissions = await fetchLearnerSubmissions(learnerId);
+  // Resolve canonical saved learner_id & submission so state.submissions NEVER loses this sitting
+  const effectiveLearnerId = savedSub?.learner_id || learnerId;
+  if (savedSub) {
+    const hydratedSub = {
+      ...savedSub,
+      assessment_id: savedSub.assessment_id || quiz.asmtId,
+      learner_id: effectiveLearnerId,
+      assessments: savedSub.assessments || (state.assessments || []).find((a) => a.id === quiz.asmtId) || {
+        id: quiz.asmtId,
+        title: quiz.asmtTitle,
+        subject: quiz.asmtSubject,
+        max_score: maxScore,
+        class_level: learnerClass,
+      },
+    };
+    state.submissions = normalizeAndDeduplicateSubmissions(
+      [...(state.submissions || []), hydratedSub],
+      effectiveLearnerId
+    );
+  }
+
+  // Refresh authoritative list from Supabase and preserve any local submission if DB lagged
+  try {
+    const remoteList = await fetchLearnerSubmissions(effectiveLearnerId);
+    if (Array.isArray(remoteList) && remoteList.length > 0) {
+      state.submissions = normalizeAndDeduplicateSubmissions(
+        [...remoteList, ...(state.submissions || [])],
+        effectiveLearnerId
+      );
+    }
+  } catch (e) {
+    console.warn("Post-submit fetchLearnerSubmissions notice:", e);
+  }
+
+  // Canonical first score (in case a locked prior sitting existed)
+  const finalSub = (state.submissions || []).find((s) => (s.assessment_id === quiz.asmtId || s.assessments?.id === quiz.asmtId));
+  const canonicalInfo = finalSub ? resolveFirstSubmissionScore(finalSub) : { score: rawScore, max_score: maxScore, correct_count: correctCount, incorrect_count: incorrectCount };
+  const score = canonicalInfo.score;
+  const pct = Math.round((score / (canonicalInfo.max_score || maxScore)) * 100);
+  const shownCorrect = canonicalInfo.correct_count != null ? canonicalInfo.correct_count : correctCount;
+  const shownIncorrect = canonicalInfo.incorrect_count != null ? canonicalInfo.incorrect_count : incorrectCount;
 
   // Results Screen: displays summary score, correct/incorrect count, and rank WITHOUT revealing the exact answers
   if (quizActiveBody) quizActiveBody.classList.add("hidden");
@@ -3255,8 +3341,8 @@ async function handleQuizSubmit() {
   if (quizResultScore) quizResultScore.textContent = score.toFixed(1);
   if (quizResultMax) quizResultMax.textContent = `/ ${maxScore}`;
   if (quizResultPct) quizResultPct.textContent = `${pct}.0%`;
-  if (quizCorrectCount) quizCorrectCount.textContent = correctCount;
-  if (quizIncorrectCount) quizIncorrectCount.textContent = incorrectCount;
+  if (quizCorrectCount) quizCorrectCount.textContent = shownCorrect;
+  if (quizIncorrectCount) quizIncorrectCount.textContent = shownIncorrect;
   if (quizResultRankText) quizResultRankText.textContent = `Turn-in Order: ${ordinalRank} in ${learnerClass}`;
 
   if (quizResultGradeBadge) {
@@ -3275,54 +3361,65 @@ async function handleQuizSubmit() {
   // ----------------------------------------------------------------------------
   // AI Pedagogical Assurance & Next Target Calibration Engine
   // ----------------------------------------------------------------------------
-  const learnerName = state.profile?.full_name?.split(" ")[0] || "Learner";
+  try {
+    const learnerName = state.profile?.full_name?.split(" ")[0] || "Learner";
 
-  // 1. Evaluate previous target outcome (Celebratory vs Reassuring Assurance)
-  const outcomeEvaluation = evaluateNextTestOutcome(score, maxScore, quiz.asmtTitle);
-  const assuranceContainer = document.getElementById("quizResultAssuranceContainer");
-  if (assuranceContainer) {
-    if (outcomeEvaluation) {
-      assuranceContainer.innerHTML = renderAssuranceCardHTML(outcomeEvaluation);
-      assuranceContainer.classList.remove("hidden");
+    // 1. Evaluate previous target outcome (Celebratory vs Reassuring Assurance)
+    const outcomeEvaluation = evaluateNextTestOutcome(score, maxScore, quiz.asmtTitle);
+    const assuranceContainer = document.getElementById("quizResultAssuranceContainer");
+    if (assuranceContainer) {
+      if (outcomeEvaluation) {
+        assuranceContainer.innerHTML = renderAssuranceCardHTML(outcomeEvaluation);
+        assuranceContainer.classList.remove("hidden");
 
-      // Broadcast intelligent in-app push notification
-      window.dispatchEvent(
-        new CustomEvent("jhs:push-notification", {
-          detail: {
-            title: outcomeEvaluation.assuranceTitle,
-            body: outcomeEvaluation.assuranceMessage,
-            timestamp: "Just now",
-          },
-        })
-      );
-    } else {
-      assuranceContainer.innerHTML = "";
-      assuranceContainer.classList.add("hidden");
+        // Broadcast intelligent in-app push notification
+        window.dispatchEvent(
+          new CustomEvent("jhs:push-notification", {
+            detail: {
+              title: outcomeEvaluation.assuranceTitle,
+              body: outcomeEvaluation.assuranceMessage,
+              timestamp: "Just now",
+            },
+          })
+        );
+      } else {
+        assuranceContainer.innerHTML = "";
+        assuranceContainer.classList.add("hidden");
+      }
     }
+
+    // 2. Unveil potentials & calibrate realistic target for the next sitting
+    const newAiProfile = generateLearnerAIPotentials(
+      learnerName,
+      {
+        score,
+        max_score: maxScore,
+        assessment_id: quiz.asmtId,
+        learner_id: effectiveLearnerId,
+        correct_count: shownCorrect,
+        incorrect_count: shownIncorrect,
+      },
+      quiz.asmtTitle
+    );
+
+    const quizResultAiContainer = document.getElementById("quizResultAiContainer");
+    if (quizResultAiContainer) {
+      quizResultAiContainer.innerHTML = renderAIPotentialCardHTML(newAiProfile);
+    }
+  } catch (aiErr) {
+    console.warn("AI pedagogical card render notice:", aiErr);
+  } finally {
+    if (quizSubmitBtn) {
+      quizSubmitBtn.removeAttribute("disabled");
+      if (origSubmitHtml) quizSubmitBtn.innerHTML = origSubmitHtml;
+    }
+    quiz.isSubmitting = false;
   }
 
-  // 2. Unveil potentials & calibrate realistic target for the next sitting
-  const newAiProfile = generateLearnerAIPotentials(
-    learnerName,
-    {
-      score,
-      max_score: maxScore,
-      assessment_id: quiz.asmtId,
-      learner_id: learnerId,
-      correct_count: correctCount,
-      incorrect_count: incorrectCount,
-    },
-    quiz.asmtTitle
-  );
-
-  const quizResultAiContainer = document.getElementById("quizResultAiContainer");
-  if (quizResultAiContainer) {
-    quizResultAiContainer.innerHTML = renderAIPotentialCardHTML(newAiProfile);
-  }
-
-  // Immediately lock this card so student cannot start it again
+  // Immediately lock this card, accumulate score card, and update banner
   renderAssessmentCards();
   updateKpiMetrics();
+  updateActiveTestBanner();
 }
 
 function startQuizSessionTimer() {
@@ -3414,7 +3511,7 @@ async function handleConfirmAbandonQuiz() {
   try {
     const totalQ = quiz.paper ? quiz.paper.length : 10;
     const calcCorrect = priorValidScore != null ? Math.round(priorValidScore / (maxScore / totalQ)) : 0;
-    await saveAssessmentSubmission({
+    const savedSub = await saveAssessmentSubmission({
       assessment_id: quiz.asmtId,
       learner_id: learnerId,
       score: finalScore,
@@ -3424,9 +3521,31 @@ async function handleConfirmAbandonQuiz() {
       answers: quiz.answers || priorSub?.answers || {},
       submission_rank: rankNum,
       teacher_remarks: remarks,
+      _learnerMeta: {
+        full_name: state.profile?.full_name || state.user?.user_metadata?.full_name || "Portal Learner",
+        email: state.profile?.email || state.user?.email || "",
+        class_level: state.profile?.class_level || "Basic 9A",
+        student_id: state.profile?.student_id || null,
+        gender: state.profile?.gender || "Male",
+        role: state.profile?.role || (state.isAdmin ? "admin" : "learner"),
+      },
     });
 
-    state.submissions = await fetchLearnerSubmissions(learnerId);
+    const effectiveLearnerId = savedSub?.learner_id || learnerId;
+    if (savedSub) {
+      state.submissions = normalizeAndDeduplicateSubmissions(
+        [...(state.submissions || []), { ...savedSub, assessment_id: savedSub.assessment_id || quiz.asmtId, learner_id: effectiveLearnerId }],
+        effectiveLearnerId
+      );
+    }
+
+    const remoteList = await fetchLearnerSubmissions(effectiveLearnerId);
+    if (Array.isArray(remoteList) && remoteList.length > 0) {
+      state.submissions = normalizeAndDeduplicateSubmissions(
+        [...remoteList, ...(state.submissions || [])],
+        effectiveLearnerId
+      );
+    }
   } catch (err) {
     console.error("Failed to record failed assessment:", err);
   }
@@ -3462,6 +3581,7 @@ async function handleConfirmAbandonQuiz() {
 
   updateKpiMetrics();
   renderAssessmentCards();
+  updateActiveTestBanner();
 
   if (priorValidScore != null) {
     showPushToast(
@@ -3488,6 +3608,7 @@ function closeQuizRunner() {
 
   updateKpiMetrics();
   renderAssessmentCards();
+  updateActiveTestBanner();
 }
 
 // ------------------------------------------------------------------------------

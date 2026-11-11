@@ -324,29 +324,60 @@ export function onAuthChange(callback) {
 // -------------------------------------------------------------
 // Learner Profile & Onboarding API
 // -------------------------------------------------------------
-export async function fetchLearnerProfile(userId) {
+function isValidUuid(val) {
+  return typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
+export async function fetchLearnerProfile(userId, userEmail = null) {
   if (userId?.startsWith("demo-") || !getSupabase()) {
     const local = localStorage.getItem("jhs_active_learner");
     if (local) {
-      try { return JSON.parse(local); } catch (e) {}
+      try {
+        const parsed = JSON.parse(local);
+        if (!userId || parsed?.id === userId) return parsed;
+      } catch (e) {}
     }
     return null;
   }
 
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("learners")
-    .select("*")
-    .eq("id", userId)
-    .single();
+  if (isValidUuid(userId)) {
+    const { data, error } = await supabase
+      .from("learners")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
 
-  if (error && error.code !== "PGRST116") {
-    console.error("Error fetching learner profile:", error);
+    if (error && error.code !== "PGRST116") {
+      console.error("Error fetching learner profile:", error);
+    }
+    if (data) return data;
   }
-  if (data) return data;
+
+  // Fallback lookup by email in case pre-enrolled learner row has a different UUID
+  if (userEmail && typeof userEmail === "string" && userEmail.trim() !== "") {
+    try {
+      const { data: emailMatch, error: emailErr } = await supabase
+        .from("learners")
+        .select("*")
+        .ilike("email", userEmail.trim())
+        .limit(1)
+        .maybeSingle();
+      if (!emailErr && emailMatch) {
+        localStorage.setItem("jhs_active_learner", JSON.stringify(emailMatch));
+        return emailMatch;
+      }
+    } catch (e) {}
+  }
+
   const local = localStorage.getItem("jhs_active_learner");
   if (local) {
-    try { return JSON.parse(local); } catch (e) {}
+    try {
+      const parsed = JSON.parse(local);
+      if (parsed && (parsed.id === userId || (userEmail && parsed.email?.toLowerCase() === userEmail.toLowerCase()))) {
+        return parsed;
+      }
+    } catch (e) {}
   }
   return null;
 }
@@ -366,8 +397,31 @@ export async function updateLearnerProfile(profileData) {
       .select()
       .single();
 
-    // If there is a student_id collision (Postgres code 23505), re-calculate safe sequence and retry
+    // If there is a student_id or email collision (Postgres code 23505), handle cleanly
     if (error && (error.code === "23505" || String(error.message || "").includes("student_id"))) {
+      if (String(error.message || "").includes("email") && payload.email) {
+        const { data: existingByEmail } = await supabase
+          .from("learners")
+          .select("*")
+          .ilike("email", payload.email.trim())
+          .limit(1)
+          .maybeSingle();
+        if (existingByEmail) {
+          const updateFields = { ...payload, id: existingByEmail.id };
+          delete updateFields.date_of_birth; // respect immutable DOB trigger if already set
+          const { data: updated } = await supabase
+            .from("learners")
+            .update(updateFields)
+            .eq("id", existingByEmail.id)
+            .select()
+            .single();
+          if (updated) {
+            localStorage.setItem("jhs_active_learner", JSON.stringify(updated));
+            return updated;
+          }
+        }
+      }
+
       console.warn("Student ID collision detected on profile save. Generating next sequence...", error);
       const freshSeq = await getNextStudentSequence(payload.class_level || "Basic 9A");
       payload.student_id = generateStudentId(payload.class_level || "Basic 9A", freshSeq);
@@ -734,13 +788,16 @@ export function normalizeAndDeduplicateSubmissions(subs, defaultLearnerId = null
 }
 
 export async function fetchLearnerSubmissions(learnerId) {
+  const localForLearner = getFallbackSubmissions().filter((s) => s.learner_id === learnerId);
   const supabase = getAdminSupabase() || getSupabase();
-  if (!supabase || !learnerId) {
-    const fallback = getFallbackSubmissions().filter((s) => s.learner_id === learnerId);
-    return normalizeAndDeduplicateSubmissions(fallback, learnerId);
+  if (!supabase || !learnerId || !isValidUuid(learnerId)) {
+    return normalizeAndDeduplicateSubmissions(localForLearner, learnerId);
   }
 
-  const { data, error } = await supabase
+  let data = null;
+  let error = null;
+
+  const primaryRes = await supabase
     .from("submissions")
     .select(`
       id,
@@ -772,18 +829,72 @@ export async function fetchLearnerSubmissions(learnerId) {
     .eq("learner_id", learnerId)
     .order("submitted_at", { ascending: true });
 
+  data = primaryRes.data;
+  error = primaryRes.error;
+
+  // Fallback query with core columns in case optional retake/previous_scores columns are missing
   if (error) {
-    console.warn("Supabase fetchLearnerSubmissions error:", error);
-    const fallback = getFallbackSubmissions().filter((s) => s.learner_id === learnerId);
-    return normalizeAndDeduplicateSubmissions(fallback, learnerId);
+    console.warn("Supabase fetchLearnerSubmissions primary query error, retrying core columns:", error);
+    const coreRes = await supabase
+      .from("submissions")
+      .select(`
+        id,
+        assessment_id,
+        learner_id,
+        score,
+        max_score,
+        correct_count,
+        incorrect_count,
+        status,
+        submitted_at,
+        teacher_remarks,
+        assessments (
+          id,
+          title,
+          subject,
+          class_level,
+          assessment_type,
+          max_score,
+          weight,
+          deadline
+        )
+      `)
+      .eq("learner_id", learnerId)
+      .order("submitted_at", { ascending: true });
+    if (!coreRes.error) {
+      data = coreRes.data;
+      error = null;
+    } else {
+      error = coreRes.error;
+    }
   }
 
-  return normalizeAndDeduplicateSubmissions(data || [], learnerId, supabase);
+  if (error) {
+    console.warn("Supabase fetchLearnerSubmissions error:", error);
+    return normalizeAndDeduplicateSubmissions(localForLearner, learnerId);
+  }
+
+  const remoteSubs = Array.isArray(data) ? data : [];
+  const remoteAsmtIds = new Set(remoteSubs.map((s) => s.assessment_id || s.assessments?.id).filter(Boolean));
+
+  // Preserve any locally submitted / unsynced work that has not yet appeared in remote DB results
+  const merged = [...remoteSubs];
+  for (const ls of localForLearner) {
+    const aId = ls.assessment_id || ls.assessments?.id;
+    if (aId && !remoteAsmtIds.has(aId) && ls._unsynced) {
+      merged.push(ls);
+    }
+  }
+
+  return normalizeAndDeduplicateSubmissions(merged, learnerId, supabase);
 }
 
 export async function fetchSingleSubmission(learnerId, assessmentId, submissionId = null) {
   const supabase = getAdminSupabase() || getSupabase();
-  if (supabase) {
+  const canQueryBySubId = submissionId && isValidUuid(submissionId);
+  const canQueryByPair = isValidUuid(learnerId) && isValidUuid(assessmentId);
+
+  if (supabase && (canQueryBySubId || canQueryByPair)) {
     try {
       let query = supabase
         .from("submissions")
@@ -816,13 +927,16 @@ export async function fetchSingleSubmission(learnerId, assessmentId, submissionI
           )
         `);
 
-      if (submissionId) {
+      if (canQueryBySubId) {
         query = query.eq("id", submissionId);
       } else {
         query = query.eq("learner_id", learnerId).eq("assessment_id", assessmentId);
       }
 
-      const { data, error } = await query.maybeSingle();
+      const { data, error } = await query
+        .order("submitted_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
       if (!error && data) return data;
     } catch (e) {
       console.warn("fetchSingleSubmission error:", e);
@@ -1176,69 +1290,181 @@ export async function batchEnrollLearners(learnersList) {
   return data;
 }
 
+async function ensureLearnerRowExists(supabase, learnerId, meta = null) {
+  if (!supabase || !isValidUuid(learnerId)) return learnerId;
+
+  try {
+    const { data: existingById } = await supabase
+      .from("learners")
+      .select("id")
+      .eq("id", learnerId)
+      .maybeSingle();
+
+    if (existingById?.id) return existingById.id;
+
+    // Check by email in case learner row exists with another UUID
+    const cleanEmail = (meta?.email || "").trim().toLowerCase();
+    if (cleanEmail) {
+      const { data: existingByEmail } = await supabase
+        .from("learners")
+        .select("id")
+        .ilike("email", cleanEmail)
+        .limit(1)
+        .maybeSingle();
+      if (existingByEmail?.id) return existingByEmail.id;
+    }
+
+    // Create minimal learner profile row so Foreign Key on submissions succeeds
+    const targetClass = meta?.class_level || "Basic 9A";
+    const nextSeq = await getNextStudentSequence(targetClass);
+    const minimalLearner = {
+      id: learnerId,
+      full_name: (meta?.full_name || "Portal Learner").trim(),
+      email: cleanEmail || `learner.${learnerId.slice(0, 8)}@ghana-edu.gov.gh`,
+      class_level: targetClass,
+      gender: meta?.gender || "Male",
+      role: meta?.role || "learner",
+      student_id: meta?.student_id || generateStudentId(targetClass, nextSeq),
+      onboarding_completed: true,
+      is_online: true,
+      last_seen: new Date().toISOString(),
+    };
+
+    const { data: inserted, error: insertErr } = await supabase
+      .from("learners")
+      .insert(minimalLearner)
+      .select("id")
+      .single();
+
+    if (!insertErr && inserted?.id) {
+      return inserted.id;
+    }
+  } catch (e) {
+    console.warn("ensureLearnerRowExists notice:", e);
+  }
+
+  return learnerId;
+}
+
 export async function saveAssessmentSubmission(payload) {
-  // Always update local cache
+  const learnerMeta = payload._learnerMeta || null;
+  const cleanPayload = { ...payload };
+  delete cleanPayload._learnerMeta;
+
+  const supabase = getSupabase();
+  let resolvedLearnerId = cleanPayload.learner_id;
+
+  // 1. Check live Supabase DB FIRST so locked tasks cannot be retaken/overwritten across browsers/devices
+  let existingDbRows = [];
+  if (supabase && isValidUuid(resolvedLearnerId) && isValidUuid(cleanPayload.assessment_id)) {
+    try {
+      const { data: dbCheck, error: checkErr } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("assessment_id", cleanPayload.assessment_id)
+        .eq("learner_id", resolvedLearnerId)
+        .order("submitted_at", { ascending: true });
+
+      if (!checkErr && Array.isArray(dbCheck) && dbCheck.length > 0) {
+        existingDbRows = dbCheck;
+      }
+    } catch (e) {
+      console.warn("Pre-save submission DB check notice:", e);
+    }
+  }
+
+  const existingDbRow = existingDbRows.length > 0 ? existingDbRows[0] : null;
+  if (existingDbRow) {
+    const isDbDone =
+      existingDbRow.status === "GRADED" ||
+      existingDbRow.status === "SUBMITTED" ||
+      existingDbRow.score != null;
+
+    if (isDbDone && existingDbRow.retake_granted !== true) {
+      // HARD LOCK: Already submitted and scored in database without retake authorization
+      const firstData = resolveFirstSubmissionScore(existingDbRow);
+      const lockedSub = {
+        ...existingDbRow,
+        score: firstData.score,
+        max_score: firstData.max_score || existingDbRow.max_score || 20,
+        _unsynced: false,
+      };
+      const localSubsSync = getFallbackSubmissions();
+      const lIdx = localSubsSync.findIndex(
+        (s) =>
+          (s.assessment_id === cleanPayload.assessment_id || s.assessments?.id === cleanPayload.assessment_id) &&
+          s.learner_id === resolvedLearnerId
+      );
+      if (lIdx >= 0) localSubsSync[lIdx] = lockedSub;
+      else localSubsSync.unshift(lockedSub);
+      localStorage.setItem("jhs_local_submissions", JSON.stringify(localSubsSync));
+      return lockedSub;
+    }
+  }
+
+  // 2. Check local cache (only block locally if DB didn't explicitly grant a retake)
   const localSubs = getFallbackSubmissions();
   const existingIdx = localSubs.findIndex(
-    (s) => (s.assessment_id === payload.assessment_id || s.assessments?.id === payload.assessment_id) &&
-           (s.learner_id === payload.learner_id)
+    (s) => (s.assessment_id === cleanPayload.assessment_id || s.assessments?.id === cleanPayload.assessment_id) &&
+           (s.learner_id === resolvedLearnerId)
   );
 
-  const existingSub = existingIdx >= 0 ? localSubs[existingIdx] : null;
+  const existingSub = existingDbRow || (existingIdx >= 0 ? localSubs[existingIdx] : null);
   const isAlreadyDone = existingSub && (existingSub.status === "GRADED" || existingSub.status === "SUBMITTED" || existingSub.score != null);
 
-  // Strict Lock Guard: If learner has already completed and was evaluated/scored,
-  // and no teacher retake was authorized, block submission & preserve locked first score
-  if (isAlreadyDone && !existingSub.retake_granted) {
+  if (isAlreadyDone && existingSub.retake_granted !== true) {
     return existingSub;
   }
 
-  const prevScores = existingIdx >= 0 && localSubs[existingIdx].previous_scores
-    ? [...localSubs[existingIdx].previous_scores]
+  const prevScores = existingSub && Array.isArray(existingSub.previous_scores)
+    ? [...existingSub.previous_scores]
     : [];
-  if (existingIdx >= 0 && localSubs[existingIdx].score != null) {
+  if (existingSub && existingSub.score != null) {
     prevScores.push({
-      score: localSubs[existingIdx].score,
-      max_score: localSubs[existingIdx].max_score || 20,
-      submitted_at: localSubs[existingIdx].submitted_at,
-      retake_reason: localSubs[existingIdx].retake_reason || null,
-      correct_count: localSubs[existingIdx].correct_count,
-      incorrect_count: localSubs[existingIdx].incorrect_count,
-      answers: localSubs[existingIdx].answers,
-      teacher_remarks: localSubs[existingIdx].teacher_remarks,
+      score: existingSub.score,
+      max_score: existingSub.max_score || 20,
+      submitted_at: existingSub.submitted_at,
+      retake_reason: existingSub.retake_reason || null,
+      correct_count: existingSub.correct_count,
+      incorrect_count: existingSub.incorrect_count,
+      answers: existingSub.answers,
+      teacher_remarks: existingSub.teacher_remarks,
     });
   }
 
   // Grade integrity guard: If payload attempts to set 0 due to an abandoned sitting,
   // but existing attempt had a genuine score > 0, preserve the genuine score
-  let resolvedScore = payload.score;
-  let resolvedRemarks = payload.teacher_remarks;
+  let resolvedScore = Number.isFinite(Number(cleanPayload.score)) ? Number(cleanPayload.score) : 0;
+  let resolvedRemarks = cleanPayload.teacher_remarks;
   if (
     resolvedScore === 0 &&
-    existingIdx >= 0 &&
-    parseFloat(localSubs[existingIdx].score) > 0 &&
-    payload.teacher_remarks &&
-    payload.teacher_remarks.includes("terminated early")
+    existingSub &&
+    parseFloat(existingSub.score) > 0 &&
+    cleanPayload.teacher_remarks &&
+    cleanPayload.teacher_remarks.includes("terminated early")
   ) {
-    resolvedScore = localSubs[existingIdx].score;
-    resolvedRemarks = `Sitting closed early by learner. Previous official mark (${resolvedScore}/${payload.max_score || 20}) preserved.`;
+    resolvedScore = parseFloat(existingSub.score);
+    resolvedRemarks = `Sitting closed early by learner. Previous official mark (${resolvedScore}/${cleanPayload.max_score || 20}) preserved.`;
   }
 
   // Ensure any historical first score is preserved as canonical
   if (prevScores.length > 0 && prevScores[0].score != null) {
-    resolvedScore = prevScores[0].score;
+    resolvedScore = Number(prevScores[0].score);
   }
 
   const newSub = {
-    id: payload.id || (existingIdx >= 0 ? localSubs[existingIdx].id : "sub-" + Date.now()),
-    ...payload,
+    id: cleanPayload.id || existingSub?.id || "sub-" + Date.now(),
+    ...cleanPayload,
+    learner_id: resolvedLearnerId,
     score: resolvedScore,
+    max_score: Number(cleanPayload.max_score) || 20,
     teacher_remarks: resolvedRemarks,
-    submitted_at: payload.submitted_at || new Date().toISOString(),
+    submitted_at: cleanPayload.submitted_at || new Date().toISOString(),
     status: "GRADED",
     retake_granted: false, // Reset retake flag once re-submitted
     retake_reason: null,
     previous_scores: prevScores,
+    _unsynced: true,
   };
 
   if (existingIdx >= 0) {
@@ -1250,10 +1476,10 @@ export async function saveAssessmentSubmission(payload) {
 
   // Also update learner in fallback list
   const fallbackLearners = getFallbackAllLearners();
-  const lrn = fallbackLearners.find((l) => l.id === payload.learner_id);
+  const lrn = fallbackLearners.find((l) => l.id === resolvedLearnerId);
   if (lrn) {
     lrn.submissions = lrn.submissions || [];
-    const lrnSubIdx = lrn.submissions.findIndex((s) => s.assessment_id === payload.assessment_id || s.id === newSub.id);
+    const lrnSubIdx = lrn.submissions.findIndex((s) => s.assessment_id === cleanPayload.assessment_id || s.id === newSub.id);
     if (lrnSubIdx >= 0) {
       lrn.submissions[lrnSubIdx] = { ...lrn.submissions[lrnSubIdx], ...newSub };
     } else {
@@ -1261,36 +1487,109 @@ export async function saveAssessmentSubmission(payload) {
     }
   }
 
-  const supabase = getSupabase();
-  if (supabase && payload.learner_id && !payload.learner_id.startsWith("demo-")) {
+  if (supabase && resolvedLearnerId && !String(resolvedLearnerId).startsWith("demo-") && isValidUuid(resolvedLearnerId) && isValidUuid(cleanPayload.assessment_id)) {
     try {
-      const { data, error } = await supabase
-        .from("submissions")
-        .upsert(
-          {
-            assessment_id: payload.assessment_id,
-            learner_id: payload.learner_id,
-            score: resolvedScore,
-            max_score: payload.max_score || 20,
-            correct_count: payload.correct_count,
-            incorrect_count: payload.incorrect_count,
-            answers: payload.answers,
-            submission_rank: payload.submission_rank,
-            status: "GRADED",
-            retake_granted: false,
-            retake_reason: null,
-            previous_scores: prevScores,
-            teacher_remarks: resolvedRemarks || "Completed online assessment via portal.",
-            submitted_at: newSub.submitted_at,
-          },
-          { onConflict: "assessment_id,learner_id" }
-        )
-        .select()
-        .single();
+      // Ensure learner exists in DB so FK submissions_learner_id_fkey cannot reject the submission
+      resolvedLearnerId = await ensureLearnerRowExists(supabase, resolvedLearnerId, learnerMeta);
+      newSub.learner_id = resolvedLearnerId;
 
-      if (!error && data) return data;
+      const fullDbPayload = {
+        assessment_id: cleanPayload.assessment_id,
+        learner_id: resolvedLearnerId,
+        score: resolvedScore,
+        max_score: Number(cleanPayload.max_score) || 20,
+        correct_count: cleanPayload.correct_count ?? 0,
+        incorrect_count: cleanPayload.incorrect_count ?? 0,
+        answers: cleanPayload.answers || {},
+        submission_rank: cleanPayload.submission_rank || 1,
+        status: "GRADED",
+        retake_granted: false,
+        retake_reason: null,
+        previous_scores: prevScores,
+        teacher_remarks: resolvedRemarks || "Completed online assessment via portal.",
+        submitted_at: existingDbRow?.submitted_at || newSub.submitted_at,
+      };
+
+      let dbRes;
+      if (existingDbRow?.id) {
+        dbRes = await supabase
+          .from("submissions")
+          .update(fullDbPayload)
+          .eq("id", existingDbRow.id)
+          .select()
+          .single();
+      } else {
+        dbRes = await supabase
+          .from("submissions")
+          .insert(fullDbPayload)
+          .select()
+          .single();
+      }
+
+      // If insert hit unique constraint 23505 (concurrent submit / already submitted), fetch canonical row & lock
+      if (dbRes.error && dbRes.error.code === "23505") {
+        const { data: conflictRow } = await supabase
+          .from("submissions")
+          .select("*")
+          .eq("assessment_id", cleanPayload.assessment_id)
+          .eq("learner_id", resolvedLearnerId)
+          .order("submitted_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (conflictRow) {
+          const firstData = resolveFirstSubmissionScore(conflictRow);
+          const lockedRow = { ...conflictRow, score: firstData.score, _unsynced: false };
+          const updatedLocal = getFallbackSubmissions();
+          const idx = updatedLocal.findIndex(
+            (s) => s.assessment_id === cleanPayload.assessment_id && s.learner_id === resolvedLearnerId
+          );
+          if (idx >= 0) updatedLocal[idx] = lockedRow;
+          else updatedLocal.unshift(lockedRow);
+          localStorage.setItem("jhs_local_submissions", JSON.stringify(updatedLocal));
+          return lockedRow;
+        }
+      }
+
+      // If optional columns caused schema cache error, retry with minimal core columns
+      if (dbRes.error && (dbRes.error.code === "PGRST204" || dbRes.error.code === "42703" || dbRes.error.code === "42P10")) {
+        console.warn("Supabase submissions schema mismatch, retrying core columns:", dbRes.error);
+        const corePayload = {
+          assessment_id: cleanPayload.assessment_id,
+          learner_id: resolvedLearnerId,
+          score: resolvedScore,
+          max_score: Number(cleanPayload.max_score) || 20,
+          correct_count: cleanPayload.correct_count ?? 0,
+          incorrect_count: cleanPayload.incorrect_count ?? 0,
+          answers: cleanPayload.answers || {},
+          status: "GRADED",
+          teacher_remarks: resolvedRemarks || "Completed online assessment via portal.",
+          submitted_at: existingDbRow?.submitted_at || newSub.submitted_at,
+        };
+        if (existingDbRow?.id) {
+          dbRes = await supabase.from("submissions").update(corePayload).eq("id", existingDbRow.id).select().single();
+        } else {
+          dbRes = await supabase.from("submissions").insert(corePayload).select().single();
+        }
+      }
+
+      if (dbRes.error) {
+        console.error("Supabase submission persistence error:", dbRes.error);
+      } else if (dbRes.data) {
+        const syncedSub = { ...dbRes.data, _unsynced: false };
+        const updatedLocal = getFallbackSubmissions();
+        const idx = updatedLocal.findIndex(
+          (s) =>
+            (s.assessment_id === cleanPayload.assessment_id || s.assessments?.id === cleanPayload.assessment_id) &&
+            s.learner_id === resolvedLearnerId
+        );
+        if (idx >= 0) updatedLocal[idx] = syncedSub;
+        else updatedLocal.unshift(syncedSub);
+        localStorage.setItem("jhs_local_submissions", JSON.stringify(updatedLocal));
+        return syncedSub;
+      }
     } catch (e) {
-      console.warn("Supabase submission upsert failed, retained in local storage:", e);
+      console.warn("Supabase submission persistence failed, retained in local storage:", e);
     }
   }
 
