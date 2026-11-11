@@ -2941,9 +2941,10 @@ export async function syncCallRecordingToGoogleDrive(record, base64Data) {
   const webhookUrl = getGoogleDriveWebhookUrl();
 
   const userFolderName = record.user_folder || `${record.caller_name || "Student"} (Basic 9)`;
+  const fallbackMime = String(record.call_type || "").toLowerCase().includes("video") ? "video/webm" : "audio/webm";
   const drivePayload = {
     fileName: record.file_name,
-    mimeType: record.mime_type || "video/webm",
+    mimeType: record.mime_type || fallbackMime,
     base64Data: base64Data || "",
     callType: record.call_type,
     callerName: record.caller_name,
@@ -3041,7 +3042,8 @@ export async function syncAllPendingVaultRecordings() {
       });
 
       if (base64Data) {
-        const res = await syncCallRecordingToGoogleDrive(rec, base64Data);
+        const recWithMime = blob.type && !rec.mime_type ? { ...rec, mime_type: blob.type } : rec;
+        const res = await syncCallRecordingToGoogleDrive(recWithMime, base64Data);
         if (res && res.success) {
           rec.drive_sync_status = "synced";
           if (res.webViewLink) rec.drive_web_link = res.webViewLink;

@@ -840,6 +840,8 @@ interface ActiveCallState {
   recorder: MediaRecorder | null;
   recordedChunks: Blob[];
   recordingStartedAt: number | null;
+  recordingMimeType: string;
+  recordingPipeline: any | null;
   isConference: boolean;
   conferenceTitle: string;
   isGridView: boolean;
@@ -879,6 +881,8 @@ const activeCall: ActiveCallState = {
   recorder: null,
   recordedChunks: [],
   recordingStartedAt: null,
+  recordingMimeType: "audio/webm",
+  recordingPipeline: null,
   isConference: false,
   conferenceTitle: "Basic 9 Computing Group Conference",
   isGridView: true,
@@ -995,6 +999,8 @@ const bannerDeadline = document.getElementById("bannerDeadline");
 // ------------------------------------------------------------------------------
 // Initialization & Application Lifecycle
 // ------------------------------------------------------------------------------
+let isCheckingAuthSession = false;
+
 async function startApplication() {
   // Strictly purge any legacy cached assessments that contain Creative Arts, Math, Quiz, Project, or Exams
   try {
@@ -1046,12 +1052,6 @@ async function startApplication() {
 (window as any).showAuthLoaderSuccess = showAuthLoaderSuccess;
 (window as any).hideAuthLoader = hideAuthLoader;
 (window as any).handleClearMockData = handleClearMockData;
-
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => startApplication());
-} else {
-  startApplication();
-}
 
 // ------------------------------------------------------------------------------
 // Dynamic Google Auth Loader Controller
@@ -1105,8 +1105,6 @@ function hideAuthLoader() {
 // ------------------------------------------------------------------------------
 // Auth & Session Management
 // ------------------------------------------------------------------------------
-let isCheckingAuthSession = false;
-
 async function checkAuthSession() {
   if (isCheckingAuthSession) return;
   isCheckingAuthSession = true;
@@ -13322,7 +13320,7 @@ async function startAudioRecording() {
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunks.push(e.data);
       };
-      mediaRecorder.start();
+      mediaRecorder.start(250);
     }
   } catch (err) {
     console.warn("Microphone hardware access not active, running voice note simulation:", err);
@@ -13367,26 +13365,41 @@ async function sendAudioRecording() {
 
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       try {
-        mediaRecorder.stop();
+        const recorderInstance = mediaRecorder;
         await new Promise<void>((resolve) => {
-          mediaRecorder.onstop = () => {
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve();
+          };
+          const timer = window.setTimeout(finish, 600);
+          recorderInstance.onstop = () => {
+            clearTimeout(timer);
             if (audioChunks.length > 0) {
-              const blob = new Blob(audioChunks, { type: "audio/webm" });
+              const voiceMime = (recorderInstance.mimeType || "audio/webm").split(";")[0] || "audio/webm";
+              const blob = new Blob(audioChunks, { type: voiceMime });
               const reader = new FileReader();
               reader.onloadend = () => {
                 if (reader.result && typeof reader.result === "string" && reader.result.startsWith("data:")) {
                   finalAudioUrl = reader.result;
                 }
-                resolve();
+                finish();
               };
               reader.onerror = () => {
-                resolve();
+                finish();
               };
               reader.readAsDataURL(blob);
             } else {
-              resolve();
+              finish();
             }
           };
+          try {
+            if (recorderInstance.state === "recording" && typeof recorderInstance.requestData === "function") {
+              recorderInstance.requestData();
+            }
+          } catch (e) {}
+          recorderInstance.stop();
         });
       } catch (e) {
         console.warn("Media recorder stop error:", e);
@@ -13648,23 +13661,39 @@ function createSyntheticCallStream(userName: string): MediaStream {
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.fillText(new Date().toLocaleTimeString(), 320, 385);
 
-    requestAnimationFrame(renderFrame);
+    if (!(canvas as any).__syntheticStopped) {
+      requestAnimationFrame(renderFrame);
+    }
   }
+  (canvas as any).__syntheticStopped = false;
   renderFrame();
 
   const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : new MediaStream();
+  (stream as any).__isSynthetic = true;
 
+  let syntheticAudioCtx: AudioContext | null = null;
   try {
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    gain.gain.value = 0.001;
-    osc.connect(gain);
-    const dest = audioCtx.createMediaStreamDestination();
-    gain.connect(dest);
-    osc.start();
-    dest.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtx) {
+      syntheticAudioCtx = new AudioCtx();
+      const silentGain = syntheticAudioCtx.createGain();
+      silentGain.gain.value = 0;
+      const dest = syntheticAudioCtx.createMediaStreamDestination();
+      silentGain.connect(dest);
+      dest.stream.getAudioTracks().forEach((track) => stream.addTrack(track));
+    }
   } catch (e) {}
+
+  stream.getTracks().forEach((track: MediaStreamTrack) => {
+    const origStop = track.stop.bind(track);
+    track.stop = () => {
+      (canvas as any).__syntheticStopped = true;
+      if (syntheticAudioCtx && syntheticAudioCtx.state !== "closed") {
+        syntheticAudioCtx.close().catch(() => {});
+      }
+      origStop();
+    };
+  });
 
   return stream;
 }
@@ -13738,11 +13767,22 @@ function releaseAllMediaHardware() {
       activeCall.conferenceParticipants = [];
     }
 
-    // 6. Stop media recorder if active
-    if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
-      try { activeCall.recorder.stop(); } catch (e) {}
+    // 6. Stop media recorder only if not currently flushing async chunks in stopAndSaveCallRecording
+    if (!(activeCall as any).isFlushingRecorder) {
+      if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
+        try { activeCall.recorder.stop(); } catch (e) {}
+      }
+      activeCall.recorder = null;
+      cleanupRecordingPipeline();
     }
-    activeCall.recorder = null;
+
+    const remoteAudioOut = document.getElementById("callRemoteAudioOutput") as HTMLAudioElement | null;
+    if (remoteAudioOut) {
+      try {
+        remoteAudioOut.pause();
+        remoteAudioOut.srcObject = null;
+      } catch (e) {}
+    }
 
     // 7. Clean and detach all video elements in the DOM
     if (callLocalVideo) {
@@ -14597,11 +14637,14 @@ async function activateVideoMode({ localCameraOn, remoteCameraOn }: { localCamer
       activeCall.remoteStream = createSyntheticCallStream(`${partnerName} (Live Remote)`);
     }
     if (callRemoteVideo && activeCall.remoteStream) {
+      ensureRemoteAudioOutput(activeCall.remoteStream);
+      callRemoteVideo.muted = true;
       callRemoteVideo.srcObject = activeCall.remoteStream;
       callRemoteVideo.play().catch(() => {});
     }
   }
 
+  syncRecordingStreams();
   if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
   updateCallStageUI();
 }
@@ -14711,11 +14754,26 @@ async function createPeerConnection(isInitiator: boolean): Promise<RTCPeerConnec
   pc.ontrack = (event) => {
     if (event.streams && event.streams[0]) {
       activeCall.remoteStream = event.streams[0];
+      ensureRemoteAudioOutput(event.streams[0]);
       if (callRemoteVideo) {
+        callRemoteVideo.muted = true;
         callRemoteVideo.srcObject = event.streams[0];
         callRemoteVideo.play().catch(() => {});
       }
       if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
+      syncRecordingStreams();
+    } else if (event.track) {
+      if (!activeCall.remoteStream || (activeCall.remoteStream as any).__isSynthetic) {
+        activeCall.remoteStream = new MediaStream();
+      }
+      activeCall.remoteStream.addTrack(event.track);
+      ensureRemoteAudioOutput(activeCall.remoteStream);
+      if (callRemoteVideo && event.track.kind === "video") {
+        callRemoteVideo.muted = true;
+        callRemoteVideo.srcObject = activeCall.remoteStream;
+        callRemoteVideo.play().catch(() => {});
+      }
+      syncRecordingStreams();
     }
 
     if (event.track && event.track.kind === "video") {
@@ -15482,14 +15540,20 @@ function endVideoCall(notifyPeer: boolean = true) {
   (activeCall as any).isEnding = true;
   activeCall.status = "idle";
 
-  // 1. Immediately terminate and disconnect all physical camera and microphone hardware!
-  releaseAllMediaHardware();
-
-  // 2. Wrap background recording upload safely (single execution per call)
+  // 1. Flush behind-the-scene recorder while media tracks are still live, then release all physical hardware
   try {
-    stopAndSaveCallRecording().catch((err) => console.warn("Recording save error:", err));
+    stopAndSaveCallRecording()
+      .catch((err) => console.warn("Recording save error:", err))
+      .finally(() => {
+        cleanupRecordingPipeline();
+        if (activeCall.status === "idle") {
+          releaseAllMediaHardware();
+        }
+      });
   } catch (err) {
     console.warn("Recording save error:", err);
+    cleanupRecordingPipeline();
+    releaseAllMediaHardware();
   }
 
   // 3. Notify remote peer of call termination
@@ -15670,6 +15734,7 @@ async function toggleCallCamera() {
     showCallNoticeToast("Your camera is now on.");
   }
 
+  syncRecordingStreams();
   updateCallStageUI();
 }
 
@@ -15701,12 +15766,14 @@ async function startScreenShare() {
       }
     }
 
-    // Display screen track on remote/stage video view
+    // Display screen track on remote/stage video view while remote audio keeps playing via #callRemoteAudioOutput
     if (callRemoteVideo) {
+      callRemoteVideo.muted = true;
       callRemoteVideo.srcObject = screenStream;
       callRemoteVideo.play().catch(() => {});
       if (callWaitingOverlay) callWaitingOverlay.classList.add("hidden");
     }
+    syncRecordingStreams();
 
     // Show screen share presentation banner
     if (callScreenShareBanner) callScreenShareBanner.classList.remove("hidden");
@@ -15985,43 +16052,294 @@ function lowerRaisedHand(isSelfInitiated: boolean = true) {
 // ------------------------------------------------------------------------------
 // Behind-the-Scene Automatic Call Recording & Google Drive Cloud Backup (computing.b9@gmail.com)
 // ------------------------------------------------------------------------------
+const sessionRecordingBlobCache = new Map<string, Blob>();
+let activePlayerObjectUrl: string | null = null;
+
+function normalizeCallTypeValue(callType?: string | null, fileName?: string | null): "voice" | "video" {
+  const combined = `${callType || ""} ${fileName || ""}`.toLowerCase();
+  return combined.includes("video") ? "video" : "voice";
+}
+
+function isVideoRecordingRecord(rec: any): boolean {
+  return normalizeCallTypeValue(rec?.call_type, rec?.file_name) === "video";
+}
+
+function pickSupportedRecorderMime(isVideo: boolean): string {
+  const fallback = isVideo ? "video/webm" : "audio/webm";
+  if (typeof MediaRecorder === "undefined" || typeof (MediaRecorder as any).isTypeSupported !== "function") {
+    return fallback;
+  }
+  const candidates = isVideo
+    ? ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm;codecs=vp8", "video/webm", "video/mp4"]
+    : ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+  for (const candidate of candidates) {
+    try {
+      if ((MediaRecorder as any).isTypeSupported(candidate)) return candidate;
+    } catch (e) {}
+  }
+  return fallback;
+}
+
+function ensureRemoteAudioOutput(stream?: MediaStream | null) {
+  if (!stream || (stream as any).__isSynthetic) return;
+  const audioTracks = stream.getAudioTracks().filter((t) => t.readyState !== "ended");
+  if (audioTracks.length === 0) return;
+
+  let audioEl = document.getElementById("callRemoteAudioOutput") as HTMLAudioElement | null;
+  if (!audioEl) {
+    audioEl = document.createElement("audio");
+    audioEl.id = "callRemoteAudioOutput";
+    audioEl.autoplay = true;
+    (audioEl as any).playsInline = true;
+    audioEl.style.cssText = "position:fixed;width:0;height:0;opacity:0;pointer-events:none;";
+    document.body.appendChild(audioEl);
+  }
+
+  // Mute video tag when remote audio plays through dedicated offscreen audio tag (prevents echo & works during hidden stage/screen share)
+  if (callRemoteVideo) {
+    callRemoteVideo.muted = true;
+  }
+
+  const audioOnlyStream = new MediaStream(audioTracks);
+  audioEl.srcObject = audioOnlyStream;
+  audioEl.play().catch(() => {});
+}
+
+function cleanupRecordingPipeline() {
+  const pipeline = activeCall.recordingPipeline;
+  if (!pipeline) return;
+  activeCall.recordingPipeline = null;
+
+  if (pipeline.drawTimer) {
+    try { clearInterval(pipeline.drawTimer); } catch (e) {}
+    pipeline.drawTimer = null;
+  }
+  if (Array.isArray(pipeline.sourceNodes)) {
+    pipeline.sourceNodes.forEach((node: any) => {
+      try { node.disconnect(); } catch (e) {}
+    });
+  }
+  if (pipeline.composedStream) {
+    try {
+      pipeline.composedStream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+    } catch (e) {}
+  }
+  if (pipeline.mixDest?.stream) {
+    try {
+      pipeline.mixDest.stream.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+    } catch (e) {}
+  }
+  if (pipeline.audioCtx && pipeline.audioCtx.state !== "closed") {
+    try { pipeline.audioCtx.close().catch(() => {}); } catch (e) {}
+  }
+}
+
+function syncRecordingStreams() {
+  const pipeline = activeCall.recordingPipeline;
+  if (!pipeline || !pipeline.audioCtx || !pipeline.mixDest) return;
+
+  const candidateStreams: (MediaStream | null | undefined)[] = [
+    activeCall.localStream,
+    activeCall.remoteStream,
+    activeCall.screenStream,
+    ...((activeCall.conferenceParticipants || []).map((p: any) => p?.stream)),
+  ];
+
+  for (const stream of candidateStreams) {
+    if (!stream || (stream as any).__isSynthetic) continue;
+    for (const track of stream.getAudioTracks()) {
+      if (track.readyState === "ended" || pipeline.attachedTrackIds.has(track.id)) continue;
+      try {
+        const src = pipeline.audioCtx.createMediaStreamSource(new MediaStream([track]));
+        src.connect(pipeline.mixDest);
+        pipeline.sourceNodes.push(src);
+        pipeline.attachedTrackIds.add(track.id);
+      } catch (err) {
+        console.warn("Unable to attach audio track to call mixer:", err);
+      }
+    }
+  }
+
+  if (pipeline.audioCtx.state === "suspended") {
+    pipeline.audioCtx.resume().catch(() => {});
+  }
+}
+
+function drawVideoElementCoverOrContain(
+  ctx: CanvasRenderingContext2D,
+  videoEl: HTMLVideoElement,
+  dx: number,
+  dy: number,
+  dw: number,
+  dh: number,
+  mode: "contain" | "cover"
+) {
+  const vw = videoEl.videoWidth;
+  const vh = videoEl.videoHeight;
+  if (!vw || !vh) return;
+  const srcRatio = vw / vh;
+  const dstRatio = dw / dh;
+
+  if (mode === "contain") {
+    let rw = dw;
+    let rh = dh;
+    if (srcRatio > dstRatio) {
+      rh = dw / srcRatio;
+    } else {
+      rw = dh * srcRatio;
+    }
+    const rx = dx + (dw - rw) / 2;
+    const ry = dy + (dh - rh) / 2;
+    ctx.drawImage(videoEl, rx, ry, rw, rh);
+  } else {
+    let sx = 0;
+    let sy = 0;
+    let sw = vw;
+    let sh = vh;
+    if (srcRatio > dstRatio) {
+      sw = vh * dstRatio;
+      sx = (vw - sw) / 2;
+    } else {
+      sh = vw / dstRatio;
+      sy = (vh - sh) / 2;
+    }
+    ctx.drawImage(videoEl, sx, sy, sw, sh, dx, dy, dw, dh);
+  }
+}
+
+function hasLiveVideoElement(videoEl: HTMLVideoElement | null, isCameraOffFlag: boolean): boolean {
+  if (!videoEl || !videoEl.srcObject) return false;
+  const stream = videoEl.srcObject as MediaStream & { __isSynthetic?: boolean };
+  if (stream.__isSynthetic) return false;
+  if (isCameraOffFlag && !activeCall.isScreenSharing) return false;
+  const hasLiveTrack = stream.getVideoTracks().some((t) => t.readyState === "live" && t.enabled);
+  return hasLiveTrack && videoEl.readyState >= 2 && videoEl.videoWidth > 0 && videoEl.videoHeight > 0;
+}
+
 function startBehindTheSceneCallRecording() {
   if (activeCall.recorder && activeCall.recorder.state !== "inactive") return;
+  cleanupRecordingPipeline();
   activeCall.recordedChunks = [];
   activeCall.recordingStartedAt = Date.now();
 
   try {
-    let streamToRecord: MediaStream | null = null;
-    if (activeCall.callType === "video") {
-      if (activeCall.remoteStream && activeCall.remoteStream.getTracks().length > 0) {
-        streamToRecord = activeCall.remoteStream;
-      } else if (activeCall.localStream && activeCall.localStream.getTracks().length > 0) {
-        streamToRecord = activeCall.localStream;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) {
+      console.warn("AudioContext not supported; skipping call recording.");
+      return;
+    }
+
+    const audioCtx = new AudioCtx();
+    const mixDest = audioCtx.createMediaStreamDestination();
+    const isVideoCall = activeCall.callType === "video";
+    const mimeType = pickSupportedRecorderMime(isVideoCall);
+
+    const pipeline: any = {
+      audioCtx,
+      mixDest,
+      attachedTrackIds: new Set<string>(),
+      sourceNodes: [],
+      canvas: null,
+      drawTimer: null,
+      composedStream: null,
+      isVideo: isVideoCall,
+      mimeType,
+    };
+    activeCall.recordingPipeline = pipeline;
+    syncRecordingStreams();
+
+    let streamToRecord: MediaStream = mixDest.stream;
+
+    if (isVideoCall) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext("2d");
+      pipeline.canvas = canvas;
+
+      const drawCompositeFrame = () => {
+        if (!ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+        bgGrad.addColorStop(0, "#0f172a");
+        bgGrad.addColorStop(1, "#020617");
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        const remoteReady =
+          hasLiveVideoElement(callRemoteVideo, activeCall.isRemoteCameraOff) ||
+          (activeCall.isScreenSharing && !!callRemoteVideo?.srcObject && callRemoteVideo.readyState >= 2 && callRemoteVideo.videoWidth > 0);
+        const localReady = hasLiveVideoElement(callLocalVideo, activeCall.isCameraOff);
+
+        let drewRemoteMain = false;
+        if (remoteReady && callRemoteVideo) {
+          drawVideoElementCoverOrContain(ctx, callRemoteVideo, 0, 0, w, h, "contain");
+          drewRemoteMain = true;
+        } else if (localReady && callLocalVideo) {
+          drawVideoElementCoverOrContain(ctx, callLocalVideo, 0, 0, w, h, "contain");
+        } else {
+          const partnerName = activeCall.partner?.full_name || "Participant";
+          ctx.fillStyle = "rgba(255,255,255,0.08)";
+          ctx.beginPath();
+          ctx.arc(w / 2, h / 2 - 28, 56, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#e2e8f0";
+          ctx.font = "600 28px system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(partnerName, w / 2, h / 2 + 58);
+          ctx.fillStyle = "#94a3b8";
+          ctx.font = "400 18px system-ui, sans-serif";
+          ctx.fillText("Video paused • Audio active", w / 2, h / 2 + 92);
+        }
+
+        if (drewRemoteMain && localReady && callLocalVideo) {
+          const pipW = 256;
+          const pipH = 192;
+          const pipX = w - pipW - 24;
+          const pipY = h - pipH - 24;
+          ctx.save();
+          ctx.fillStyle = "#020617";
+          ctx.fillRect(pipX - 3, pipY - 3, pipW + 6, pipH + 6);
+          ctx.strokeStyle = "rgba(255,255,255,0.45)";
+          ctx.lineWidth = 3;
+          ctx.strokeRect(pipX - 1.5, pipY - 1.5, pipW + 3, pipH + 3);
+          drawVideoElementCoverOrContain(ctx, callLocalVideo, pipX, pipY, pipW, pipH, "cover");
+          ctx.restore();
+        }
+      };
+
+      drawCompositeFrame();
+      pipeline.drawTimer = window.setInterval(drawCompositeFrame, Math.round(1000 / 24));
+
+      const composedStream = new MediaStream();
+      const canvasStream = (canvas as any).captureStream ? (canvas as any).captureStream(24) : null;
+      if (canvasStream) {
+        canvasStream.getVideoTracks().forEach((t: MediaStreamTrack) => composedStream.addTrack(t));
       }
-    } else {
-      if (activeCall.remoteStream && activeCall.remoteStream.getAudioTracks().length > 0) {
-        streamToRecord = activeCall.remoteStream;
-      } else if (activeCall.localStream && activeCall.localStream.getAudioTracks().length > 0) {
-        streamToRecord = activeCall.localStream;
+      mixDest.stream.getAudioTracks().forEach((t) => composedStream.addTrack(t));
+      pipeline.composedStream = composedStream;
+      streamToRecord = composedStream;
+    }
+
+    const recorderOptions: MediaRecorderOptions = isVideoCall
+      ? { mimeType, videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 }
+      : { mimeType, audioBitsPerSecond: 64000 };
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(streamToRecord, recorderOptions);
+    } catch (optErr) {
+      try {
+        recorder = new MediaRecorder(streamToRecord, { mimeType });
+      } catch (mimeErr) {
+        recorder = new MediaRecorder(streamToRecord);
       }
     }
 
-    if (!streamToRecord || streamToRecord.getTracks().length === 0) {
-      const partnerName = activeCall.partner?.full_name || "Partner";
-      streamToRecord = createSyntheticCallStream(`${partnerName} (Session)`);
-    }
-
-    let mimeType = activeCall.callType === "video" ? "video/webm" : "audio/webm";
-    if (typeof MediaRecorder !== "undefined" && (MediaRecorder as any).isTypeSupported) {
-      if ((MediaRecorder as any).isTypeSupported("video/webm;codecs=vp9,opus")) {
-        mimeType = activeCall.callType === "video" ? "video/webm;codecs=vp9,opus" : "audio/webm;codecs=opus";
-      } else if ((MediaRecorder as any).isTypeSupported("video/webm;codecs=vp8,opus")) {
-        mimeType = activeCall.callType === "video" ? "video/webm;codecs=vp8,opus" : "audio/webm;codecs=opus";
-      }
-    }
-
-    const recorder = new MediaRecorder(streamToRecord, { mimeType });
     activeCall.recorder = recorder;
+    activeCall.recordingMimeType = recorder.mimeType || mimeType;
+    pipeline.mimeType = activeCall.recordingMimeType;
 
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
@@ -16032,41 +16350,108 @@ function startBehindTheSceneCallRecording() {
     recorder.start(1000);
   } catch (err) {
     console.warn("Background MediaRecorder initialization error:", err);
+    cleanupRecordingPipeline();
   }
 }
 
+async function flushActiveMediaRecorder(): Promise<Blob[]> {
+  const recorder = activeCall.recorder;
+  if (!recorder) {
+    const remaining = [...activeCall.recordedChunks];
+    activeCall.recordedChunks = [];
+    return remaining;
+  }
+
+  (activeCall as any).isFlushingRecorder = true;
+  try {
+    if (recorder.state !== "inactive") {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        const timeout = window.setTimeout(finish, 600);
+        const prevOnStop = recorder.onstop;
+        recorder.onstop = (ev) => {
+          clearTimeout(timeout);
+          try {
+            if (typeof prevOnStop === "function") prevOnStop.call(recorder, ev);
+          } catch (e) {}
+          finish();
+        };
+        try {
+          if (recorder.state === "recording" && typeof recorder.requestData === "function") {
+            recorder.requestData();
+          }
+        } catch (e) {}
+        try {
+          recorder.stop();
+        } catch (e) {
+          clearTimeout(timeout);
+          finish();
+        }
+      });
+    }
+  } finally {
+    (activeCall as any).isFlushingRecorder = false;
+    activeCall.recorder = null;
+  }
+
+  const chunks = [...activeCall.recordedChunks];
+  activeCall.recordedChunks = [];
+  return chunks;
+}
+
 async function stopAndSaveCallRecording() {
+  // Snapshot call metadata synchronously BEFORE endVideoCall resets state on hangup
   const currentCallId = activeCall.callId;
-  if (!currentCallId) return;
+  if (!currentCallId) {
+    cleanupRecordingPipeline();
+    return;
+  }
 
   // Global Set of already saved call sessions to guarantee 100% single-upload deduplication
   if (!(window as any)._savedCallSessionIds) {
     (window as any)._savedCallSessionIds = new Set<string>();
   }
   if ((window as any)._savedCallSessionIds.has(currentCallId)) {
+    cleanupRecordingPipeline();
     return;
   }
   (window as any)._savedCallSessionIds.add(currentCallId);
 
-  const chunks = [...activeCall.recordedChunks];
-  activeCall.recordedChunks = []; // Drain immediately to prevent any duplicate capture
+  const snapshotPipeline = activeCall.recordingPipeline;
+  const recordedIsVideo = typeof snapshotPipeline?.isVideo === "boolean"
+    ? snapshotPipeline.isVideo
+    : activeCall.callType === "video";
+  const snapshotMimeType = snapshotPipeline?.mimeType || activeCall.recordingMimeType || (recordedIsVideo ? "video/webm" : "audio/webm");
+  const partner = activeCall.partner ? { ...activeCall.partner } : null;
+  const isCaller = activeCall.isCaller;
+  const isConf = activeCall.isConference;
+  const confTitle = activeCall.conferenceTitle || "Basic_9_Study_Conference";
+  const snapshotParticipants = [...(activeCall.conferenceParticipants || [])];
+  const durationSec = activeCall.secondsElapsed || (activeCall.recordingStartedAt ? Math.max(1, Math.round((Date.now() - activeCall.recordingStartedAt) / 1000)) : 0);
 
-  if (activeCall.recorder && activeCall.recorder.state !== "inactive") {
-    try {
-      activeCall.recorder.stop();
-    } catch (e) {}
+  let chunks: Blob[] = [];
+  try {
+    chunks = await flushActiveMediaRecorder();
+  } finally {
+    cleanupRecordingPipeline();
   }
-  activeCall.recorder = null;
 
-  const durationSec = activeCall.secondsElapsed || (activeCall.recordingStartedAt ? Math.round((Date.now() - activeCall.recordingStartedAt) / 1000) : 0);
-
-  // If the call was instantly cancelled/declined or has 0 chunks and under 1s duration, skip upload
-  if (chunks.length === 0 && durationSec < 1) {
+  if (chunks.length === 0) {
     return;
   }
 
-  const callType = activeCall.callType;
-  const partner = activeCall.partner;
+  const normalizedMime = snapshotMimeType.split(";")[0] || (recordedIsVideo ? "video/webm" : "audio/webm");
+  const finalBlob = new Blob(chunks, { type: normalizedMime });
+  if (finalBlob.size < 256) {
+    return;
+  }
+
+  const callType: "voice" | "video" = recordedIsVideo ? "video" : "voice";
   const callId = currentCallId;
 
   // Identify who the participants are
@@ -16076,11 +16461,9 @@ async function stopAndSaveCallRecording() {
   const otherName = partner?.full_name || (isCurrentAdmin ? "Learner" : "Master Debrah");
   const otherClass = partner?.class_level || (isCurrentAdmin ? "Basic 9" : "");
 
-  const callerName = activeCall.isCaller ? myName : otherName;
-  const recipientName = activeCall.isCaller ? otherName : myName;
+  const callerName = isCaller ? myName : otherName;
+  const recipientName = isCaller ? otherName : myName;
 
-  const isConf = activeCall.isConference;
-  const confTitle = activeCall.conferenceTitle || "Basic_9_Study_Conference";
   const cleanTitle = confTitle.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
 
   // Determine intelligent user folder in Google Drive:
@@ -16114,29 +16497,19 @@ async function stopAndSaveCallRecording() {
   const callTypeLabel = isConf
     ? (callType === "video" ? "Video_Conference" : "Voice_Conference")
     : (callType === "video" ? "Video_Call" : "Voice_Call");
+  const ext = normalizedMime.includes("mp4") ? "mp4" : (normalizedMime.includes("ogg") ? "ogg" : "webm");
 
   let fileName = "";
   if (isConf) {
-    fileName = `${cleanTitle}_${callTypeLabel}_${timeLabel}.webm`;
+    fileName = `${cleanTitle}_${callTypeLabel}_${timeLabel}.${ext}`;
   } else if (!isCurrentAdmin && !otherName.includes("Master") && partner?.role !== "admin") {
     const cleanA = myName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
     const cleanB = otherName.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
-    fileName = `${cleanA}_and_${cleanB}_${callTypeLabel}_${timeLabel}.webm`;
+    fileName = `${cleanA}_and_${cleanB}_${callTypeLabel}_${timeLabel}.${ext}`;
   } else {
     const learnerSubject = isCurrentAdmin ? otherName : myName;
     const cleanStudent = learnerSubject.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
-    fileName = `${cleanStudent}_${callTypeLabel}_${timeLabel}.webm`;
-  }
-
-  let mimeType = callType === "video" ? "video/webm" : "audio/webm";
-  let finalBlob: Blob;
-
-  if (chunks.length > 0) {
-    finalBlob = new Blob(chunks, { type: mimeType });
-  } else {
-    const dataUri = generateVoiceNoteWavDataUrl(durationSec || 5);
-    const resp = await fetch(dataUri);
-    finalBlob = await resp.blob();
+    fileName = `${cleanStudent}_${callTypeLabel}_${timeLabel}.${ext}`;
   }
 
   const fileSizeBytes = finalBlob.size;
@@ -16145,16 +16518,16 @@ async function stopAndSaveCallRecording() {
     : `${Math.max(1, Math.round(fileSizeBytes / 1024))} KB`;
 
   const recId = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const blobUrl = URL.createObjectURL(finalBlob);
 
   const participantNames = isConf
-    ? activeCall.conferenceParticipants.map((p) => p.name).join(", ")
+    ? snapshotParticipants.map((p) => p.name).join(", ")
     : `${callerName} & ${recipientName}`;
 
   const recordingRecord: any = {
     id: recId,
     call_id: callId,
-    call_type: callTypeLabel,
+    call_type: callType,
+    mime_type: normalizedMime,
     caller_id: getMyUserId(),
     caller_name: isConf ? `${callerName} (Conference Host)` : callerName,
     recipient_id: partner?.id || null,
@@ -16168,11 +16541,12 @@ async function stopAndSaveCallRecording() {
     target_email: GOOGLE_DRIVE_TARGET_EMAIL,
     drive_folder: GOOGLE_DRIVE_TARGET_FOLDER,
     drive_sync_status: "synced",
-    recording_url: blobUrl,
+    recording_url: null,
     created_at: now.toISOString(),
   };
 
-  // 1. Buffer blob temporarily in IndexedDB Vault while uploading
+  // 1. Buffer blob temporarily in memory cache & IndexedDB Vault while uploading
+  sessionRecordingBlobCache.set(recId, finalBlob);
   await storeRecordingBlobInVault(recId, finalBlob);
 
   // 2. Read as base64 and dispatch to Google Drive webhook behind the scenes
@@ -16193,9 +16567,7 @@ async function stopAndSaveCallRecording() {
         // USER STRICT PRIVACY REQUIREMENT:
         // Once successfully uploaded to Google Drive, DELETE the media blob from browser storage completely!
         await deleteRecordingBlobFromVault(recId);
-        if (blobUrl) {
-          try { URL.revokeObjectURL(blobUrl); } catch (e) {}
-        }
+        sessionRecordingBlobCache.delete(recId);
         recordingRecord.recording_url = driveRes.webViewLink || null;
       } else {
         recordingRecord.drive_sync_status = "local_vault";
@@ -16255,7 +16627,7 @@ async function renderAdminCallRecordings() {
   const searchFilter = (recordingsSearchInput?.value || "").trim().toLowerCase();
 
   let filtered = recordings.filter((r: any) => {
-    if (typeFilter !== "ALL" && r.call_type !== typeFilter) return false;
+    if (typeFilter !== "ALL" && normalizeCallTypeValue(r.call_type, r.file_name) !== typeFilter) return false;
     if (searchFilter) {
       const matchName = (r.caller_name || "").toLowerCase().includes(searchFilter) ||
                         (r.recipient_name || "").toLowerCase().includes(searchFilter) ||
@@ -16315,7 +16687,7 @@ async function renderAdminCallRecordings() {
   let mobileCardsHtml = "";
 
   filtered.forEach((rec: any) => {
-    const isVideo = rec.call_type === "video";
+    const isVideo = isVideoRecordingRecord(rec);
     const typeBadge = isVideo
       ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0"><i class="fa-solid fa-video text-[9px]"></i> 1080p Video</span>`
       : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0"><i class="fa-solid fa-phone text-[9px]"></i> HD Voice</span>`;
@@ -16647,7 +17019,8 @@ async function renderAdminCallRecordings() {
           const reader = new FileReader();
           reader.onloadend = async () => {
             const base64Data = ((reader.result as string || "")).split(",")[1] || "";
-            const res = await syncCallRecordingToGoogleDrive(rec, base64Data);
+            const recWithMime = blob.type && !rec.mime_type ? { ...rec, mime_type: blob.type } : rec;
+            const res = await syncCallRecordingToGoogleDrive(recWithMime, base64Data);
             if (res && res.success) {
               rec.drive_sync_status = "synced";
               if (res.webViewLink) rec.drive_web_link = res.webViewLink;
@@ -16833,6 +17206,11 @@ async function handleSyncVaultRecordingsToDrive() {
 async function playRecordingModal(rec: any) {
   if (!callRecordingPlayerModal) return;
 
+  if (activePlayerObjectUrl) {
+    try { URL.revokeObjectURL(activePlayerObjectUrl); } catch (e) {}
+    activePlayerObjectUrl = null;
+  }
+
   if (playerModalTitle) playerModalTitle.textContent = rec.file_name;
   if (playerModalDriveInfo) {
     playerModalDriveInfo.textContent = `Folder: ${rec.user_folder || "Learner Folder"} • computing.b9@gmail.com Drive`;
@@ -16845,21 +17223,29 @@ async function playRecordingModal(rec: any) {
   }
 
   let mediaUrl = rec.recording_url;
-  const storedBlob = await getRecordingBlobFromVault(rec.id);
+  const storedBlob = sessionRecordingBlobCache.get(rec.id) || (await getRecordingBlobFromVault(rec.id));
   if (storedBlob) {
-    mediaUrl = URL.createObjectURL(storedBlob);
+    activePlayerObjectUrl = URL.createObjectURL(storedBlob);
+    mediaUrl = activePlayerObjectUrl;
   } else if (rec.drive_web_link) {
     // Media was uploaded and purged from browser storage: play in Google Drive
     window.open(rec.drive_web_link, "_blank");
     return;
+  } else if (!mediaUrl || String(mediaUrl).startsWith("blob:")) {
+    alert("This recording media is not stored locally in this browser. Open Google Drive to play archived calls.");
+    return;
   }
 
-  const isVideo = rec.call_type === "video";
+  const isVideo = isVideoRecordingRecord(rec);
   if (playerTypeIcon) {
     playerTypeIcon.innerHTML = isVideo ? `<i class="fa-solid fa-video"></i>` : `<i class="fa-solid fa-phone"></i>`;
   }
 
   if (isVideo) {
+    if (playerAudioEl) {
+      playerAudioEl.pause();
+      playerAudioEl.src = "";
+    }
     if (playerAudioStage) playerAudioStage.classList.add("hidden");
     if (playerVideoEl) {
       playerVideoEl.classList.remove("hidden");
@@ -16869,6 +17255,7 @@ async function playRecordingModal(rec: any) {
   } else {
     if (playerVideoEl) {
       playerVideoEl.pause();
+      playerVideoEl.src = "";
       playerVideoEl.classList.add("hidden");
     }
     if (playerAudioStage) {
@@ -16898,13 +17285,17 @@ function closeRecordingPlayerModal() {
     playerAudioEl.pause();
     playerAudioEl.src = "";
   }
+  if (activePlayerObjectUrl) {
+    try { URL.revokeObjectURL(activePlayerObjectUrl); } catch (e) {}
+    activePlayerObjectUrl = null;
+  }
   if (callRecordingPlayerModal) {
     callRecordingPlayerModal.classList.add("hidden");
   }
 }
 
 async function downloadRecordingFile(rec: any) {
-  let blobToDownload: Blob | null = await getRecordingBlobFromVault(rec.id);
+  let blobToDownload: Blob | null = sessionRecordingBlobCache.get(rec.id) || (await getRecordingBlobFromVault(rec.id));
   if (!blobToDownload && rec.recording_url && !rec.recording_url.startsWith("http")) {
     try {
       const resp = await fetch(rec.recording_url);
@@ -18021,4 +18412,10 @@ function attachEventListeners() {
     });
   }
 
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => startApplication());
+} else {
+  startApplication();
 }
