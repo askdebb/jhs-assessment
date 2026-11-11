@@ -8549,6 +8549,54 @@ function getLearnerDisplayScore(sub: any): number {
   return firstData.score;
 }
 
+function getNormalizedLearnerSubmissions(learner: any, learnerIdFallback?: string): any[] {
+  const targetId = learner?.id || learnerIdFallback || "";
+  const targetEmail = (learner?.email || "").toLowerCase();
+  const rawFromLearner = Array.isArray(learner?.submissions) ? learner.submissions : [];
+  const rawFromGlobal = (state.submissions || []).filter((s: any) =>
+    (targetId && s.learner_id === targetId) ||
+    (targetEmail && s.email && s.email.toLowerCase() === targetEmail)
+  );
+  return normalizeAndDeduplicateSubmissions([...rawFromLearner, ...rawFromGlobal], targetId || null);
+}
+
+function getGradeTierMeta(pct: number) {
+  if (pct >= 80) {
+    return {
+      label: "Distinction",
+      fullLabel: "Distinction (Grade 1)",
+      textClass: "text-emerald-700",
+      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-300",
+      stanine: "Stanine 1 (Highest)",
+    };
+  }
+  if (pct >= 65) {
+    return {
+      label: "Credit",
+      fullLabel: "Credit (Grade 2-3)",
+      textClass: "text-indigo-700",
+      badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-300",
+      stanine: "Stanine 3-4 (Above Avg)",
+    };
+  }
+  if (pct >= 50) {
+    return {
+      label: "Pass",
+      fullLabel: "Pass (Grade 4-6)",
+      textClass: "text-amber-700",
+      badgeClass: "bg-amber-100 text-amber-800 border-amber-300",
+      stanine: "Stanine 5-6 (Average)",
+    };
+  }
+  return {
+    label: "Fail / Remedial",
+    fullLabel: "Fail (Grade 9)",
+    textClass: "text-rose-700",
+    badgeClass: "bg-rose-100 text-rose-800 border-rose-300",
+    stanine: "Stanine 9 (Remedial)",
+  };
+}
+
 function renderAdminLearnersTable() {
   if (!adminLearnersTableBody) return;
   const paginationContainer = document.getElementById("adminLearnersPaginationContainer");
@@ -8594,7 +8642,7 @@ function renderAdminLearnersTable() {
 
     const totalCount = managedLearners.length;
     const onlineCount = managedLearners.filter(isLearnerOnline).length;
-    const taskDoneCount = managedLearners.filter((l: any) => l.submissions && l.submissions.length > 0).length;
+    const taskDoneCount = managedLearners.filter((l: any) => getNormalizedLearnerSubmissions(l).length > 0).length;
     const taskPendingCount = Math.max(0, totalCount - taskDoneCount);
 
     if (quickCountAll) quickCountAll.textContent = totalCount.toString();
@@ -8806,10 +8854,7 @@ function renderAdminLearnersTable() {
            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Offline (${formatTimeAgo(learner.last_seen)})
          </span>`;
 
-    const rawSubs = (learner.submissions && learner.submissions.length > 0)
-      ? learner.submissions
-      : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
-    const learnerSubs = normalizeAndDeduplicateSubmissions(rawSubs, learner.id);
+    const learnerSubs = getNormalizedLearnerSubmissions(learner);
     const subCount = learnerSubs.length;
     const hasPerformedTask = subCount > 0;
     const latestSub = hasPerformedTask ? learnerSubs[0] : null;
@@ -8843,11 +8888,9 @@ function renderAdminLearnersTable() {
       academicPill = `
         <button
           type="button"
-          class="admin-table-inspect-test-btn text-left group cursor-pointer block"
+          class="admin-table-tasks-summary-btn text-left group cursor-pointer block"
           data-learner-id="${learner.id}"
-          data-asmt-id="${latestSub.assessment_id}"
-          data-sub-id="${latestSub.id || ''}"
-          title="Inspect latest test performance & question breakdown"
+          title="View summary of all ${subCount} completed task(s) &amp; select one to inspect"
         >
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap group-hover:bg-emerald-100 transition">
             <i class="fa-solid fa-circle-check text-emerald-500"></i> ${subCount} Task(s) Done
@@ -8975,10 +9018,7 @@ function renderAdminLearnersTable() {
              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> ${formatTimeAgo(learner.last_seen)}
            </span>`;
 
-      const rawSubs = (learner.submissions && learner.submissions.length > 0)
-        ? learner.submissions
-        : (state.submissions || []).filter((s: any) => s.learner_id === learner.id || (s.email && s.email.toLowerCase() === learner.email?.toLowerCase()));
-      const learnerSubs = normalizeAndDeduplicateSubmissions(rawSubs, learner.id);
+      const learnerSubs = getNormalizedLearnerSubmissions(learner);
       const subCount = learnerSubs.length;
       const hasPerformedTask = subCount > 0;
       const latestSub = hasPerformedTask ? learnerSubs[0] : null;
@@ -9005,11 +9045,9 @@ function renderAdminLearnersTable() {
         : (hasPerformedTask && latestSub
             ? `<button
                  type="button"
-                 class="admin-table-inspect-test-btn cursor-pointer text-left"
+                 class="admin-table-tasks-summary-btn cursor-pointer text-left"
                  data-learner-id="${learner.id}"
-                 data-asmt-id="${latestSub.assessment_id}"
-                 data-sub-id="${latestSub.id || ''}"
-                 title="Inspect test performance"
+                 title="View summary of all ${subCount} completed task(s) &amp; select one to inspect"
                >
                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition">
                    <i class="fa-solid fa-circle-check text-emerald-600"></i> ${subCount} Done (${lastScore}/20) <i class="fa-solid fa-arrow-up-right-from-square text-[8px] ml-0.5"></i>
@@ -9159,7 +9197,18 @@ function renderAdminLearnersTable() {
     });
   });
 
-  // Attach direct inspect test handlers from Academic column
+  // Attach Tasks Summary handlers when clicking "N Task(s) Done" in Academic column
+  document.querySelectorAll(".admin-table-tasks-summary-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const learnerId = btn.getAttribute("data-learner-id");
+      if (learnerId) {
+        openAdminLearnerTasksSummaryModal(learnerId);
+      }
+    });
+  });
+
+  // Attach direct inspect test handlers (e.g. Retake Active pill) from Academic column
   document.querySelectorAll(".admin-table-inspect-test-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -9801,12 +9850,12 @@ function showActiveLearnerDetail(learner: any) {
 }
 
 function renderActiveLearnerDetailHtml(learner) {
-  const subs = learner.submissions || [];
+  const subs = getNormalizedLearnerSubmissions(learner);
   const subCount = subs.length;
   const avgScore = subCount > 0
-    ? (subs.reduce((sum, s) => sum + (parseFloat(s.score) || 0), 0) / subCount).toFixed(1)
+    ? (subs.reduce((sum, s) => sum + getLearnerDisplayScore(s), 0) / subCount).toFixed(1)
     : "0.0";
-  const lastScore = subCount > 0 ? `${subs[0].score}/${subs[0].max_score || 20}` : "None";
+  const lastScore = subCount > 0 ? `${getLearnerDisplayScore(subs[0])}/${subs[0].max_score || 20}` : "None";
   const age = calculateAge(learner.date_of_birth);
   const isOnlineNow = isLearnerOnline(learner);
 
@@ -9967,7 +10016,7 @@ function renderActiveLearnerDetailHtml(learner) {
           ${subs.map((s) => {
             const asmtTitle = resolveAssessmentTitle(s.assessment_id, s.assessments, learner.class_level);
             const maxScore = parseFloat(s.max_score || 20);
-            const numScore = parseFloat(s.score || 0);
+            const numScore = getLearnerDisplayScore(s);
             const pct = Math.round((numScore / maxScore) * 100);
 
             // Correct / Incorrect counts
@@ -9975,22 +10024,10 @@ function renderActiveLearnerDetailHtml(learner) {
             const incorrectCount = s.incorrect_count != null ? s.incorrect_count : Math.max(0, 10 - correctCount);
 
             // Performance Tier & Stanine
-            let tierColorClass = "text-emerald-700";
-            let tierLabel = "Distinction";
-            let stanine = "Stanine 1 (Highest)";
-            if (pct < 50) {
-              tierColorClass = "text-rose-700";
-              tierLabel = "Fail / Remedial";
-              stanine = "Stanine 9 (Remedial)";
-            } else if (pct < 65) {
-              tierColorClass = "text-amber-700";
-              tierLabel = "Pass";
-              stanine = "Stanine 5-6 (Average)";
-            } else if (pct < 80) {
-              tierColorClass = "text-indigo-700";
-              tierLabel = "Credit";
-              stanine = "Stanine 3-4 (Above Avg)";
-            }
+            const tier = getGradeTierMeta(pct);
+            const tierColorClass = tier.textClass;
+            const tierLabel = tier.label;
+            const stanine = tier.stanine;
 
             const submittedDateStr = s.submitted_at ? formatDateTime(s.submitted_at) : "Recently submitted";
 
@@ -10107,16 +10144,334 @@ function renderActiveLearnerDetailHtml(learner) {
 // ------------------------------------------------------------------------------
 // Admin Privileged Test Performance & Question Breakdown Controller (Admin-Only)
 // ------------------------------------------------------------------------------
-async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId: string = "") {
-  // 1. Strict Role Authorization Guard (Admins / Teachers only)
-  const isAuthorized =
+function isAuthorizedAdminOrTeacher(): boolean {
+  return Boolean(
     state.isAdmin ||
     (state.user?.email || "").toLowerCase() === PRIMARY_ADMIN_EMAIL.toLowerCase() ||
     state.profile?.role === "admin" ||
     state.profile?.role === "teacher" ||
-    (state.user && isUserAdmin(state.user, state.profile));
+    (state.user && isUserAdmin(state.user, state.profile))
+  );
+}
 
-  if (!isAuthorized) {
+function resolveModalLearner(learnerId: string) {
+  let learner = (state.allLearners || []).find((l: any) => l.id === learnerId);
+  if (!learner && state.profile?.id === learnerId) {
+    learner = state.profile;
+  }
+  return learner;
+}
+
+function buildAdminModalLearnerMetaHtml(learnerName: string, studentId: string, classLevel: string): string {
+  return `
+    Learner: <strong class="text-slate-800">${escapeHtml(learnerName)}</strong> &bull; 
+    Student ID: <span class="font-mono text-indigo-700 font-bold">${escapeHtml(studentId)}</span> &bull; 
+    Class: <strong class="text-slate-800">${escapeHtml(classLevel)}</strong>
+  `;
+}
+
+async function openAdminLearnerTasksSummaryModal(learnerId: string) {
+  if (!isAuthorizedAdminOrTeacher()) {
+    alert("ACCESS RESTRICTED: Only school administrators and teachers may inspect completed tasks.");
+    return;
+  }
+
+  const modal = document.getElementById("adminTestReviewModal");
+  const modalTitle = document.getElementById("adminTestReviewModalTitle");
+  const modalSubtitle = document.getElementById("adminTestReviewModalSubtitle");
+  const bodyEl = document.getElementById("adminTestReviewBody");
+  const retakeBtn = document.getElementById("adminTestReviewRetakeBtn");
+  const chatBtn = document.getElementById("adminTestReviewChatBtn");
+  const printBtn = document.getElementById("adminTestReviewPrintBtn");
+
+  if (!modal || !bodyEl) return;
+
+  const learner = resolveModalLearner(learnerId);
+  let learnerSubs = getNormalizedLearnerSubmissions(learner, learnerId);
+
+  if (learnerSubs.length === 0) {
+    try {
+      const fetched = await fetchLearnerSubmissions(learnerId);
+      if (Array.isArray(fetched) && fetched.length > 0) {
+        learnerSubs = normalizeAndDeduplicateSubmissions(fetched, learnerId);
+      }
+    } catch (e) {}
+  }
+
+  const learnerName = learner?.full_name || "Student Learner";
+  const classLevel = learner?.class_level || "Basic 9A";
+  const studentId = learner?.student_id || generateStudentId(classLevel, 1);
+  const subCount = learnerSubs.length;
+
+  if (modalTitle) {
+    modalTitle.textContent = `Completed Tasks Summary (${subCount} Task${subCount === 1 ? "" : "s"} Done)`;
+  }
+  if (modalSubtitle) {
+    modalSubtitle.innerHTML = buildAdminModalLearnerMetaHtml(learnerName, studentId, classLevel);
+  }
+
+  let totalEarned = 0;
+  let totalPossible = 0;
+
+  const taskSummaries = learnerSubs.map((s: any, idx: number) => {
+    const asmtTitle = resolveAssessmentTitle(s.assessment_id, s.assessments, classLevel);
+    const maxScore = parseFloat(s.max_score || 20) || 20;
+    const scoreVal = getLearnerDisplayScore(s);
+    const pct = maxScore > 0 ? Math.round((scoreVal / maxScore) * 100) : 0;
+    const correctCount = s.correct_count != null ? s.correct_count : Math.round((scoreVal / maxScore) * 10);
+    const incorrectCount = s.incorrect_count != null ? s.incorrect_count : Math.max(0, 10 - correctCount);
+    const tier = getGradeTierMeta(pct);
+    const submittedDateStr = s.submitted_at ? formatDateTime(s.submitted_at) : "Recently submitted";
+
+    totalEarned += scoreVal;
+    totalPossible += maxScore;
+
+    return {
+      sub: s,
+      index: idx + 1,
+      asmtTitle,
+      maxScore,
+      scoreVal,
+      pct,
+      correctCount,
+      incorrectCount,
+      tier,
+      submittedDateStr,
+    };
+  });
+
+  const bestTask = taskSummaries.reduce<any>((best, item) => {
+    if (!best || item.pct > best.pct || (item.pct === best.pct && item.scoreVal > best.scoreVal)) {
+      return item;
+    }
+    return best;
+  }, null);
+
+  const cumulativePct = totalPossible > 0 ? Math.round((totalEarned / totalPossible) * 100) : 0;
+  const avgOutOf20 = totalPossible > 0 ? ((totalEarned / totalPossible) * 20).toFixed(1) : "0.0";
+  const overallTier = getGradeTierMeta(cumulativePct);
+
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
+
+  bodyEl.innerHTML = `
+    <!-- Learner & Cumulative Tasks Overview Banner -->
+    <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div class="flex items-center gap-3.5 min-w-0">
+          <img
+            src="${learner?.avatar_url || AVATAR_PRESETS[0]}"
+            alt="${escapeHtml(learnerName)}"
+            class="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl object-cover ring-2 ring-indigo-400/40 shadow-md shrink-0"
+          />
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h4 class="text-base sm:text-lg font-bold truncate">${escapeHtml(learnerName)}</h4>
+              <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/10 text-emerald-300 border border-white/20 uppercase tracking-wider">
+                ${escapeHtml(classLevel)}
+              </span>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-slate-300 mt-0.5 flex-wrap">
+              <span class="font-mono font-bold text-emerald-300 bg-white/10 px-1.5 py-0.5 rounded">${escapeHtml(studentId)}</span>
+              <span>&bull;</span>
+              <span>${subCount} Completed Assessment${subCount === 1 ? "" : "s"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:flex-col sm:items-end justify-between border-t border-white/10 sm:border-t-0 pt-3 sm:pt-0 shrink-0">
+          <span class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Overall Average</span>
+          <div class="text-2xl sm:text-3xl font-extrabold text-white font-mono">${cumulativePct}%</div>
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${overallTier.badgeClass}">
+            ${overallTier.fullLabel}
+          </span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-white/10">
+        <div class="bg-white/10 rounded-xl p-2.5 text-center border border-white/10">
+          <span class="text-[10px] uppercase font-bold text-slate-300 block tracking-wider">Tasks Done</span>
+          <span class="text-lg font-extrabold text-white font-mono">${subCount}</span>
+        </div>
+        <div class="bg-white/10 rounded-xl p-2.5 text-center border border-white/10">
+          <span class="text-[10px] uppercase font-bold text-slate-300 block tracking-wider">Cumulative Score</span>
+          <span class="text-lg font-extrabold text-emerald-300 font-mono">${totalEarned.toFixed(1)}<span class="text-xs text-slate-300 font-normal"> / ${totalPossible}</span></span>
+        </div>
+        <div class="bg-white/10 rounded-xl p-2.5 text-center border border-white/10">
+          <span class="text-[10px] uppercase font-bold text-slate-300 block tracking-wider">Avg Scale (/20)</span>
+          <span class="text-lg font-extrabold text-indigo-200 font-mono">${avgOutOf20}<span class="text-xs text-slate-300 font-normal"> / 20</span></span>
+        </div>
+        <div class="bg-white/10 rounded-xl p-2.5 text-center border border-white/10">
+          <span class="text-[10px] uppercase font-bold text-slate-300 block tracking-wider">Best Task</span>
+          <span class="text-lg font-extrabold text-amber-300 font-mono">${bestTask ? `${bestTask.scoreVal.toFixed(1)}/${bestTask.maxScore}` : "N/A"}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Summary Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/70 border border-indigo-200 rounded-xl px-4 py-2.5">
+      <div class="flex items-center gap-2 text-xs text-indigo-950 font-semibold">
+        <i class="fa-solid fa-list-check text-indigo-600"></i>
+        <span>Select any task below to inspect full question-by-question answers and explanations.</span>
+      </div>
+      <span class="text-[11px] font-bold text-indigo-700 bg-white px-2.5 py-0.5 rounded-full border border-indigo-200 shrink-0 w-fit">
+        ${subCount} Task${subCount === 1 ? "" : "s"} Ready
+      </span>
+    </div>
+
+    <!-- Completed Tasks List -->
+    ${subCount === 0 ? `
+      <div class="py-12 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
+        <i class="fa-solid fa-folder-open text-2xl mb-2 block"></i>
+        <p class="text-sm font-bold text-slate-700">No Completed Tasks Found</p>
+        <p class="text-xs text-slate-400 mt-1">This learner has no recorded submissions yet.</p>
+      </div>
+    ` : `
+      <div class="space-y-3">
+        ${taskSummaries.map((item: any) => {
+          const s = item.sub;
+          return `
+            <div
+              role="button"
+              tabindex="0"
+              class="admin-summary-select-task-card bg-white hover:bg-indigo-50/30 rounded-2xl border border-slate-200/90 hover:border-indigo-400 p-4 transition-all shadow-2xs hover:shadow-md cursor-pointer group"
+              data-learner-id="${learnerId}"
+              data-asmt-id="${s.assessment_id}"
+              data-sub-id="${s.id || ''}"
+            >
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-start sm:items-center gap-3 min-w-0">
+                  <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    #${item.index}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <h5 class="font-bold text-slate-900 text-sm tracking-tight">${escapeHtml(item.asmtTitle)}</h5>
+                      ${s.retake_granted
+                        ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300"><i class="fa-solid fa-rotate-right text-amber-600"></i> Retake Open</span>`
+                        : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200"><i class="fa-solid fa-check text-emerald-600"></i> ${escapeHtml(s.status || "GRADED")}</span>`
+                      }
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
+                      <span class="inline-flex items-center gap-1 font-medium text-slate-600">
+                        <i class="fa-regular fa-calendar-days text-[11px] text-slate-400"></i> ${item.submittedDateStr}
+                      </span>
+                      <span class="text-slate-300">&bull;</span>
+                      <span class="${item.tier.textClass} font-bold">${item.pct}% (${item.tier.label})</span>
+                      <span class="text-slate-300">&bull;</span>
+                      <span class="text-slate-500">${item.tier.stanine}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0 pl-13 sm:pl-0 border-t sm:border-t-0 border-slate-100 pt-2.5 sm:pt-0">
+                  <div class="text-left sm:text-right">
+                    <div class="flex items-baseline gap-1 sm:justify-end">
+                      <span class="text-2xl font-black text-slate-900 font-mono">${item.scoreVal.toFixed(1)}</span>
+                      <span class="text-xs font-bold text-slate-400">/ ${item.maxScore}</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 flex items-center gap-2 sm:justify-end">
+                      <span class="text-emerald-700 font-semibold"><i class="fa-solid fa-circle-check text-[10px]"></i> ${item.correctCount} Correct</span>
+                      <span class="text-rose-600 font-semibold"><i class="fa-solid fa-circle-xmark text-[10px]"></i> ${item.incorrectCount} Wrong</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-3 pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div class="text-xs text-slate-500 min-w-0 truncate">
+                  ${s.teacher_remarks
+                    ? `<i class="fa-solid fa-quote-left text-indigo-400 mr-1 text-[10px]"></i><span class="italic">${escapeHtml(s.teacher_remarks)}</span>`
+                    : `<span class="text-slate-400">Click to inspect full question responses &amp; grading sheet</span>`
+                  }
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    class="admin-summary-task-retake-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-amber-900 bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 transition cursor-pointer"
+                    data-learner-id="${learnerId}"
+                    data-asmt-id="${s.assessment_id}"
+                    title="Authorize retake for this specific task"
+                  >
+                    <i class="fa-solid fa-rotate-right text-amber-600 text-[11px]"></i>
+                    <span>Retake</span>
+                  </button>
+                  <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 group-hover:bg-indigo-700 shadow-2xs transition">
+                    <span>See Details &amp; Answers</span>
+                    <i class="fa-solid fa-arrow-right text-[11px] group-hover:translate-x-0.5 transition-transform"></i>
+                  </span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `}
+  `;
+
+  bodyEl.querySelectorAll(".admin-summary-select-task-card").forEach((card: Element) => {
+    const openDetails = () => {
+      const lId = card.getAttribute("data-learner-id");
+      const aId = card.getAttribute("data-asmt-id");
+      const sId = card.getAttribute("data-sub-id") || "";
+      if (lId && aId) {
+        openAdminTestReviewModal(lId, aId, sId, { fromSummary: true });
+      }
+    };
+    card.addEventListener("click", (e: Event) => {
+      if ((e.target as HTMLElement)?.closest(".admin-summary-task-retake-btn")) return;
+      openDetails();
+    });
+    card.addEventListener("keydown", (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === "Enter" || ke.key === " ") {
+        e.preventDefault();
+        openDetails();
+      }
+    });
+  });
+
+  bodyEl.querySelectorAll(".admin-summary-task-retake-btn").forEach((btn: Element) => {
+    btn.addEventListener("click", (e: Event) => {
+      e.stopPropagation();
+      const lId = btn.getAttribute("data-learner-id");
+      const aId = btn.getAttribute("data-asmt-id") || undefined;
+      if (lId) {
+        openGrantRetakeModal(lId, aId);
+      }
+    });
+  });
+
+  if (retakeBtn) {
+    retakeBtn.className = "inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition cursor-pointer shadow-xs";
+    retakeBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> <span>Authorize Retake</span>`;
+    retakeBtn.onclick = () => {
+      openGrantRetakeModal(learnerId);
+    };
+  }
+
+  if (chatBtn) {
+    chatBtn.onclick = () => {
+      closeAdminTestReviewModal();
+      if (learner) openChatWithUser(learner);
+    };
+  }
+
+  if (printBtn) {
+    printBtn.onclick = () => {
+      window.print();
+    };
+  }
+}
+
+async function openAdminTestReviewModal(
+  learnerId: string,
+  asmtId: string,
+  subId: string = "",
+  options: { fromSummary?: boolean } = {}
+) {
+  // 1. Strict Role Authorization Guard (Admins / Teachers only)
+  if (!isAuthorizedAdminOrTeacher()) {
     alert("ACCESS RESTRICTED: Only school administrators and teachers may inspect individual test answers and question breakdowns.");
     return;
   }
@@ -10170,10 +10525,49 @@ async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId
 
   if (modalTitle) modalTitle.textContent = `${asmtTitle} Review`;
   if (modalSubtitle) {
-    modalSubtitle.innerHTML = `
-      Learner: <strong class="text-slate-800">${escapeHtml(learnerName)}</strong> &bull; 
-      Student ID: <span class="font-mono text-indigo-700 font-bold">${escapeHtml(studentId)}</span> &bull; 
-      Class: <strong class="text-slate-800">${escapeHtml(classLevel)}</strong>
+    modalSubtitle.innerHTML = buildAdminModalLearnerMetaHtml(learnerName, studentId, classLevel);
+  }
+
+  const allLearnerSubs = getNormalizedLearnerSubmissions(learner, learnerId);
+  let tasksNavHtml = "";
+  if (allLearnerSubs.length > 1 || options?.fromSummary) {
+    const pillsHtml = allLearnerSubs.map((taskSub: any, i: number) => {
+      const taskAsmtTitle = resolveAssessmentTitle(taskSub.assessment_id, taskSub.assessments, classLevel);
+      const taskScore = getLearnerDisplayScore(taskSub);
+      const taskMax = parseFloat(taskSub.max_score || 20) || 20;
+      const isCurrent = (subId && taskSub.id === subId) || (!subId && taskSub.assessment_id === asmtId) || taskSub.assessment_id === asmtId;
+      return `
+        <button
+          type="button"
+          class="admin-review-switch-task-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+            isCurrent
+              ? "bg-indigo-600 text-white shadow-2xs"
+              : "bg-slate-100 text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 border border-slate-200"
+          }"
+          data-learner-id="${learnerId}"
+          data-asmt-id="${taskSub.assessment_id}"
+          data-sub-id="${taskSub.id || ''}"
+        >
+          <span>#${i + 1} ${escapeHtml(taskAsmtTitle)}</span>
+          <span class="font-mono opacity-90">(${taskScore.toFixed(1)}/${taskMax})</span>
+        </button>
+      `;
+    }).join("");
+
+    tasksNavHtml = `
+      <div class="bg-white border border-slate-200 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+        <button
+          type="button"
+          class="admin-review-back-summary-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer shrink-0 w-fit"
+          data-learner-id="${learnerId}"
+        >
+          <i class="fa-solid fa-arrow-left text-[11px]"></i>
+          <span>Back to All ${allLearnerSubs.length} Task(s) Summary</span>
+        </button>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          ${pillsHtml}
+        </div>
+      </div>
     `;
   }
 
@@ -10307,16 +10701,8 @@ async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId
   }
   const pct = Math.round((displayScore / maxScore) * 100);
 
-  let gradeBadge = { label: "Pass", color: "bg-amber-100 text-amber-800 border-amber-300" };
-  if (pct >= 80) {
-    gradeBadge = { label: "Distinction (Grade 1)", color: "bg-emerald-100 text-emerald-800 border-emerald-300" };
-  } else if (pct >= 65) {
-    gradeBadge = { label: "Credit (Grade 2-3)", color: "bg-indigo-100 text-indigo-800 border-indigo-300" };
-  } else if (pct >= 50) {
-    gradeBadge = { label: "Pass (Grade 4-6)", color: "bg-amber-100 text-amber-800 border-amber-300" };
-  } else {
-    gradeBadge = { label: "Fail (Grade 9)", color: "bg-rose-100 text-rose-800 border-rose-300" };
-  }
+  const tierMeta = getGradeTierMeta(pct);
+  const gradeBadge = { label: tierMeta.fullLabel, color: tierMeta.badgeClass };
 
   // 5. Render Modal Contents
   renderAdminTestReviewBodyHtml(bodyEl, {
@@ -10333,6 +10719,26 @@ async function openAdminTestReviewModal(learnerId: string, asmtId: string, subId
     totalQuestions,
     evaluatedQuestions,
     simulatedForDisplay,
+    tasksNavHtml,
+  });
+
+  // Wire "Back to Tasks Summary" and Quick Task Switcher tabs
+  bodyEl.querySelectorAll(".admin-review-back-summary-btn").forEach((btn: Element) => {
+    btn.addEventListener("click", () => {
+      const lId = btn.getAttribute("data-learner-id") || learnerId;
+      openAdminLearnerTasksSummaryModal(lId);
+    });
+  });
+
+  bodyEl.querySelectorAll(".admin-review-switch-task-btn").forEach((btn: Element) => {
+    btn.addEventListener("click", () => {
+      const lId = btn.getAttribute("data-learner-id") || learnerId;
+      const aId = btn.getAttribute("data-asmt-id");
+      const sId = btn.getAttribute("data-sub-id") || "";
+      if (aId) {
+        openAdminTestReviewModal(lId, aId, sId, { fromSummary: true });
+      }
+    });
   });
 
   // Wire Restore Historical Attempt Score Buttons
@@ -10443,6 +10849,7 @@ function renderAdminTestReviewBodyHtml(container: HTMLElement, data: any) {
     totalQuestions,
     evaluatedQuestions,
     simulatedForDisplay,
+    tasksNavHtml,
   } = data;
 
   const learnerName = learner?.full_name || "Student Learner";
@@ -10453,6 +10860,7 @@ function renderAdminTestReviewBodyHtml(container: HTMLElement, data: any) {
   const remarksText = sub?.teacher_remarks || `Assessment completed and scored ${displayScore.toFixed(1)}/${maxScore}.`;
 
   container.innerHTML = `
+    ${tasksNavHtml || ""}
     <!-- Learner & Performance Overview Header Card -->
     <div class="bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-sm">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -10862,6 +11270,7 @@ function renderAdminTestReviewBodyHtml(container: HTMLElement, data: any) {
 (window as any).showActiveLearnerDetail = showActiveLearnerDetail;
 (window as any).renderActiveLearnersList = renderActiveLearnersList;
 (window as any).startAdminDemoMode = startAdminDemoMode;
+(window as any).openAdminLearnerTasksSummaryModal = openAdminLearnerTasksSummaryModal;
 (window as any).openAdminTestReviewModal = openAdminTestReviewModal;
 (window as any).closeAdminTestReviewModal = closeAdminTestReviewModal;
 
